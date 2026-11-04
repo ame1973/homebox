@@ -31,6 +31,8 @@ Usage:
   homebox db check [--database PATH] [--timeout DURATION]
   homebox db verify-snapshot --snapshot PATH [--timeout DURATION]
   homebox auth bootstrap --output PRIVATE_FILE [--database PATH] [--timeout DURATION]
+  homebox auth reset-password --output PRIVATE_FILE --confirm RESET_PASSWORD
+                              [--database PATH] [--timeout DURATION]
 
 Database commands require exclusive access to a local, private data directory.
 Serve requires a real frontend build and an already migrated database.

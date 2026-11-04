@@ -60,6 +60,14 @@ Grant consumption is private to the store and must share the authoritative SQL t
 
 Migration 0005 adds private reauthentication storage and indexes. Migration 0006 retires the earlier cookie-only MAC protocol, revokes existing sessions, deletes old grants/authentication replies, and adds private server-key storage without deleting domain idempotency records. Missing key material with outstanding authentication state fails closed rather than silently regenerating a different key. HTTP reauthentication and privileged operation routes are still pending; these services do not by themselves expose a usable remote workflow.
 
+## Offline owner recovery
+
+`homebox auth reset-password --output PRIVATE_FILE --confirm RESET_PASSWORD` is an explicitly local operator command, not a remote authentication bypass. The server must be stopped so the CLI can obtain the process-lifetime database lock; only this command opens the store with offline recovery enabled. A normally opened serving store rejects the recovery method before creating any file. No HTTP route exposes it, and missing/wrong confirmation is rejected before database access.
+
+Recovery requires an existing sole administrator. It generates a fresh random temporary password, hashes it without requiring the old/legacy encoding to verify, and rechecks the target account before committing. The new hash, revision advance, mandatory-change flag, all-session revocation, stale bootstrap cleanup, and recovery audit event commit together only after private-file synchronization. Delivery or commit failure preserves the earlier account/session state and removes the attempt's file when possible. Username and safe revision/file metadata are returned, but the temporary password is never printed or passed on the command line.
+
+After a temporary-password login, reauthentication/privileged access remains blocked until the password-change flow completes. Prior sessions and grants cannot be used. The temporary password is not automatically time-expiring; change it promptly, then remove the now-obsolete private delivery file through the operator's normal secret-handling process. Recovery handles forgotten/unsupported password encodings, not corruption or loss of authentication server-key material; restore a verified protected database for that separate failure.
+
 ## Data and transport boundaries
 
 Private SQLite storage, sidecars, and migration snapshots have strict permissions and must not be placed in the public static-assets directory. Migration snapshots are not encrypted full backups; see [Database Operations](database.md). Future deployment requires trusted HTTPS on LAN/VPN; a VPN alone does not satisfy browser camera/PWA secure-context requirements.

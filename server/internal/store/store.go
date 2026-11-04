@@ -37,6 +37,8 @@ type Config struct {
 	BackupDir    string
 	ReserveBytes uint64
 	LegacyUnits  map[string]UnitMapping
+	// OfflineAuth permits local owner recovery; HTTP serving must leave this false.
+	OfflineAuth bool
 }
 
 // UnitMapping certifies the meaning of existing integer base counts; counts are never rescaled.
@@ -67,12 +69,13 @@ type Health struct {
 
 // Store serializes the authoritative database and holds a process-lifetime lock.
 type Store struct {
-	db        *sql.DB
-	path      string
-	lock      *os.File
-	report    MigrationReport
-	closeOnce sync.Once
-	closeErr  error
+	db          *sql.DB
+	path        string
+	lock        *os.File
+	report      MigrationReport
+	closeOnce   sync.Once
+	closeErr    error
+	offlineAuth bool
 }
 
 // Open checks capabilities and history before making the store available to callers.
@@ -96,7 +99,7 @@ func Open(ctx context.Context, cfg Config) (_ *Store, finalErr error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Store{path: path, lock: lock}
+	s := &Store{path: path, lock: lock, offlineAuth: cfg.OfflineAuth}
 	defer func() {
 		if finalErr != nil {
 			finalErr = errors.Join(finalErr, s.Close())

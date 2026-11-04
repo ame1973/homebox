@@ -40,6 +40,17 @@ With the server stopped and the database already migrated, create a new private 
 
 The command prints only the absolute file path and expiry, not the secret. The output directory must be private, the new file is mode `0600`, and existing files/symlinks are never overwritten. The credential expires after 30 minutes and is disabled after successful administrator provisioning. This CLI delivery is implemented; the user-facing HTTP setup/login flow is still pending, so it does not make the build production-ready. See [Security](docs/security.md) for delivery, failure, and retry behavior.
 
+## Offline account recovery (available now)
+
+A local filesystem owner can replace a forgotten or unsupported legacy password while the server is stopped:
+
+```sh
+./bin/homebox auth reset-password --database ./data/homebox.sqlite \
+  --output ./data/recovery-password.txt --confirm RESET_PASSWORD
+```
+
+The command requires an already provisioned account and explicit confirmation. It generates a random temporary password into a new mode-`0600` private file, prints only account/file/revision metadata, revokes all sessions, and requires password change after the next login. Existing files are never overwritten. Recovery is deliberately unavailable in normal serving-store mode and has no HTTP route. Read the file through a trusted local channel; do not paste secrets into logs or issues. The HTTP login/change-password interface is still being implemented.
+
 ## Local web application (available now)
 
 The React interface currently provides a real, read-only server connectivity check, retry/error/loading states, and system/light/dark appearance. It does not display invented inventory data or claim that private domain APIs are ready.
