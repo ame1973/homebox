@@ -15,6 +15,10 @@
 - Verified pre-upgrade SQLite Online Backup snapshots with SHA-256 markers, integrity/FK checks, free-space gates, and self-contained rollback-journal output.
 - Real Go integration, race-detector, and CGO-disabled tests for persistence and failure handling.
 
+### Security
+
+- Reject permissive or symlinked SQLite sidecars before opening a database, and reject unhashed sidecars or unsafe checksum markers when verifying a migration snapshot.
+
 ### Acceptance status
 
 - No product release is claimed. Specification-level checks do not establish HTTP, PWA, or QNAP production readiness.

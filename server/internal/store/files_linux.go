@@ -56,6 +56,22 @@ func privateFile(path string, create bool) (*os.File, error) {
 	return file, nil
 }
 
+func validateSidecars(path string, snapshot bool) error {
+	for _, suffix := range []string{"-wal", "-shm", "-journal"} {
+		info, err := os.Lstat(path + suffix)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if snapshot || !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
+			return fmt.Errorf("%w: unexpected or permissive SQLite sidecar %s", ErrUnsafePath, suffix)
+		}
+	}
+	return nil
+}
+
 func acquireLock(path string) (*os.File, error) {
 	file, err := privateFile(path+".lock", true)
 	if err != nil {

@@ -112,6 +112,9 @@ func Open(ctx context.Context, cfg Config) (_ *Store, finalErr error) {
 	if err = file.Close(); err != nil {
 		return nil, err
 	}
+	if err = validateSidecars(path, false); err != nil {
+		return nil, err
+	}
 	s.db, err = openSQL(path, false)
 	if err != nil {
 		return nil, err

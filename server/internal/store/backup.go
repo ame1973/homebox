@@ -126,9 +126,23 @@ func VerifySnapshot(ctx context.Context, path string) error {
 	if !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
 		return ErrUnsafePath
 	}
-	marker, err := os.ReadFile(path + ".sha256")
+	markerInfo, err := os.Lstat(path + ".sha256")
 	if err != nil {
 		return err
+	}
+	if !markerInfo.Mode().IsRegular() || markerInfo.Mode().Perm()&0o077 != 0 || markerInfo.Size() > 512 {
+		return ErrUnsafePath
+	}
+	markerFile, err := os.Open(path + ".sha256")
+	if err != nil {
+		return err
+	}
+	marker, readErr := io.ReadAll(io.LimitReader(markerFile, 513))
+	if err = errors.Join(readErr, markerFile.Close()); err != nil {
+		return err
+	}
+	if len(marker) > 512 {
+		return errors.New("snapshot checksum marker is too large")
 	}
 	parts := strings.Fields(string(marker))
 	if len(parts) != 2 || len(parts[0]) != 64 || parts[1] != filepath.Base(path) {
@@ -145,6 +159,9 @@ func VerifySnapshot(ctx context.Context, path string) error {
 }
 
 func checkSnapshotDatabase(ctx context.Context, path string) error {
+	if err := validateSidecars(path, true); err != nil {
+		return err
+	}
 	db, err := openSQL(path, true)
 	if err != nil {
 		return err

@@ -520,6 +520,66 @@ func TestWriteTransactionsAcquireTheirLockBeforeAnyMutation(t *testing.T) {
 	}
 }
 
+func TestDatabaseRejectsPermissiveOrSymlinkedSQLiteSidecars(t *testing.T) {
+	for _, suffix := range []string{"-wal", "-shm", "-journal"} {
+		for _, kind := range []string{"permissive", "symlink"} {
+			t.Run(suffix+kind, func(t *testing.T) {
+				s := openTestStore(t)
+				_ = s.Close()
+				if kind == "symlink" {
+					target := filepath.Join(filepath.Dir(s.path), "untouched")
+					if err := os.WriteFile(target, []byte("private"), 0o600); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.Symlink(target, s.path+suffix); err != nil {
+						t.Fatal(err)
+					}
+				} else if err := os.WriteFile(s.path+suffix, []byte("invalid"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := Open(t.Context(), Config{Path: s.path}); !errors.Is(err, ErrUnsafePath) {
+					t.Fatalf("unsafe sidecar accepted: %v", err)
+				}
+			})
+		}
+	}
+}
+
+func TestSnapshotsRejectAllUnhashedSidecarsAndInvalidMarkers(t *testing.T) {
+	for _, damage := range []string{"-wal", "-shm", "-journal", "missing marker", "oversized marker", "symlinked marker", "malformed marker", "wrong filename"} {
+		t.Run(damage, func(t *testing.T) {
+			s := openTestStore(t)
+			path, digest, err := s.snapshot(t.Context(), privateTempDir(t))
+			if err != nil {
+				t.Fatal(err)
+			}
+			marker := path + ".sha256"
+			switch damage {
+			case "-wal", "-shm", "-journal":
+				err = os.WriteFile(path+damage, []byte("unhashed"), 0o600)
+			case "missing marker":
+				err = os.Remove(marker)
+			case "oversized marker":
+				err = os.WriteFile(marker, []byte(strings.Repeat("a", 513)), 0o600)
+			case "symlinked marker":
+				if err = os.Remove(marker); err == nil {
+					err = os.Symlink(path, marker)
+				}
+			case "malformed marker":
+				err = os.WriteFile(marker, []byte("not a checksum"), 0o600)
+			case "wrong filename":
+				err = os.WriteFile(marker, []byte(digest+"  another.sqlite\n"), 0o600)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = VerifySnapshot(t.Context(), path); err == nil {
+				t.Fatal("unsafe snapshot passed verification")
+			}
+		})
+	}
+}
+
 func TestForeignKeyViolationBlocksStartup(t *testing.T) {
 	s := openTestStore(t)
 	execSQL(t, s.db, "PRAGMA foreign_keys=OFF")
