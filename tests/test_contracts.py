@@ -222,6 +222,31 @@ class OpenAPIContractTests(unittest.TestCase):
             self.assertIn("file", SCHEMAS[name]["required"])
             self.assertEqual("binary", SCHEMAS[name]["properties"]["file"]["format"])
 
+    def test_location_writes_require_origin_and_document_real_body_limits(self):
+        for path, method, limit in [("/locations", "post", 131072),
+                                    ("/locations/{id}", "patch", 131072),
+                                    ("/locations/{id}", "delete", 0),
+                                    ("/locations/{id}/move", "post", 131072),
+                                    ("/locations/{id}/archive", "post", 131072)]:
+            operation = API["paths"][path][method]
+            headers = {p["name"]: p for p in operation["parameters"] if p["in"] == "header"}
+            with self.subTest(path=path, method=method):
+                self.assertTrue(headers["Origin"]["required"])
+                self.assertEqual(limit, operation["x-max-body-bytes"])
+                revision = Draft202012Validator(headers["If-Match"]["schema"])
+                revision.validate('"1"')
+                revision.validate('"9007199254740991"')
+                for invalid in ['1', '"0"', '"01"', 'W/"1"', '*', '"1", "2"']:
+                    with self.assertRaises(ValidationError):
+                        revision.validate(invalid)
+
+    def test_location_integer_schemas_allow_exact_integral_json_numbers(self):
+        for number in [1.0, 1000.0, -9007199254740991, 9007199254740991]:
+            validator("LocationCreate").validate({"name": "Box", "code": "BOX", "sort_order": number})
+        for number in [0.5, -9007199254740992, 9007199254740992]:
+            with self.assertRaises(ValidationError):
+                validator("LocationCreate").validate({"name": "Box", "code": "BOX", "sort_order": number})
+
     def test_location_create_parent_proof_defaults_and_safe_bounds(self):
         operation = API["paths"]["/locations"]["post"]
         headers = {p["name"]: p for p in operation["parameters"] if p["in"] == "header"}

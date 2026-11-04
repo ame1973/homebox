@@ -15,10 +15,33 @@ import (
 
 const authBodyLimit = 16 << 10
 
-// Authentication inputs are flat, exact-name string objects. In particular,
-// encoding/json's case-insensitive struct matching and last-duplicate-wins behavior
-// are not appropriate at this credential boundary.
+// Authentication inputs are flat, exact-name string objects. Neither struct
+// case-folding nor last-duplicate-wins decoding is appropriate at this boundary.
 func readAuthJSON(w http.ResponseWriter, r *http.Request, requestID string, fields ...string) (map[string]string, bool) {
+	raw, ok := readJSONObject(w, r, requestID, authBodyLimit, fields...)
+	if !ok {
+		return nil, false
+	}
+	if len(raw) != len(fields) {
+		writeError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "A required authentication field is missing.", requestID)
+		return nil, false
+	}
+	values := make(map[string]string, len(raw))
+	for key, value := range raw {
+		if len(value) == 0 || value[0] != '"' {
+			writeError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "Every authentication field must be a string.", requestID)
+			return nil, false
+		}
+		var text string
+		_ = json.Unmarshal(value, &text)
+		values[key] = text
+	}
+	return values, true
+}
+
+// readJSONObject preserves field presence and exact JSON value types. Callers
+// apply their command schema after shared media/syntax/duplicate validation.
+func readJSONObject(w http.ResponseWriter, r *http.Request, requestID string, limit int64, fields ...string) (map[string]json.RawMessage, bool) {
 	if len(r.Header.Values("Content-Type")) != 1 || len(r.Header.Values("Content-Encoding")) != 0 {
 		writeError(w, http.StatusUnsupportedMediaType, "UNSUPPORTED_MEDIA_TYPE", "Send an unencoded application/json request.", requestID)
 		return nil, false
@@ -28,7 +51,7 @@ func readAuthJSON(w http.ResponseWriter, r *http.Request, requestID string, fiel
 		writeError(w, http.StatusUnsupportedMediaType, "UNSUPPORTED_MEDIA_TYPE", "Send application/json with UTF-8 encoding.", requestID)
 		return nil, false
 	}
-	body, ok := readAuthBody(w, r, requestID)
+	body, ok := readBoundedBody(w, r, requestID, limit)
 	if !ok {
 		return nil, false
 	}
@@ -39,10 +62,10 @@ func readAuthJSON(w http.ResponseWriter, r *http.Request, requestID string, fiel
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	first, _ := decoder.Token()
 	if first != json.Delim('{') {
-		writeError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "The request must be an object with the required string fields.", requestID)
+		writeError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "The request must be a JSON object.", requestID)
 		return nil, false
 	}
-	values := make(map[string]string, len(fields))
+	values := make(map[string]json.RawMessage, len(fields))
 	for decoder.More() {
 		name, _ := decoder.Token()
 		key := name.(string)
@@ -56,27 +79,21 @@ func readAuthJSON(w http.ResponseWriter, r *http.Request, requestID string, fiel
 		}
 		var raw json.RawMessage
 		_ = decoder.Decode(&raw) // json.Valid above guarantees token syntax.
-		if len(raw) == 0 || raw[0] != '"' {
-			writeError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "Every authentication field must be a string.", requestID)
-			return nil, false
-		}
-		var value string
-		_ = json.Unmarshal(raw, &value)
-		values[key] = value
-	}
-	if len(values) != len(fields) {
-		writeError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "A required authentication field is missing.", requestID)
-		return nil, false
+		values[key] = raw
 	}
 	return values, true
 }
 
 func readAuthBody(w http.ResponseWriter, r *http.Request, requestID string) ([]byte, bool) {
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, authBodyLimit))
+	return readBoundedBody(w, r, requestID, authBodyLimit)
+}
+
+func readBoundedBody(w http.ResponseWriter, r *http.Request, requestID string, limit int64) ([]byte, bool) {
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, limit))
 	if err != nil {
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {
-			writeError(w, http.StatusRequestEntityTooLarge, "BODY_TOO_LARGE", "The authentication body exceeds 16 KiB.", requestID)
+			writeError(w, http.StatusRequestEntityTooLarge, "BODY_TOO_LARGE", "The request body exceeds the allowed size.", requestID)
 		} else {
 			writeError(w, http.StatusBadRequest, "INVALID_BODY", "The request body could not be read.", requestID)
 		}
@@ -85,8 +102,21 @@ func readAuthBody(w http.ResponseWriter, r *http.Request, requestID string) ([]b
 	return body, true
 }
 
+func requireNoBody(w http.ResponseWriter, r *http.Request, requestID string) bool {
+	if r.ContentLength > 0 || len(r.Header.Values("Content-Encoding")) != 0 {
+		writeError(w, http.StatusBadRequest, "INVALID_BODY", "This request does not accept a body or content encoding.", requestID)
+		return false
+	}
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 0))
+	if err != nil || len(body) != 0 {
+		writeError(w, http.StatusBadRequest, "INVALID_BODY", "This request does not accept a body.", requestID)
+		return false
+	}
+	return true
+}
+
 // encoding/json replaces lone escaped surrogates with U+FFFD. Reject them rather
-// than silently changing a submitted credential. Call only after json.Valid.
+// than silently changing a submitted value. Call only after json.Valid.
 func validJSONSurrogates(body []byte) bool {
 	for i := 0; i < len(body); i++ {
 		if body[i] != '\\' {

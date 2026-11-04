@@ -489,6 +489,7 @@ paths:
   /locations:
     post:
       operationId: post_locations
+      x-max-body-bytes: 131072
       summary: Create location
       tags:
       - locations
@@ -533,6 +534,14 @@ paths:
         '503':
           $ref: '#/components/responses/Error503'
       parameters:
+      - name: Origin
+        in: header
+        required: true
+        description: Exact configured browser origin, including scheme and nondefault port. Null, absent, cross-origin, and duplicate values are rejected.
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
       - name: X-CSRF-Token
         in: header
         required: true
@@ -627,6 +636,7 @@ paths:
           maxLength: 128
     patch:
       operationId: patch_locations_id
+      x-max-body-bytes: 131072
       summary: Update location
       tags:
       - locations
@@ -671,6 +681,14 @@ paths:
         '503':
           $ref: '#/components/responses/Error503'
       parameters:
+      - name: Origin
+        in: header
+        required: true
+        description: Exact configured browser origin, including scheme and nondefault port. Null, absent, cross-origin, and duplicate values are rejected.
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
       - name: id
         in: path
         required: true
@@ -698,10 +716,9 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]{0,15}"$
+        description: Quoted current positive safe-integer location aggregate revision, at most 9007199254740991. Exact retries retain the original precondition.
       - name: X-HomeBox-Client-Version
         in: header
         required: true
@@ -720,6 +737,7 @@ paths:
         service validates invariants and commits projections in same SQLite transaction.
     delete:
       operationId: delete_locations_id
+      x-max-body-bytes: 0
       summary: Delete an unused leaf location
       description: Logical deletion retains immutable history and reserves the code/ID. Reject live children and all unit/stock references, including disposed units and zero balances. Unlink owner photos with independent media-link tombstones; never delete shared media. The original acknowledgement remains replayable with an active completed session.
       tags:
@@ -759,6 +777,14 @@ paths:
         '426':
           $ref: '#/components/responses/Error426'
       parameters:
+      - name: Origin
+        in: header
+        required: true
+        description: Exact configured browser origin, including scheme and nondefault port. Null, absent, cross-origin, and duplicate values are rejected.
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
       - name: id
         in: path
         required: true
@@ -794,13 +820,13 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]{0,15}"$
+        description: Quoted current positive safe-integer location aggregate revision, at most 9007199254740991. Exact retries retain the original precondition.
   /locations/{id}/move:
     post:
       operationId: post_locations_id_move
+      x-max-body-bytes: 131072
       summary: Reparent location
       tags:
       - locations
@@ -845,6 +871,14 @@ paths:
         '503':
           $ref: '#/components/responses/Error503'
       parameters:
+      - name: Origin
+        in: header
+        required: true
+        description: Exact configured browser origin, including scheme and nondefault port. Null, absent, cross-origin, and duplicate values are rejected.
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
       - name: id
         in: path
         required: true
@@ -872,10 +906,9 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]{0,15}"$
+        description: Quoted current positive safe-integer location aggregate revision, at most 9007199254740991. Exact retries retain the original precondition.
       - name: X-HomeBox-Client-Version
         in: header
         required: true
@@ -895,6 +928,7 @@ paths:
   /locations/{id}/archive:
     post:
       operationId: post_locations_id_archive
+      x-max-body-bytes: 131072
       summary: Archive location
       tags:
       - locations
@@ -939,6 +973,14 @@ paths:
         '503':
           $ref: '#/components/responses/Error503'
       parameters:
+      - name: Origin
+        in: header
+        required: true
+        description: Exact configured browser origin, including scheme and nondefault port. Null, absent, cross-origin, and duplicate values are rejected.
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
       - name: id
         in: path
         required: true
@@ -974,10 +1016,9 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]{0,15}"$
+        description: Quoted current positive safe-integer location aggregate revision, at most 9007199254740991. Exact retries retain the original precondition.
       requestBody:
         required: true
         content:

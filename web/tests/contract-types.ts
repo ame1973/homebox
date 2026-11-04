@@ -41,6 +41,8 @@ const hashLogin: components['schemas']['LoginInput'] = { username: 'owner', pass
 type LocationCreateHeaders = operations['post_locations']['parameters']['header']
 const childLocationHeaders = { ...authHeaders, 'If-Match': '"3"' } satisfies LocationCreateHeaders
 const rootLocationHeaders = { ...authHeaders } satisfies LocationCreateHeaders
+// @ts-expect-error Domain writes require the configured browser Origin as well.
+const locationWithoutOrigin: LocationCreateHeaders = { 'X-CSRF-Token': 'csrf-fixture', 'Idempotency-Key': 'location-fixture-key', 'X-HomeBox-Client-Version': '0.1.0-dev' }
 const rootLocation = { name: 'Box', code: 'BOX-1', parent_id: null, sort_order: -1 } satisfies components['schemas']['LocationCreate']
 const minimalLocation = { name: 'Box', code: 'BOX-1' } satisfies components['schemas']['LocationCreate']
 const minimalItem = { name: 'Item' } satisfies components['schemas']['ItemCreate']
@@ -53,4 +55,4 @@ const textSortOrder: components['schemas']['LocationCreate'] = { name: 'Box', co
 const nullKind: components['schemas']['LocationWrite'] = { kind: null }
 
 void [invalidDelete, missingRevision, invalidQuantity, authHeaders, noOrigin, noCSRF, rawCredentialAdmin, hashLogin,
-  childLocationHeaders, rootLocationHeaders, rootLocation, minimalLocation, minimalItem, rootMove, parentWrapper, textSortOrder, nullKind]
+  childLocationHeaders, rootLocationHeaders, locationWithoutOrigin, rootLocation, minimalLocation, minimalItem, rootMove, parentWrapper, textSortOrder, nullKind]

@@ -4,9 +4,11 @@
 
 ### Added
 
+- Connect seven real location HTTP operations under the existing fixed-origin/session/CSRF/version/rate boundary, with quoted revisions, no-store ETags, signed live-list pages, strict bounded Unicode JSON, exact nonrounding integer parsing, safe errors, and immutable acknowledgement replay. Verify real TLS/cookie-jar CRUD, subtree confirmation, stale proofs, revoked-after-middleware races, and negative transport/input cases; browser location screens remain pending.
+
 - Add principal/epoch/page-size-scoped signed location-list continuations with a 15-minute lifetime, private-key and credential-purpose isolation, canonical encoding checks, active-session enforcement, and live-list rather than fake-snapshot semantics.
 
-- Add the authoritative location service with Unicode/safe-integer bounds, parent/subtree aggregate revisions, cycle and archival/holding guards, immutable movements, logical deletion, and independent owner-media-link tombstones. Source changes, final-state current/frozen projections, catalog invalidation, immutable audit, and principal/epoch-scoped replies commit together; add statement/commit-failure, concurrency, deep-tree, retention, and replay tests. Location HTTP/UI and complete sync remain separate unfinished work.
+- Add the authoritative location service with Unicode/safe-integer bounds, parent/subtree aggregate revisions, cycle and archival/holding guards, immutable movements, logical deletion, and independent owner-media-link tombstones. Source changes, final-state current/frozen projections, catalog invalidation, immutable audit, and principal/epoch-scoped replies commit together; add statement/commit-failure, concurrency, deep-tree, retention, and replay tests. Location UI and complete sync remain separate unfinished work.
 - Add migration 0007 for location metadata, independently retained current projections with deferred revision integrity, and append-only mutation audit; preserve original migration files and legacy quantities. Refine root location concurrency, pagination, nullable-field, and bounds contracts with generated-client fixtures and English rules documentation.
 
 - Add responsive real-server setup/login/mandatory-password-change/logout pages with React Hook Form/Zod, official fields/dialogs, password-manager support, dirty/back/reload guards, secret clearing, safe session-cache transitions, uncertain-outcome reconciliation, and lazy-chunk recovery. Add isolated per-test Go/browser fixtures, light/dark accessibility, two-times text, and committed-but-malformed-response coverage; fix transient theme contrast and narrow enlarged menus without editing generated primitives.
@@ -25,7 +27,7 @@
 - Real Go integration, race-detector, and CGO-disabled tests for persistence and failure handling.
 - A runnable database CLI for version information, explicit migration, integrity checks, and snapshot verification, with bounded mapping-file parsing and cancellation.
 - English database operations documentation and reproducible CGO-free Linux amd64/arm64 build targets.
-- A minimal same-origin HTTP foundation with public liveness, rooted static-file containment, safe SPA deep links, structured errors, security headers, and graceful shutdown. Private domain APIs are not yet implemented.
+- A minimal same-origin HTTP foundation with public liveness, rooted static-file containment, safe SPA deep links, structured errors, security headers, and graceful shutdown. Remaining private domain APIs are tracked separately.
 - An official Vite/React and shadcn/Radix/Tailwind frontend with real connectivity checks, cancellation/timeouts, runtime response validation, accessible system/light/dark themes, and no automatic mutation replay.
 - Generated API types with drift/negative-type checks, frontend unit/coverage and build-budget tests, and real-Go-server Playwright/axe checks across five layouts.
 - SHA-pinned GitHub Actions checks for the backend/frontend, frozen dependencies, dependency audits, and browser test artifacts. Remote CI execution and physical acceptance are not yet claimed.
@@ -40,7 +42,7 @@
 
 - Add stateless typed browser adapters for all seven auth endpoints with strict Zod response checks, explicit CSRF/idempotency context, package-version headers, safe error metadata, Unicode code-point bounds, cancel/timeout cleanup, and no persistent credentials or hidden refresh/retry/replay. Add 79 adapter cases and negative auth type fixtures, and verify the module in Chromium against real isolated Vite/Go processes.
 
-- Expose the seven real authentication HTTP routes with fixed-origin/Host and trusted-transport enforcement, strict bounded UTF-8 JSON, HttpOnly/SameSite cookies, CSRF/version/idempotency checks, bounded per-peer/global rate limits, mandatory password change, and exact revoked-cookie acknowledgement replay. Add direct TLS and explicit proxy CIDR configuration, actual TLS/cookie-jar and CLI listener tests, parser fuzzing, and English operator documentation. Private domain routes remain pending.
+- Expose the seven real authentication HTTP routes with fixed-origin/Host and trusted-transport enforcement, strict bounded UTF-8 JSON, HttpOnly/SameSite cookies, CSRF/version/idempotency checks, bounded per-peer/global rate limits, mandatory password change, and exact revoked-cookie acknowledgement replay. Add direct TLS and explicit proxy CIDR configuration, actual TLS/cookie-jar and CLI listener tests, parser fuzzing, and English operator documentation. Other domain routes remain pending.
 
 - Add session-bound, independently server-keyed CSRF issuance and constant-time verification, with active-session issuance, cross-session/capability isolation, and safe acknowledgement-replay tests.
 

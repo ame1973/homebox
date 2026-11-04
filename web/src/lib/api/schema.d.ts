@@ -6560,6 +6560,8 @@ export interface operations {
                 readonly "Idempotency-Key": string;
                 /** @description Required when parent_id is non-null; send the quoted current parent aggregate revision. Omit for root creation. Exact retries retain the original precondition. */
                 readonly "If-Match"?: string;
+                /** @description Exact configured browser origin, including scheme and nondefault port. Null, absent, cross-origin, and duplicate values are rejected. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -6640,8 +6642,10 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Quoted current positive safe-integer location aggregate revision, at most 9007199254740991. Exact retries retain the original precondition. */
                 readonly "If-Match": string;
+                /** @description Exact configured browser origin, including scheme and nondefault port. Null, absent, cross-origin, and duplicate values are rejected. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -6682,8 +6686,10 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Quoted current positive safe-integer location aggregate revision, at most 9007199254740991. Exact retries retain the original precondition. */
                 readonly "If-Match": string;
+                /** @description Exact configured browser origin, including scheme and nondefault port. Null, absent, cross-origin, and duplicate values are rejected. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -6730,8 +6736,10 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Quoted current positive safe-integer location aggregate revision, at most 9007199254740991. Exact retries retain the original precondition. */
                 readonly "If-Match": string;
+                /** @description Exact configured browser origin, including scheme and nondefault port. Null, absent, cross-origin, and duplicate values are rejected. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -6816,8 +6824,10 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Quoted current positive safe-integer location aggregate revision, at most 9007199254740991. Exact retries retain the original precondition. */
                 readonly "If-Match": string;
+                /** @description Exact configured browser origin, including scheme and nondefault port. Null, absent, cross-origin, and duplicate values are rejected. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;

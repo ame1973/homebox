@@ -12,7 +12,7 @@ make setup-web build-web build
 ./bin/homebox serve --database ./data/homebox.sqlite --web-dir ./web/dist
 ```
 
-Open exactly the printed `public_origin` (normally `http://127.0.0.1:8080`). Keep this incomplete build on loopback. The backend authentication, account pages, and direct TLS/explicit proxy features are implemented; private domain APIs and production deployment remain pending. See [HTTP Authentication and Transport](../docs/http-authentication.md). `serve` requires a migrated database and a nonempty frontend build and does not silently migrate data. Stop it with Ctrl+C.
+Open exactly the printed `public_origin` (normally `http://127.0.0.1:8080`). Keep this incomplete build on loopback. The backend authentication, account pages, seven location metadata HTTP operations, and direct TLS/explicit proxy features are implemented; location browser screens, remaining private domain APIs, and production deployment remain pending. See [HTTP Authentication and Transport](../docs/http-authentication.md). `serve` requires a migrated database and a nonempty frontend build and does not silently migrate data. Stop it with Ctrl+C.
 
 For hot reload, the Go origin must match the browser's Vite origin, and Vite must preserve that Host while forwarding `/api`:
 

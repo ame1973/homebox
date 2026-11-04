@@ -13,9 +13,10 @@ import (
 )
 
 type authAPI struct {
-	auth    *store.Auth
-	origin  originPolicy
-	limiter *requestLimiter
+	auth      *store.Auth
+	locations *store.Locations
+	origin    originPolicy
+	limiter   *requestLimiter
 }
 
 func authMethod(path string) string {
@@ -48,6 +49,9 @@ func (a *authAPI) serve(w http.ResponseWriter, r *http.Request, requestID string
 		return
 	}
 	if method == "" {
+		if a.serveLocations(w, r, requestID) {
+			return
+		}
 		// Worker credentials are a separate boundary, never an administrator session.
 		if r.URL.Path != "/api/v1/worker" && !strings.HasPrefix(r.URL.Path, "/api/v1/worker/") {
 			if !a.requireAdmin(w, r, requestID) {

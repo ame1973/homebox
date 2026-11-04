@@ -1,6 +1,26 @@
 # Location Rules
 
-**Implementation status:** the authoritative Go/SQLite location service is implemented and tested. Location HTTP handlers and browser screens are not connected yet. The routes in OpenAPI specify their eventual interface; they are not working HTTP examples. Full offline synchronization is also a separate unfinished feature.
+**Implementation status:** the authoritative Go/SQLite location service and seven location HTTP operations are implemented and tested. Browser screens, location contents/summary/QR routes, and full offline synchronization are separate unfinished features.
+
+## HTTP operations
+
+All paths are relative to `/api/v1`, use the configured same-origin session boundary, and return `Cache-Control: no-store`. Domain writes require exact Origin, current-session CSRF, a supported application version, and an explicit stable idempotency key. Mandatory password change blocks all these operations. A domain reply never sets or clears the session cookie.
+
+| Operation | Request | Successful result |
+| --- | --- | --- |
+| `GET /locations/tree` | Optional `limit` 1–100 (default 100) and signed `cursor`; no body | Flat parent-linked page, including archived but excluding deleted locations |
+| `POST /locations` | JSON name/code and optional metadata; conditional parent `If-Match` | Location and quoted aggregate ETag |
+| `GET /locations/{id}` | Active completed session; no body | Current location and ETag |
+| `PATCH /locations/{id}` | Nonempty JSON patch and target `If-Match` | Updated location and ETag |
+| `POST /locations/{id}/move` | Required nullable `target_parent_id` and target `If-Match` | Moved location and ETag |
+| `POST /locations/{id}/archive` | JSON object, optional `archive_children`/reason, target `If-Match` | Archived location and ETag |
+| `DELETE /locations/{id}` | Target `If-Match`; no body | Frozen committed acknowledgement with operation ID and tombstone revision |
+
+Missing revision proofs return `409 PRECONDITION_REQUIRED`; stale ones return `409 REVISION_CONFLICT`. Root creation must omit unrelated `If-Match`. Revisions use one quoted positive decimal integer without leading zeros, weak tags, lists, or `*`, and may not exceed `9007199254740991`. Signed-list failures return `400 INVALID_CURSOR`; restart the read rather than altering the token. Other safe domain codes distinguish reserved codes, cycles, archived destinations, unreviewed children, and retained inventory references. See [OpenAPI](../contracts/openapi.yaml) for the exact payloads.
+
+Location JSON is unencoded UTF-8 `application/json`, capped at 128 KiB before parsing. Fields are case-sensitive; duplicate names, invalid UTF-8/surrogates, unknown fields, null nonnullable values, and trailing documents are rejected. Integer-valued decimal/exponent forms such as `1000.00` or `1e3` are accepted exactly, never rounded through floating point. Numeric representations are limited to 128 characters with bounded exponent work; nonintegral or unsafe values are rejected. Authentication retains its separate 16 KiB limit. GET/DELETE bodies and query parameters outside the documented tree pagination are rejected; tree query strings are bounded to 2,300 encoded characters.
+
+Location reads and writes share the existing general 60/minute peer and 600/minute global admission windows; they do not bypass the limiter or consume a separate credential-minting allowance. An active-session middleware check does not replace the second transactional authorization: revocation after middleware but before source mutation still rejects the write.
 
 ## Identity and hierarchy
 
@@ -61,7 +81,7 @@ Timeout or cancellation after sending does not prove rollback. No client should 
 
 The location-list service returns stable-ID pages of at most 100 records and an opaque HMAC-signed continuation. Each cursor binds the administrator, dataset epoch, page size, final ID, and a 15-minute expiry in a dedicated signing namespace. Changing a token, page size, principal, or dataset invalidates it. A fresh active session for the same principal may continue the read; the cursor is not a credential and cannot reactivate a revoked session. It contains no raw cookie/password, and private signing key material never leaves SQLite/server memory.
 
-These are live metadata pages, not a frozen offline snapshot. Mutations between pages are reflected in later reads; callers must refresh ordinary tree reads when needed rather than treating them as a certified replica. HTTP integration remains pending at this stage.
+These are live metadata pages, not a frozen offline snapshot. Mutations between pages are reflected in later reads; callers must refresh ordinary tree reads when needed rather than treating them as a certified replica. `GET /locations/tree` exposes this signed protocol; follow the cursor with the same page size.
 
 ## Projections and verification
 
@@ -73,7 +93,8 @@ Run the actual service/transaction tests:
 
 ```sh
 go -C server test -race -count=1 ./internal/store -run '^(TestLocation|TestDomain)'
+go -C server test -race -count=1 ./internal/httpapi -run '^TestLocation'
 make check-backend
 ```
 
-Tests cover Unicode/safe-integer bounds, parent/subtree revisions, a hierarchy deeper than 1,000 levels, concurrent duplicate creation and opposite moves, stale parent proofs, owner/link tombstones, shared-media preservation, immutable/frozen records, retention independence, all dependent write failures, and deferred commit failure. These are automated database/service checks, not location HTTP/browser or physical NAS/device acceptance.
+Tests cover Unicode/safe-integer bounds, parent/subtree revisions, a hierarchy deeper than 1,000 levels, concurrent duplicate creation and opposite moves, stale parent proofs, owner/link tombstones, shared-media preservation, immutable/frozen records, retention independence, all dependent write failures, and deferred commit failure. HTTP checks additionally drive all seven operations through verified TLS/cookie jars, exact acknowledgement replay, signed pagination, safe errors, method/URL/Origin/CSRF/version/admission rules, and revocation after middleware but before the SQL mutation. The compiled CLI/server has also been driven through real loopback sockets with a disposable private database. These automated checks are not location-browser-screen or physical NAS/device acceptance.

@@ -1,6 +1,6 @@
 # HTTP Authentication and Transport
 
-**Development status:** all seven authentication API routes, their transport/security checks, and the React setup/login/password-change/logout workflow are implemented. Privileged reauthentication consumers, inventory/domain routes, offline PWA, and production deployment are not complete. These commands document working server capabilities, not QNAP or physical-device acceptance.
+**Development status:** all seven authentication API routes, their transport/security checks, the React setup/login/password-change/logout workflow, and [seven location HTTP operations](locations.md) are implemented. Privileged reauthentication consumers, other inventory/domain routes, location screens, offline PWA, and production deployment are not complete. These commands document working server capabilities, not QNAP or physical-device acceptance.
 
 ## Start locally
 
