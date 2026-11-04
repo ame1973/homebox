@@ -54,5 +54,15 @@ const textSortOrder: components['schemas']['LocationCreate'] = { name: 'Box', co
 // @ts-expect-error Only the parent field is nullable; kind is not.
 const nullKind: components['schemas']['LocationWrite'] = { kind: null }
 
-void [invalidDelete, missingRevision, invalidQuantity, authHeaders, noOrigin, noCSRF, rawCredentialAdmin, hashLogin,
+declare const createLocation: typeof import('../src/lib/api/locations').createLocation
+declare const writeContext: import('../src/lib/api/client').WriteContext
+const createRoot = createLocation({ name: 'Box', code: 'BOX-1' }, writeContext)
+const createChild = createLocation({ name: 'Box', code: 'BOX-2', parent_id: 'parent' }, { ...writeContext, expectedRevision: 3 })
+// @ts-expect-error Child creation cannot omit its reviewed parent revision.
+const unprovenChild = createLocation({ name: 'Box', code: 'BOX-2', parent_id: 'parent' }, writeContext)
+// @ts-expect-error Root creation cannot silently attach an unrelated If-Match.
+const unrelatedRootProof = createLocation({ name: 'Box', code: 'BOX-1' }, { ...writeContext, expectedRevision: 3 })
+
+void [createRoot, createChild, unprovenChild, unrelatedRootProof,
+  invalidDelete, missingRevision, invalidQuantity, authHeaders, noOrigin, noCSRF, rawCredentialAdmin, hashLogin,
   childLocationHeaders, rootLocationHeaders, locationWithoutOrigin, rootLocation, minimalLocation, minimalItem, rootMove, parentWrapper, textSortOrder, nullKind]

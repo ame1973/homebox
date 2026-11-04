@@ -22,6 +22,16 @@ Location JSON is unencoded UTF-8 `application/json`, capped at 128 KiB before pa
 
 Location reads and writes share the existing general 60/minute peer and 600/minute global admission windows; they do not bypass the limiter or consume a separate credential-minting allowance. An active-session middleware check does not replace the second transactional authorization: revocation after middleware but before source mutation still rejects the write.
 
+## Typed browser client
+
+`web/src/lib/api/locations.ts` implements the seven operations through generated OpenAPI paths and strict runtime schemas. It validates safe integer/Unicode bounds, exact resource identity, matching strong ETags, allowed mutation revision transitions, deletion acknowledgements, page sizes, and duplicate IDs. Extra success fields are rejected. It returns one explicit page at a time rather than following continuations invisibly or claiming a frozen tree.
+
+Root/child create overloads make their concurrency difference explicit: root context has no expected revision, while a child requires `LocationWriteContext.expectedRevision` for its reviewed parent. Other writes use the target's original expected revision. Callers supply CSRF, stable idempotency key, and AbortSignal; the adapter never fetches a new proof, chooses a fresh key, rebases, retries, queues, persists, or replays a mutation. Empty versus explicit-null PATCH parents remain distinct, and optional server defaults are not silently inserted into the submitted request.
+
+Read deadlines are eight seconds and write deadlines are 30 seconds. Cancellation, network failure, timeout, or malformed success after sending is an uncertain outcome, not evidence of rollback. An explicit retry retains the original key/body/proof. Conflict/expired-claim codes require current-state review, not automatic new-key resubmission. Safe error normalization is shared with account adapters and retains no arbitrary server text, details, response, or transport cause.
+
+These adapters are not a claim that location browser screens, draft storage, or offline replication are complete.
+
 ## Identity and hierarchy
 
 A location has a stable UUID, a unique human-readable code, a name, a parent or root position, a kind, a signed sort order, a description, and an active/archived state. New locations default to `kind=other`, `status=active`, and `sort_order=0`. Names, descriptions, whitespace, and Unicode normalization are preserved rather than silently rewritten.

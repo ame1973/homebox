@@ -4,6 +4,8 @@
 
 ### Added
 
+- Add strict typed browser adapters for all seven location operations with root/child proof overloads, original-key/revision preservation, identity/strong-ETag/deletion/page validation, Unicode/safe-integer bounds, cancellation/deadlines, and no hidden token refresh, rebase, retry, queue, or persistence. Share the existing stateless error/Unicode/transport implementations with account adapters and retain compatibility exports.
+
 - Connect seven real location HTTP operations under the existing fixed-origin/session/CSRF/version/rate boundary, with quoted revisions, no-store ETags, signed live-list pages, strict bounded Unicode JSON, exact nonrounding integer parsing, safe errors, and immutable acknowledgement replay. Verify real TLS/cookie-jar CRUD, subtree confirmation, stale proofs, revoked-after-middleware races, and negative transport/input cases; browser location screens remain pending.
 
 - Add principal/epoch/page-size-scoped signed location-list continuations with a 15-minute lifetime, private-key and credential-purpose isolation, canonical encoding checks, active-session enforcement, and live-list rather than fake-snapshot semantics.
