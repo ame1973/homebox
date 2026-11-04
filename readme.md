@@ -53,7 +53,7 @@ The command requires an already provisioned account and explicit confirmation. I
 
 ## Local web application (available now)
 
-The React interface currently provides a real, read-only server connectivity check, retry/error/loading states, and system/light/dark appearance. It does not display invented inventory data or claim that private domain APIs are ready.
+The React interface currently provides a real, read-only server connectivity check, retry/error/loading states, and system/light/dark appearance. A generated-types/Zod authentication adapter is implemented and tested in Chromium against the real server, but the account screens are still pending. It does not display invented inventory data or claim that private domain APIs are ready.
 
 ```sh
 make setup-web build-web build

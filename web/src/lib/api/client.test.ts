@@ -70,7 +70,7 @@ describe('same-origin health boundary', () => {
     abortableFetch()
     const { fetchHealth } = await import('./client')
     const result = fetchHealth(new AbortController().signal)
-    const rejection = expect(result).rejects.toThrow('Aborted')
+    const rejection = expect(result).rejects.toThrow('Request timed out')
     await vi.advanceTimersByTimeAsync(8_000)
     await rejection
     expect(vi.getTimerCount()).toBe(0)

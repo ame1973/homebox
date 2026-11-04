@@ -27,6 +27,8 @@
 
 ### Security
 
+- Add stateless typed browser adapters for all seven auth endpoints with strict Zod response checks, explicit CSRF/idempotency context, package-version headers, safe error metadata, Unicode code-point bounds, cancel/timeout cleanup, and no persistent credentials or hidden refresh/retry/replay. Add 79 adapter cases and negative auth type fixtures, and verify the module in Chromium against real isolated Vite/Go processes. Account screens remain pending.
+
 - Expose the seven real authentication HTTP routes with fixed-origin/Host and trusted-transport enforcement, strict bounded UTF-8 JSON, HttpOnly/SameSite cookies, CSRF/version/idempotency checks, bounded per-peer/global rate limits, mandatory password change, and exact revoked-cookie acknowledgement replay. Add direct TLS and explicit proxy CIDR configuration, actual TLS/cookie-jar and CLI listener tests, parser fuzzing, and English operator documentation. React authentication screens and domain routes remain pending.
 
 - Add session-bound, independently server-keyed CSRF issuance and constant-time verification, with active-session issuance, cross-session/capability isolation, and safe acknowledgement-replay tests.
