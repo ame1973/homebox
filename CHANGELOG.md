@@ -27,6 +27,8 @@
 
 ### Security
 
+- Add short-lived, session/revision/epoch-bound single-use reauthentication grants with hash-only storage, deterministic safe replay, atomic private consumption, concurrent-use exclusion, and commit-failure rollback tests. Migration 0005 adds private grant storage; HTTP integration remains pending.
+
 - Add atomic password change with current-password verification, mandatory-change completion, all-session revocation, safe frozen acknowledgement replay, operation/body-bound auth keys, and keyed credential fingerprints. HTTP routes remain pending.
 
 - Add transactional one-time bootstrap, single-administrator enforcement, hashed opaque sessions, idle/absolute expiry, credential-proof revalidation, and session-scoped idempotent logout. Migration 0003 revokes uncertified reference sessions and refuses ambiguous multi-admin upgrades without deleting data; 0004 binds credentials to the dataset epoch to prevent resurrection after restore. These store services are not yet exposed as HTTP authentication.

@@ -48,6 +48,16 @@ New accounts have `must_change_password=true`. The password-change service clear
 
 Schema migration 0003 adds revision/mandatory-change/idle metadata and the one-admin index; 0004 adds dataset-epoch binding and invalidates older unbound session/bootstrap credentials. Existing reference sessions are revoked because they have no certified idle history. Multiple legacy administrators cause an atomic upgrade refusal, preserving the original accounts and the verified pre-upgrade snapshot; no account is silently selected or deleted. Unsupported legacy password encodings are not silently downgraded or accepted.
 
+## Reauthentication grants
+
+The internal reauthentication service requires a fully initialized account, an active session, the correct username, and a fresh password proof. It creates a single-use capability valid for at most five minutes, further bounded by remaining session idle/absolute lifetime. Creation revalidates the account/session proof inside the transaction and atomically commits the grant hash, activity timestamp, audit event, and safe idempotency metadata.
+
+Grant values are domain-separated HMAC outputs bound to the raw session credential and request key. This lets an exact retry reconstruct the original authenticated response without persisting the raw grant. The database stores only the grant hash, parent session, account revision, timestamps, and consumed state. Reconstruction does not create another row, renew expiry, or reset consumption; retrying an already used/expired grant does not make it usable again.
+
+Grant consumption is private to the store and must share the authoritative SQL transaction with the privileged mutation or job authorization. There is deliberately no separate public check/consume endpoint. A failed transaction rolls consumption back; concurrent transactions can have only one winner. Logout, password rotation, revision mismatch, mandatory-change state, dataset-epoch rotation, expiry, or a different session prevents use. Knowing how to derive a token is not enough: a matching persisted, unused grant is required.
+
+Migration 0005 adds private reauthentication storage and indexes. HTTP reauthentication and privileged operation routes are still pending; these services do not by themselves expose a usable remote workflow.
+
 ## Data and transport boundaries
 
 Private SQLite storage, sidecars, and migration snapshots have strict permissions and must not be placed in the public static-assets directory. Migration snapshots are not encrypted full backups; see [Database Operations](database.md). Future deployment requires trusted HTTPS on LAN/VPN; a VPN alone does not satisfy browser camera/PWA secure-context requirements.
