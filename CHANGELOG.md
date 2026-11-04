@@ -14,6 +14,8 @@
 - Explicit checksum-verified forward migrations, audited legacy adoption, unchanged base-count mappings, and atomic rollback across all pending migrations.
 - Verified pre-upgrade SQLite Online Backup snapshots with SHA-256 markers, integrity/FK checks, free-space gates, and self-contained rollback-journal output.
 - Real Go integration, race-detector, and CGO-disabled tests for persistence and failure handling.
+- A runnable database CLI for version information, explicit migration, integrity checks, and snapshot verification, with bounded mapping-file parsing and cancellation.
+- English database operations documentation and reproducible CGO-free Linux amd64/arm64 build targets.
 
 ### Security
 

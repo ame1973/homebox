@@ -17,6 +17,19 @@ A self-hosted, single-administrator household inventory and asset-management PWA
 
 Go HTTP server + SQLite WAL/FTS5 + same-origin static React/TypeScript/Vite frontend. The UI uses shadcn/ui/Radix/Tailwind. Private database and media files live on a local filesystem. Production deployments do not require Node.js, and ordinary CRUD must continue with the optional AI worker stopped.
 
+## Database CLI (available now)
+
+The database-maintenance CLI is functional; it is not yet the complete HTTP/PWA application.
+
+```sh
+make build
+./bin/homebox version
+./bin/homebox db migrate --database ./data/homebox.sqlite
+./bin/homebox db check --database ./data/homebox.sqlite
+```
+
+See [Database Operations](docs/database.md) for private storage permissions, explicit legacy adoption, precision mappings, verified pre-migration snapshots, failure recovery, timeouts, and Linux amd64/arm64 builds. Local migration snapshots are sensitive, unencrypted database-only recovery files, not full encrypted off-host backups.
+
 ## Security and data
 
 Use trusted HTTPS over LAN/VPN. A VPN does not replace the secure context required by camera/PWA APIs. Do not expose NAS administration, the Docker socket, or unprotected data directories. Do not place SQLite on SMB/NFS. Browser storage can be evicted and is not a durable backup.
