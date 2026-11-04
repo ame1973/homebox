@@ -50,6 +50,12 @@ New accounts have `must_change_password=true`. The password-change service clear
 
 Schema migration 0003 adds revision/mandatory-change/idle metadata and the one-admin index; 0004 adds dataset-epoch binding and invalidates older unbound session/bootstrap credentials. Existing reference sessions are revoked because they have no certified idle history. Multiple legacy administrators cause an atomic upgrade refusal, preserving the original accounts and the verified pre-upgrade snapshot; no account is silently selected or deleted. Unsupported legacy password encodings are not silently downgraded or accepted.
 
+## Session-bound CSRF tokens
+
+The internal CSRF service issues a domain-separated, server-keyed request token only after validating an active session, including sessions that must change their password. Tokens are stable for the session and distinct from both its cookie and reauthentication capabilities. They are not persisted in audit/idempotency data or browser storage. A different session or server key cannot validate the token.
+
+MAC verification is deliberately separate from authorization: every mutation must still validate the session inside its own transaction. This allows an exact logout/password-change acknowledgement retry with the original cookie and CSRF token without authorizing a new action after revocation. A revoked, expired, or old-epoch session cannot obtain another CSRF response. HTTP Origin checks and enforcement are still pending.
+
 ## Reauthentication grants
 
 The internal reauthentication service requires a fully initialized account, an active session, the correct username, and a fresh password proof. It creates a single-use capability valid for at most five minutes, further bounded by remaining session idle/absolute lifetime. Creation revalidates the account/session proof inside the transaction and atomically commits the grant hash, activity timestamp, audit event, and safe idempotency metadata.

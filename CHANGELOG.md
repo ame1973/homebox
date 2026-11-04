@@ -27,6 +27,8 @@
 
 ### Security
 
+- Add session-bound, independently server-keyed CSRF issuance and constant-time verification, with active-session issuance, cross-session/capability isolation, and safe acknowledgement-replay tests. HTTP enforcement remains pending.
+
 - Add explicit offline-owner password recovery with typed confirmation, random private-file delivery, mandatory first-login rotation, all-session revocation, target revalidation, and atomic audit/rollback behavior. Normal serving stores reject it and no HTTP recovery endpoint is added.
 
 - Fix reauthentication capability derivation to require independent server-only key material as well as the raw session credential. Cookie/key knowledge no longer reconstructs an issued capability. Migration 0006 invalidates the earlier auth protocol without deleting domain replies; adversarial and restart/missing-key tests cover the change.

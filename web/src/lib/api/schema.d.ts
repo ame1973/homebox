@@ -2385,6 +2385,7 @@ export interface components {
             /** Format: date-time */
             readonly occurred_at: string;
         };
+        /** @description Session-bound, server-keyed request token, issued only to an active session. Keep it in memory and send it on protected writes; it is neither a session credential nor a reauthentication capability. Verification does not replace transactional session authorization. */
         readonly CSRFToken: {
             readonly token: string;
         };

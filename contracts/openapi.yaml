@@ -13323,6 +13323,7 @@ components:
       - ok
       - operation_id
     CSRFToken:
+      description: Session-bound, server-keyed request token, issued only to an active session. Keep it in memory and send it on protected writes; it is neither a session credential nor a reauthentication capability. Verification does not replace transactional session authorization.
       type: object
       additionalProperties: false
       properties:
