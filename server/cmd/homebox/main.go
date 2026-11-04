@@ -26,6 +26,8 @@ const usage = `HomeBox
 Usage:
   homebox version
   homebox serve [--listen HOST:PORT] [--database PATH] [--web-dir DIR]
+                [--public-origin ORIGIN] [--tls-cert FILE --tls-key FILE]
+                [--trusted-proxy IP_PREFIX ...]
   homebox db migrate [--database PATH] [--allow-legacy] [--legacy-units FILE]
                      [--backup-dir DIR] [--reserve-bytes BYTES] [--timeout DURATION]
   homebox db check [--database PATH] [--timeout DURATION]
@@ -36,7 +38,8 @@ Usage:
 
 Database commands require exclusive access to a local, private data directory.
 Serve requires a real frontend build and an already migrated database.
-Only public liveness and static serving are available until domain APIs are implemented.
+Authentication and public liveness are implemented; private domain APIs remain in development.
+HTTP is restricted to direct loopback development; LAN/VPN requires trusted HTTPS.
 `
 
 func main() {

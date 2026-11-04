@@ -27,21 +27,23 @@
 
 ### Security
 
-- Add session-bound, independently server-keyed CSRF issuance and constant-time verification, with active-session issuance, cross-session/capability isolation, and safe acknowledgement-replay tests. HTTP enforcement remains pending.
+- Expose the seven real authentication HTTP routes with fixed-origin/Host and trusted-transport enforcement, strict bounded UTF-8 JSON, HttpOnly/SameSite cookies, CSRF/version/idempotency checks, bounded per-peer/global rate limits, mandatory password change, and exact revoked-cookie acknowledgement replay. Add direct TLS and explicit proxy CIDR configuration, actual TLS/cookie-jar and CLI listener tests, parser fuzzing, and English operator documentation. React authentication screens and domain routes remain pending.
+
+- Add session-bound, independently server-keyed CSRF issuance and constant-time verification, with active-session issuance, cross-session/capability isolation, and safe acknowledgement-replay tests.
 
 - Add explicit offline-owner password recovery with typed confirmation, random private-file delivery, mandatory first-login rotation, all-session revocation, target revalidation, and atomic audit/rollback behavior. Normal serving stores reject it and no HTTP recovery endpoint is added.
 
 - Fix reauthentication capability derivation to require independent server-only key material as well as the raw session credential. Cookie/key knowledge no longer reconstructs an issued capability. Migration 0006 invalidates the earlier auth protocol without deleting domain replies; adversarial and restart/missing-key tests cover the change.
 
-- Add the offline `auth bootstrap` CLI with exclusive private-file delivery, metadata-only output, file-before-database durability ordering, no-overwrite/symlink/special-file refusal, rollback cleanup, and native CLI smoke coverage. HTTP setup/login remains pending.
+- Add the offline `auth bootstrap` CLI with exclusive private-file delivery, metadata-only output, file-before-database durability ordering, no-overwrite/symlink/special-file refusal, rollback cleanup, and native CLI smoke coverage.
 
-- Add short-lived, session/revision/epoch-bound single-use reauthentication grants with hash-only storage, deterministic safe replay, atomic private consumption, concurrent-use exclusion, and commit-failure rollback tests. Migration 0005 adds private grant storage; HTTP integration remains pending.
+- Add short-lived, session/revision/epoch-bound single-use reauthentication grants with hash-only storage, deterministic safe replay, atomic private consumption, concurrent-use exclusion, and commit-failure rollback tests. Migration 0005 adds private grant storage.
 
-- Add atomic password change with current-password verification, mandatory-change completion, all-session revocation, safe frozen acknowledgement replay, operation/body-bound auth keys, and keyed credential fingerprints. HTTP routes remain pending.
+- Add atomic password change with current-password verification, mandatory-change completion, all-session revocation, safe frozen acknowledgement replay, operation/body-bound auth keys, and keyed credential fingerprints.
 
-- Add transactional one-time bootstrap, single-administrator enforcement, hashed opaque sessions, idle/absolute expiry, credential-proof revalidation, and session-scoped idempotent logout. Migration 0003 revokes uncertified reference sessions and refuses ambiguous multi-admin upgrades without deleting data; 0004 binds credentials to the dataset epoch to prevent resurrection after restore. These store services are not yet exposed as HTTP authentication.
+- Add transactional one-time bootstrap, single-administrator enforcement, hashed opaque sessions, idle/absolute expiry, credential-proof revalidation, and session-scoped idempotent logout. Migration 0003 revokes uncertified reference sessions and refuses ambiguous multi-admin upgrades without deleting data; 0004 binds credentials to the dataset epoch to prevent resurrection after restore.
 
-- Add bounded Argon2id PHC hashing/verification with unique salts, constant-time comparison, process-wide work admission, strict cost/encoding checks, Unicode password bounds, independent-vector tests, and parser fuzzing. HTTP authentication is not yet wired.
+- Add bounded Argon2id PHC hashing/verification with unique salts, constant-time comparison, process-wide work admission, strict cost/encoding checks, Unicode password bounds, independent-vector tests, and parser fuzzing.
 
 - Reject permissive or symlinked SQLite sidecars before opening a database, and reject unhashed sidecars or unsafe checksum markers when verifying a migration snapshot.
 

@@ -10,8 +10,22 @@ from jsonschema.exceptions import ValidationError
 from openapi_spec_validator import OpenAPIV31SpecValidator
 import yaml
 
+
+class UniqueKeySafeLoader(yaml.SafeLoader):
+    """Do not silently replace an earlier contract definition with a duplicate key."""
+
+    def construct_mapping(self, node, deep=False):
+        keys = set()
+        for key_node, _ in node.value:
+            key = self.construct_object(key_node, deep=deep)
+            if key in keys:
+                raise ValueError(f"Duplicate YAML key at line {key_node.start_mark.line + 1}: {key}")
+            keys.add(key)
+        return super().construct_mapping(node, deep=deep)
+
+
 ROOT = Path(__file__).resolve().parents[1]
-API = yaml.safe_load((ROOT / "contracts/openapi.yaml").read_text())
+API = yaml.load((ROOT / "contracts/openapi.yaml").read_text(), Loader=UniqueKeySafeLoader)
 PROJECTION = json.loads((ROOT / "contracts/offline-projection.schema.json").read_text())
 SCHEMAS = API["components"]["schemas"]
 FORMAT = FormatChecker()
@@ -72,6 +86,12 @@ def record(entity, payload=None, operation="upsert", revision=1, identity="examp
 
 
 class OpenAPIContractTests(unittest.TestCase):
+    def test_yaml_rejects_duplicate_keys_and_unsafe_object_tags(self):
+        with self.assertRaises(ValueError):
+            yaml.load("operation:\n  description: first\n  description: replaced\n", Loader=UniqueKeySafeLoader)
+        with self.assertRaises(yaml.constructor.ConstructorError):
+            yaml.load("!!python/object:builtins.object {}", Loader=UniqueKeySafeLoader)
+
     def test_entire_document_validates_as_openapi_31(self):
         errors = list(OpenAPIV31SpecValidator(API).iter_errors())
         self.assertEqual([], errors)
@@ -133,6 +153,37 @@ class OpenAPIContractTests(unittest.TestCase):
                     self.assertIn("426", op["responses"])
                     if method in {"patch", "put", "delete"} or path.startswith("/stock/"):
                         self.assertIn("If-Match", headers)
+
+    def test_auth_transport_cookie_and_body_limits_are_explicit(self):
+        for path in ["/auth/login", "/auth/setup", "/auth/logout", "/auth/password", "/auth/reauth"]:
+            with self.subTest(path=path):
+                operation = API["paths"][path]["post"]
+                origins = [parameter for parameter in operation["parameters"] if parameter["name"] == "Origin"]
+                self.assertEqual(1, len(origins))
+                self.assertTrue(origins[0]["required"])
+                self.assertEqual("header", origins[0]["in"])
+                self.assertEqual(2048, origins[0]["schema"]["maxLength"])
+                if path != "/auth/logout":
+                    self.assertEqual(16384, operation["x-max-body-bytes"])
+                if path in {"/auth/login", "/auth/logout", "/auth/password"}:
+                    self.assertIn("Set-Cookie", operation["responses"]["200"]["headers"])
+        self.assertNotIn("requestBody", API["paths"]["/auth/logout"]["post"])
+        self.assertNotIn("Set-Cookie", API["paths"]["/auth/setup"]["post"]["responses"]["200"]["headers"])
+        self.assertEqual("homebox_session", API["components"]["securitySchemes"]["SessionCookie"]["name"])
+
+    def test_auth_payloads_are_exact_and_credentials_are_not_admin_properties(self):
+        for name, value in [
+            ("LoginInput", {"username": "owner", "password": "a valid password"}),
+            ("AuthSetupInput", {"bootstrap_token": "a" * 43, "username": "owner", "password": "a valid password"}),
+            ("AuthPasswordChange", {"old_password": "a valid password", "new_password": "another valid password"}),
+        ]:
+            validator(name).validate(value)
+            for invalid in [{**value, "unexpected": "x"}, {**value, "password_hash": "secret"},
+                            {field: content for field, content in value.items() if field != next(iter(value))}]:
+                with self.subTest(schema=name, value=invalid), self.assertRaises(ValidationError):
+                    validator(name).validate(invalid)
+        self.assertEqual({"id", "revision", "username", "must_change_password"}, set(SCHEMAS["Admin"]["properties"]))
+        self.assertNotIn("session_token", SCHEMAS["ReauthResult"]["properties"])
 
     def test_all_responses_are_network_only_and_errors_are_structured(self):
         for path, methods in API["paths"].items():

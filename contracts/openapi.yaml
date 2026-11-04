@@ -17,6 +17,7 @@ paths:
     post:
       operationId: post_auth_login
       summary: Login
+      description: Validate credentials and issue a fresh opaque HttpOnly, host-only, SameSite=Strict session cookie. Secure is mandatory on HTTPS; plaintext is limited to actual direct loopback development. Origin is required; this anonymous operation does not use a session CSRF token.
       tags:
       - auth
       responses:
@@ -27,6 +28,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/Admin'
           headers:
+            Set-Cookie:
+              description: Host-only session cookie; HttpOnly, SameSite=Strict, Path=/, and Secure on HTTPS. Logout/password success expires it. No raw session credential is returned in JSON.
+              schema:
+                type: string
             Cache-Control:
               schema:
                 const: no-store
@@ -59,6 +64,7 @@ paths:
           $ref: '#/components/responses/Error429'
         '503':
           $ref: '#/components/responses/Error503'
+      x-max-body-bytes: 16384
       requestBody:
         required: true
         content:
@@ -66,10 +72,20 @@ paths:
             schema:
               $ref: '#/components/schemas/LoginInput'
       security: []
+      parameters:
+      - name: Origin
+        in: header
+        required: true
+        description: Exact configured browser origin, including scheme and nondefault port. Null, absent, cross-origin, and duplicate values are rejected.
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
   /auth/logout:
     post:
       operationId: post_auth_logout
       summary: Logout
+      description: Revoke the current session and clear its cookie. Requires Origin, CSRF, client version, and idempotency. No body is accepted. An exact retry with the original cookie and CSRF token returns only the frozen acknowledgement, never renewed authorization.
       tags:
       - auth
       responses:
@@ -80,6 +96,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ActionAck'
           headers:
+            Set-Cookie:
+              description: Host-only session cookie; HttpOnly, SameSite=Strict, Path=/, and Secure on HTTPS. Logout/password success expires it. No raw session credential is returned in JSON.
+              schema:
+                type: string
             Cache-Control:
               schema:
                 const: no-store
@@ -113,6 +133,14 @@ paths:
         '503':
           $ref: '#/components/responses/Error503'
       parameters:
+      - name: Origin
+        in: header
+        required: true
+        description: Exact configured browser origin, including scheme and nondefault port. Null, absent, cross-origin, and duplicate values are rejected.
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
       - name: X-CSRF-Token
         in: header
         required: true
@@ -135,8 +163,6 @@ paths:
           minLength: 1
           maxLength: 32
         description: Semantic application version. Incompatible writes return 426.
-      description: Non-idempotent mutations must use Idempotency-Key and CSRF; domain
-        service validates invariants and commits projections in same SQLite transaction.
   /auth/me:
     get:
       operationId: get_auth_me
@@ -185,6 +211,7 @@ paths:
     post:
       operationId: post_auth_password
       summary: Change password
+      description: Verify the current password, atomically replace it, revoke every session, and clear the cookie. Requires Origin, CSRF, client version, and idempotency, including an exact frozen acknowledgement retry. A fresh login is required after success.
       tags:
       - auth
       responses:
@@ -195,6 +222,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ActionAck'
           headers:
+            Set-Cookie:
+              description: Host-only session cookie; HttpOnly, SameSite=Strict, Path=/, and Secure on HTTPS. Logout/password success expires it. No raw session credential is returned in JSON.
+              schema:
+                type: string
             Cache-Control:
               schema:
                 const: no-store
@@ -228,6 +259,14 @@ paths:
         '503':
           $ref: '#/components/responses/Error503'
       parameters:
+      - name: Origin
+        in: header
+        required: true
+        description: Exact configured browser origin, including scheme and nondefault port. Null, absent, cross-origin, and duplicate values are rejected.
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
       - name: X-CSRF-Token
         in: header
         required: true
@@ -250,18 +289,18 @@ paths:
           minLength: 1
           maxLength: 32
         description: Semantic application version. Incompatible writes return 426.
+      x-max-body-bytes: 16384
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/AuthPasswordChange'
-      description: Non-idempotent mutations must use Idempotency-Key and CSRF; domain
-        service validates invariants and commits projections in same SQLite transaction.
   /auth/reauth:
     post:
       operationId: post_auth_reauth
       summary: Reauthenticate
+      description: Require a completed password-change flow and fresh credentials to issue the transaction-bound single-use capability. Requires Origin, CSRF, client version, and idempotency; replay never renews the capability.
       tags:
       - auth
       responses:
@@ -305,6 +344,14 @@ paths:
         '503':
           $ref: '#/components/responses/Error503'
       parameters:
+      - name: Origin
+        in: header
+        required: true
+        description: Exact configured browser origin, including scheme and nondefault port. Null, absent, cross-origin, and duplicate values are rejected.
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
       - name: X-CSRF-Token
         in: header
         required: true
@@ -327,6 +374,7 @@ paths:
           minLength: 1
           maxLength: 32
         description: Semantic application version. Incompatible writes return 426.
+      x-max-body-bytes: 16384
       requestBody:
         required: true
         content:
@@ -8475,7 +8523,8 @@ paths:
   /auth/setup:
     post:
       operationId: post_auth_setup
-      summary: POST /auth/setup
+      summary: Set up administrator
+      description: Consume the private one-time bootstrap token and create the sole administrator with mandatory password change. Requires the exact same Origin and never issues a session; sign in afterward. A lost successful response does not reopen setup.
       tags:
       - auth
       responses:
@@ -8519,12 +8568,22 @@ paths:
         '426':
           $ref: '#/components/responses/Error426'
       security: []
+      x-max-body-bytes: 16384
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/AuthSetupInput'
+      parameters:
+      - name: Origin
+        in: header
+        required: true
+        description: Exact configured browser origin, including scheme and nondefault port. Null, absent, cross-origin, and duplicate values are rejected.
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
   /barcodes/{id}:
     delete:
       operationId: delete_barcodes_id
@@ -10310,6 +10369,7 @@ components:
       type: apiKey
       in: cookie
       name: homebox_session
+      description: Opaque host-only HttpOnly SameSite=Strict cookie, Path=/, Secure on HTTPS. Only direct same-machine loopback development permits an insecure cookie; Origin/Host and transport checks still apply.
     WorkerToken:
       type: http
       scheme: bearer

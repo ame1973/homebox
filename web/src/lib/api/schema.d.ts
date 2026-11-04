@@ -346,7 +346,10 @@ export interface paths {
         };
         readonly get?: never;
         readonly put?: never;
-        /** Login */
+        /**
+         * Login
+         * @description Validate credentials and issue a fresh opaque HttpOnly, host-only, SameSite=Strict session cookie. Secure is mandatory on HTTPS; plaintext is limited to actual direct loopback development. Origin is required; this anonymous operation does not use a session CSRF token.
+         */
         readonly post: operations["post_auth_login"];
         readonly delete?: never;
         readonly options?: never;
@@ -365,7 +368,7 @@ export interface paths {
         readonly put?: never;
         /**
          * Logout
-         * @description Non-idempotent mutations must use Idempotency-Key and CSRF; domain service validates invariants and commits projections in same SQLite transaction.
+         * @description Revoke the current session and clear its cookie. Requires Origin, CSRF, client version, and idempotency. No body is accepted. An exact retry with the original cookie and CSRF token returns only the frozen acknowledgement, never renewed authorization.
          */
         readonly post: operations["post_auth_logout"];
         readonly delete?: never;
@@ -402,7 +405,7 @@ export interface paths {
         readonly put?: never;
         /**
          * Change password
-         * @description Non-idempotent mutations must use Idempotency-Key and CSRF; domain service validates invariants and commits projections in same SQLite transaction.
+         * @description Verify the current password, atomically replace it, revoke every session, and clear the cookie. Requires Origin, CSRF, client version, and idempotency, including an exact frozen acknowledgement retry. A fresh login is required after success.
          */
         readonly post: operations["post_auth_password"];
         readonly delete?: never;
@@ -420,7 +423,10 @@ export interface paths {
         };
         readonly get?: never;
         readonly put?: never;
-        /** Reauthenticate */
+        /**
+         * Reauthenticate
+         * @description Require a completed password-change flow and fresh credentials to issue the transaction-bound single-use capability. Requires Origin, CSRF, client version, and idempotency; replay never renews the capability.
+         */
         readonly post: operations["post_auth_reauth"];
         readonly delete?: never;
         readonly options?: never;
@@ -437,7 +443,10 @@ export interface paths {
         };
         readonly get?: never;
         readonly put?: never;
-        /** POST /auth/setup */
+        /**
+         * Set up administrator
+         * @description Consume the private one-time bootstrap token and create the sole administrator with mandatory password change. Requires the exact same Origin and never issues a session; sign in afterward. A lost successful response does not reopen setup.
+         */
         readonly post: operations["post_auth_setup"];
         readonly delete?: never;
         readonly options?: never;
@@ -4664,7 +4673,10 @@ export interface operations {
     readonly post_auth_login: {
         readonly parameters: {
             readonly query?: never;
-            readonly header?: never;
+            readonly header: {
+                /** @description Exact configured browser origin, including scheme and nondefault port. Null, absent, cross-origin, and duplicate values are rejected. */
+                readonly Origin: string;
+            };
             readonly path?: never;
             readonly cookie?: never;
         };
@@ -4681,6 +4693,8 @@ export interface operations {
                     readonly "Cache-Control"?: "no-store";
                     /** @description Quoted resource revision when a versioned resource is returned. */
                     readonly ETag?: string;
+                    /** @description Host-only session cookie; HttpOnly, SameSite=Strict, Path=/, and Secure on HTTPS. Logout/password success expires it. No raw session credential is returned in JSON. */
+                    readonly "Set-Cookie"?: string;
                     readonly [name: string]: unknown;
                 };
                 content: {
@@ -4705,6 +4719,8 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
+                /** @description Exact configured browser origin, including scheme and nondefault port. Null, absent, cross-origin, and duplicate values are rejected. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -4721,6 +4737,8 @@ export interface operations {
                     readonly "Cache-Control"?: "no-store";
                     /** @description Quoted resource revision when a versioned resource is returned. */
                     readonly ETag?: string;
+                    /** @description Host-only session cookie; HttpOnly, SameSite=Strict, Path=/, and Secure on HTTPS. Logout/password success expires it. No raw session credential is returned in JSON. */
+                    readonly "Set-Cookie"?: string;
                     readonly [name: string]: unknown;
                 };
                 content: {
@@ -4779,6 +4797,8 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
+                /** @description Exact configured browser origin, including scheme and nondefault port. Null, absent, cross-origin, and duplicate values are rejected. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -4799,6 +4819,8 @@ export interface operations {
                     readonly "Cache-Control"?: "no-store";
                     /** @description Quoted resource revision when a versioned resource is returned. */
                     readonly ETag?: string;
+                    /** @description Host-only session cookie; HttpOnly, SameSite=Strict, Path=/, and Secure on HTTPS. Logout/password success expires it. No raw session credential is returned in JSON. */
+                    readonly "Set-Cookie"?: string;
                     readonly [name: string]: unknown;
                 };
                 content: {
@@ -4823,6 +4845,8 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
+                /** @description Exact configured browser origin, including scheme and nondefault port. Null, absent, cross-origin, and duplicate values are rejected. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -4865,7 +4889,10 @@ export interface operations {
     readonly post_auth_setup: {
         readonly parameters: {
             readonly query?: never;
-            readonly header?: never;
+            readonly header: {
+                /** @description Exact configured browser origin, including scheme and nondefault port. Null, absent, cross-origin, and duplicate values are rejected. */
+                readonly Origin: string;
+            };
             readonly path?: never;
             readonly cookie?: never;
         };

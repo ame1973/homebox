@@ -15,7 +15,7 @@ import (
 
 func fixture(t *testing.T) http.Handler {
 	t.Helper()
-	handler, err := New(fstest.MapFS{
+	handler, err := New(Config{Auth: newTestAuth(t), PublicOrigin: "https://homebox.test", Assets: fstest.MapFS{
 		"index.html":                 {Data: []byte("<!doctype html><title>HomeBox fixture</title><main>App shell</main>")},
 		"assets/app-a1b2c3d4.js":     {Data: []byte("console.log('public asset')")},
 		"assets/site-a1b2c3d4.css":   {Data: []byte("body { color: black }")},
@@ -26,7 +26,7 @@ func fixture(t *testing.T) http.Handler {
 		"data/private.css":           {Data: []byte("must not be served")},
 		"secrets/private.js":         {Data: []byte("must not be served")},
 		"nested/private.html":        {Data: []byte("must not be served")},
-	})
+	}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +36,7 @@ func fixture(t *testing.T) http.Handler {
 func request(t *testing.T, handler http.Handler, method, target string) *httptest.ResponseRecorder {
 	t.Helper()
 	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequest(method, target, nil))
+	handler.ServeHTTP(response, httptest.NewRequest(method, "https://homebox.test"+target, nil))
 	return response
 }
 
@@ -82,7 +82,11 @@ func TestPrivateNamespacesTraversalAndUnknownAssetsNeverFallBackToHTML(t *testin
 	} {
 		t.Run(target, func(t *testing.T) {
 			response := request(t, handler, http.MethodGet, target)
-			if response.Code != http.StatusNotFound || strings.Contains(response.Body.String(), "App shell") || strings.Contains(response.Body.String(), "must not be served") {
+			expectedStatus, expectedCode := http.StatusNotFound, "NOT_FOUND"
+			if strings.HasPrefix(target, "/api/v1/") {
+				expectedStatus, expectedCode = http.StatusUnauthorized, "AUTHENTICATION_REQUIRED"
+			}
+			if response.Code != expectedStatus || strings.Contains(response.Body.String(), "App shell") || strings.Contains(response.Body.String(), "must not be served") {
 				t.Fatalf("unsafe route response: %d %s", response.Code, response.Body.String())
 			}
 			var body struct {
@@ -95,7 +99,7 @@ func TestPrivateNamespacesTraversalAndUnknownAssetsNeverFallBackToHTML(t *testin
 			if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 				t.Fatal(err)
 			}
-			if body.Error.Code != "NOT_FOUND" || body.Error.RequestID != response.Header().Get("X-Request-ID") || body.Error.Details == nil {
+			if body.Error.Code != expectedCode || body.Error.RequestID != response.Header().Get("X-Request-ID") || body.Error.Details == nil {
 				t.Fatal("error does not match the structured API envelope")
 			}
 			if response.Header().Get("Cache-Control") != "no-store" {
@@ -172,11 +176,11 @@ func TestSecurityHeadersAndUntrustedProxyHeaders(t *testing.T) {
 
 func TestFrontendMustBeBuiltAndRegular(t *testing.T) {
 	for _, assets := range []fstest.MapFS{nil, {}, {"index.html": {Data: nil}}, {"index.html": {Mode: os.ModeDir}}} {
-		if _, err := New(assets); err == nil {
+		if _, err := New(Config{Assets: assets}); err == nil {
 			t.Fatal("invalid frontend build accepted")
 		}
 	}
-	if _, err := New(nil); err == nil {
+	if _, err := New(Config{}); err == nil {
 		t.Fatal("nil frontend accepted")
 	}
 }
@@ -201,7 +205,7 @@ func TestRootedFilesystemCannotServeAnEscapingSymlink(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer root.Close()
-	handler, err := New(root.FS())
+	handler, err := New(Config{Assets: root.FS(), Auth: newTestAuth(t), PublicOrigin: "https://homebox.test"})
 	if err != nil {
 		t.Fatal(err)
 	}

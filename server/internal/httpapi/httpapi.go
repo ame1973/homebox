@@ -7,9 +7,12 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	"net/netip"
 	"path"
 	"regexp"
 	"strings"
+
+	"homebox/internal/store"
 )
 
 const contentSecurityPolicy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
@@ -18,9 +21,18 @@ const contentSecurityPolicy = "default-src 'self'; script-src 'self'; style-src 
 
 var hashedAsset = regexp.MustCompile(`-[A-Za-z0-9_-]{8,}\.(js|css|woff2|png|svg|webp|ico)$`)
 
-// New requires an actual frontend build. The filesystem must enforce containment;
-// production passes os.Root.FS rather than an unrestricted directory filesystem.
-func New(assets fs.FS) (http.Handler, error) {
+// Config binds browser authentication to an operator-selected origin and socket peers.
+// Assets must enforce containment; production passes os.Root.FS.
+type Config struct {
+	Assets         fs.FS
+	Auth           *store.Auth
+	PublicOrigin   string
+	TrustedProxies []netip.Prefix
+}
+
+// New requires a real frontend build and the transactional authentication service.
+func New(cfg Config) (http.Handler, error) {
+	assets := cfg.Assets
 	if assets == nil {
 		return nil, fmt.Errorf("frontend filesystem is required")
 	}
@@ -28,6 +40,14 @@ func New(assets fs.FS) (http.Handler, error) {
 	if err != nil || !index.Mode().IsRegular() || index.Size() == 0 {
 		return nil, fmt.Errorf("frontend index.html is missing or invalid; build the frontend first")
 	}
+	if cfg.Auth == nil {
+		return nil, fmt.Errorf("authentication service is required")
+	}
+	policy, err := newOriginPolicy(cfg.PublicOrigin, cfg.TrustedProxies)
+	if err != nil {
+		return nil, err
+	}
+	api := &authAPI{auth: cfg.Auth, origin: policy, limiter: newRequestLimiter()}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestID := rand.Text()
 		w.Header().Set("X-Request-ID", requestID)
@@ -37,7 +57,7 @@ func New(assets fs.FS) (http.Handler, error) {
 		w.Header().Set("Content-Security-Policy", contentSecurityPolicy)
 		w.Header().Set("Permissions-Policy", "camera=(self), microphone=(), geolocation=()")
 		w.Header().Set("Cache-Control", "no-store")
-		if r.TLS != nil {
+		if r.TLS != nil || policy.secure && policy.https(r) {
 			w.Header().Set("Strict-Transport-Security", "max-age=31536000")
 		}
 
@@ -50,6 +70,10 @@ func New(assets fs.FS) (http.Handler, error) {
 			if r.Method == http.MethodGet {
 				_, _ = w.Write([]byte("{\"status\":\"ok\"}\n"))
 			}
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/api/v1/") {
+			api.serve(w, r, requestID)
 			return
 		}
 		if privateNamespace(r.URL.Path) {

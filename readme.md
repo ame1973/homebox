@@ -38,7 +38,7 @@ With the server stopped and the database already migrated, create a new private 
 ./bin/homebox auth bootstrap --database ./data/homebox.sqlite --output ./data/bootstrap.token
 ```
 
-The command prints only the absolute file path and expiry, not the secret. The output directory must be private, the new file is mode `0600`, and existing files/symlinks are never overwritten. The credential expires after 30 minutes and is disabled after successful administrator provisioning. This CLI delivery is implemented; the user-facing HTTP setup/login flow is still pending, so it does not make the build production-ready. See [Security](docs/security.md) for delivery, failure, and retry behavior.
+The command prints only the absolute file path and expiry, not the secret. The output directory must be private, the new file is mode `0600`, and existing files/symlinks are never overwritten. The credential expires after 30 minutes and is disabled after successful administrator provisioning. The HTTP setup/login endpoints are implemented, but their React screens are still pending; this is not a production-ready product. See [HTTP Authentication and Transport](docs/http-authentication.md) and [Security](docs/security.md) for the current workflow, delivery, failure, and retry behavior.
 
 ## Offline account recovery (available now)
 
@@ -49,7 +49,7 @@ A local filesystem owner can replace a forgotten or unsupported legacy password 
   --output ./data/recovery-password.txt --confirm RESET_PASSWORD
 ```
 
-The command requires an already provisioned account and explicit confirmation. It generates a random temporary password into a new mode-`0600` private file, prints only account/file/revision metadata, revokes all sessions, and requires password change after the next login. Existing files are never overwritten. Recovery is deliberately unavailable in normal serving-store mode and has no HTTP route. Read the file through a trusted local channel; do not paste secrets into logs or issues. The HTTP login/change-password interface is still being implemented.
+The command requires an already provisioned account and explicit confirmation. It generates a random temporary password into a new mode-`0600` private file, prints only account/file/revision metadata, revokes all sessions, and requires password change after the next login. Existing files are never overwritten. Recovery is deliberately unavailable in normal serving-store mode and has no HTTP route. Read the file through a trusted local channel; do not paste secrets into logs or issues. The HTTP login/password-change endpoints are available; their React screens are still being implemented.
 
 ## Local web application (available now)
 
@@ -61,7 +61,7 @@ make setup-web build-web build
 ./bin/homebox serve --database ./data/homebox.sqlite --web-dir ./web/dist
 ```
 
-Open `http://127.0.0.1:8080`. Keep this development build on loopback until authentication and production deployment are complete. Production serving uses Go and built static assets, without Node.js. See [Web Client](web/README.md) for frontend development, browser testing, API generation, build budgets, and the current dependency-advisory status.
+Open exactly the `public_origin` printed at startup (by default `http://127.0.0.1:8080`). Development HTTP and insecure cookies are restricted to actual direct loopback peers. Keep this incomplete build on loopback; non-loopback configurations require an explicit HTTPS origin with direct TLS or an explicitly trusted proxy. See [HTTP Authentication and Transport](docs/http-authentication.md) for the implemented flags and API behavior. Production serving uses Go and built static assets, without Node.js. See [Web Client](web/README.md) for frontend development, browser testing, API generation, build budgets, and the current dependency-advisory status.
 
 ## Security and data
 
@@ -88,7 +88,7 @@ go -C server test -run TestAllPendingMigrationsRollbackWithTheirChecksumRows -v 
 
 The suite validates OpenAPI 3.1, all original API operation identities, offline projection equivalence, security/concurrency requirements, and negative payload cases. Real Go/SQLite integration tests cover safe connection replacement, process locking, fresh/legacy upgrades, checksum refusal, multi-migration rollback, explicit unit mappings, WAL-aware online snapshots, and corruption detection. See [the API reference](contracts/README.md) and [the offline protocol](contracts/sync.md).
 
-The database core and initial connectivity interface are implemented. HTTP tests cover public liveness, static-file isolation, SPA routing, and shutdown. Frontend checks cover generated API types, runtime response validation, cancellation, theme persistence, mutation non-replay, and real-server browser accessibility/responsiveness. GitHub Actions configuration is provided, but no remote run is claimed. Private domain APIs, installable/offline PWA behavior, camera, worker, and QNAP runtime acceptance remain unfinished. The `serve` command requires a real frontend build and refuses a missing `index.html`; it never substitutes a fake application page.
+The database core, HTTP authentication, and initial connectivity interface are implemented. HTTP tests cover all seven authentication routes through actual TLS/cookie jars, strict input parsing, origin/proxy/CSRF/version/rate checks, mandatory password change, safe revoked-cookie acknowledgement replay, public liveness, static-file isolation, SPA routing, and shutdown. Frontend checks cover generated API types, runtime response validation, cancellation, theme persistence, mutation non-replay, and real-server browser accessibility/responsiveness. GitHub Actions configuration is provided, but no remote run is claimed. Private domain APIs, installable/offline PWA behavior, camera, worker, and QNAP runtime acceptance remain unfinished. The `serve` command requires a real frontend build and refuses a missing `index.html`; it never substitutes a fake application page.
 
 ## Contributing
 
