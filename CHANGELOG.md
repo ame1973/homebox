@@ -18,6 +18,10 @@
 - English database operations documentation and reproducible CGO-free Linux amd64/arm64 build targets.
 - A minimal same-origin HTTP foundation with public liveness, rooted static-file containment, safe SPA deep links, structured errors, security headers, and graceful shutdown. Private domain APIs are not yet implemented.
 
+### Fixed
+
+- Move OpenAPI offline payload definitions into reusable components so generated TypeScript does not incorrectly require a `$defs` data field. The wire format and standalone JSON Schema remain unchanged and equivalence is tested.
+
 ### Security
 
 - Reject permissive or symlinked SQLite sidecars before opening a database, and reject unhashed sidecars or unsafe checksum markers when verifying a migration snapshot.

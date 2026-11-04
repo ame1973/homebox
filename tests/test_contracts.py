@@ -257,7 +257,15 @@ class OfflineProjectionTests(unittest.TestCase):
     def test_schema_is_valid_and_matches_openapi(self):
         Draft202012Validator.check_schema(PROJECTION)
         embedded = deepcopy(SCHEMAS["OfflineRecord"])
-        text = json.dumps(embedded).replace("#/components/schemas/OfflineRecord/$defs/", "#/$defs/")
+        self.assertNotIn("$defs", embedded)
+        embedded["$defs"] = {}
+        for entity in PROJECTION["$defs"]:
+            component = "Offline" + "".join(part.title() for part in entity.split("_"))
+            embedded["$defs"][entity] = deepcopy(SCHEMAS[component])
+        text = json.dumps(embedded)
+        for entity in PROJECTION["$defs"]:
+            component = "Offline" + "".join(part.title() for part in entity.split("_"))
+            text = text.replace(f'"#/components/schemas/{component}"', f'"#/$defs/{entity}"')
         standalone = {k: v for k, v in PROJECTION.items() if k not in {"$schema", "$id"}}
         self.assertEqual(standalone, json.loads(text))
 
