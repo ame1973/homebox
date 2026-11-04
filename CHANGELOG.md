@@ -4,6 +4,8 @@
 
 ### Added
 
+- Add complete iterative location-graph validation and traversal, exact original-text metadata validation, explicit dirty-field reconciliation, frozen command dispatch, and restricted location-only authentication return paths, with executable edge-case tests. These helpers do not by themselves enable location screens.
+
 - Generate official Radix Nova NativeSelect and Textarea primitives for location forms, preserving upstream code/licensing and the existing exact dependency lockfile. Apply touch sizing and field semantics in feature composition rather than altering the generated controls.
 
 - Add strict typed browser adapters for all seven location operations with root/child proof overloads, original-key/revision preservation, identity/strong-ETag/deletion/page validation, Unicode/safe-integer bounds, cancellation/deadlines, and no hidden token refresh, rebase, retry, queue, or persistence. Share the existing stateless error/Unicode/transport implementations with account adapters and retain compatibility exports.
