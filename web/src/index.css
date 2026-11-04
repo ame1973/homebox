@@ -1,0 +1,87 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  --font-heading: var(--font-sans);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--foreground);
+  --color-popover: var(--card);
+  --color-popover-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--muted);
+  --color-secondary-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--muted);
+  --color-accent-foreground: var(--foreground);
+  --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-border: var(--border);
+  --color-input: var(--border);
+  --color-ring: var(--primary);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+}
+
+:root {
+  --background: #f7f9fc;
+  --foreground: #182537;
+  --card: #ffffff;
+  --primary: #28548c;
+  --primary-foreground: #ffffff;
+  --muted: #edf1f6;
+  --muted-foreground: #516075;
+  --border: #d8e1eb;
+  --destructive: #ad293a;
+  --success: #19684b;
+  --warning: #805600;
+  --radius: 0.625rem;
+}
+
+.dark {
+  --background: #101b2b;
+  --foreground: #eaf0f7;
+  --card: #1a283a;
+  --primary: #a5c9f5;
+  --primary-foreground: #101b2b;
+  --muted: #25364b;
+  --muted-foreground: #b3c0d0;
+  --border: #3b4c62;
+  --destructive: #ffafb8;
+  --success: #85d4b0;
+  --warning: #e9bc6f;
+}
+
+@layer base {
+  * { @apply border-border outline-ring; }
+  html { @apply font-sans; }
+  body { @apply m-0 bg-background text-base leading-relaxed text-foreground; }
+  button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
+  a, button { touch-action: manipulation; }
+}
+
+.safe-page {
+  padding-inline: max(1.25rem, env(safe-area-inset-left)) max(1.25rem, env(safe-area-inset-right));
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -30,6 +30,18 @@ make build
 
 See [Database Operations](docs/database.md) for private storage permissions, explicit legacy adoption, precision mappings, verified pre-migration snapshots, failure recovery, timeouts, and Linux amd64/arm64 builds. Local migration snapshots are sensitive, unencrypted database-only recovery files, not full encrypted off-host backups.
 
+## Local web application (available now)
+
+The React interface currently provides a real, read-only server connectivity check, retry/error/loading states, and system/light/dark appearance. It does not display invented inventory data or claim that private domain APIs are ready.
+
+```sh
+make setup-web build-web build
+./bin/homebox db migrate --database ./data/homebox.sqlite
+./bin/homebox serve --database ./data/homebox.sqlite --web-dir ./web/dist
+```
+
+Open `http://127.0.0.1:8080`. Keep this development build on loopback until authentication and production deployment are complete. Production serving uses Go and built static assets, without Node.js. See [Web Client](web/README.md) for frontend development, browser testing, API generation, build budgets, and the current dependency-advisory status.
+
 ## Security and data
 
 Use trusted HTTPS over LAN/VPN. A VPN does not replace the secure context required by camera/PWA APIs. Do not expose NAS administration, the Docker socket, or unprotected data directories. Do not place SQLite on SMB/NFS. Browser storage can be evicted and is not a durable backup.
@@ -38,12 +50,15 @@ Local specifications, environment files, databases, private media, backups, keys
 
 ## Development checks
 
-Prerequisites: Linux (including WSL2), Go 1.26.2, Python 3.12, and [uv](https://docs.astral.sh/uv/). The race detector also needs a C compiler; the application SQLite driver itself does not require CGO. Python is a development-only tool, not a NAS runtime dependency. Exact dependencies and artifact hashes are recorded in `go.sum` and `uv.lock`.
+Prerequisites: Linux (including WSL2), Go 1.26.2, Node 24.14.1/npm 11.14.1, Python 3.12, and [uv](https://docs.astral.sh/uv/). The race detector also needs a C compiler; the application SQLite driver itself does not require CGO. Python and Node are development/build tools, not NAS runtime dependencies. Exact dependencies are recorded in `go.sum`, `uv.lock`, and `web/package-lock.json`.
 
 ```sh
 uv sync --frozen
+make setup-web
 make check
 make test-go-pure
+make audit-web
+make test-e2e  # Requires the Playwright Chromium browser.
 
 # Run individual tests.
 uv run --frozen python -m unittest tests.test_contracts.OpenAPIContractTests.test_entire_document_validates_as_openapi_31 -v
@@ -52,7 +67,7 @@ go -C server test -run TestAllPendingMigrationsRollbackWithTheirChecksumRows -v 
 
 The suite validates OpenAPI 3.1, all original API operation identities, offline projection equivalence, security/concurrency requirements, and negative payload cases. Real Go/SQLite integration tests cover safe connection replacement, process locking, fresh/legacy upgrades, checksum refusal, multi-migration rollback, explicit unit mappings, WAL-aware online snapshots, and corruption detection. See [the API reference](contracts/README.md) and [the offline protocol](contracts/sync.md).
 
-The database core is implemented. HTTP tests cover public liveness, static-file isolation, SPA routing, and shutdown only; private domain APIs, the React frontend, camera, worker, and QNAP runtime acceptance remain unfinished. The `serve` command requires a real frontend build and refuses a missing `index.html`; it never substitutes a fake application page.
+The database core and initial connectivity interface are implemented. HTTP tests cover public liveness, static-file isolation, SPA routing, and shutdown. Frontend checks cover generated API types, runtime response validation, cancellation, theme persistence, mutation non-replay, and real-server browser accessibility/responsiveness. GitHub Actions configuration is provided, but no remote run is claimed. Private domain APIs, installable/offline PWA behavior, camera, worker, and QNAP runtime acceptance remain unfinished. The `serve` command requires a real frontend build and refuses a missing `index.html`; it never substitutes a fake application page.
 
 ## Contributing
 

@@ -1,9 +1,12 @@
-.PHONY: test test-contracts test-go test-go-pure check setup-test-tools build build-linux
+.PHONY: setup-test-tools setup-web test test-contracts test-go test-go-pure test-web test-e2e check check-backend check-web audit-web build build-web build-linux
 
 setup-test-tools:
 	uv sync --frozen
 
-test: test-contracts test-go
+setup-web:
+	npm ci --prefix web --ignore-scripts
+
+test: test-contracts test-go test-web
 
 test-contracts:
 	uv run --frozen python -m unittest discover -s tests -v
@@ -14,9 +17,30 @@ test-go:
 test-go-pure:
 	CGO_ENABLED=0 go -C server test -count=1 ./...
 
-check: test
+test-web:
+	npm --prefix web test
+
+test-e2e: build-web
+	npm --prefix web run test:e2e
+
+check: check-backend check-web
+
+check-backend: test-contracts test-go
 	go -C server vet ./...
 	go -C server mod verify
+
+check-web: test-web
+	npm --prefix web run api:check
+	npm --prefix web run lint
+	npm --prefix web run test:build
+	npm --prefix web run build
+
+audit-web:
+	npm --prefix web audit --omit=dev --audit-level=low
+	npm --prefix web audit --audit-level=high
+
+build-web:
+	npm --prefix web run build
 
 build:
 	mkdir -p bin

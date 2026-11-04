@@ -17,6 +17,9 @@
 - A runnable database CLI for version information, explicit migration, integrity checks, and snapshot verification, with bounded mapping-file parsing and cancellation.
 - English database operations documentation and reproducible CGO-free Linux amd64/arm64 build targets.
 - A minimal same-origin HTTP foundation with public liveness, rooted static-file containment, safe SPA deep links, structured errors, security headers, and graceful shutdown. Private domain APIs are not yet implemented.
+- An official Vite/React and shadcn/Radix/Tailwind frontend with real connectivity checks, cancellation/timeouts, runtime response validation, accessible system/light/dark themes, and no automatic mutation replay.
+- Generated API types with drift/negative-type checks, frontend unit/coverage and build-budget tests, and real-Go-server Playwright/axe checks across five layouts.
+- SHA-pinned GitHub Actions checks for the backend/frontend, frozen dependencies, dependency audits, and browser test artifacts. Remote CI execution and physical acceptance are not yet claimed.
 
 ### Fixed
 
