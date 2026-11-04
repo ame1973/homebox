@@ -25,13 +25,15 @@ const usage = `HomeBox
 
 Usage:
   homebox version
+  homebox serve [--listen HOST:PORT] [--database PATH] [--web-dir DIR]
   homebox db migrate [--database PATH] [--allow-legacy] [--legacy-units FILE]
                      [--backup-dir DIR] [--reserve-bytes BYTES] [--timeout DURATION]
   homebox db check [--database PATH] [--timeout DURATION]
   homebox db verify-snapshot --snapshot PATH [--timeout DURATION]
 
 Database commands require exclusive access to a local, private data directory.
-HTTP serving and the PWA are not yet available in this development build.
+Serve requires a real frontend build and an already migrated database.
+Only public liveness and static serving are available until domain APIs are implemented.
 `
 
 func main() {
@@ -55,6 +57,9 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) (finalErr
 			OS      string `json:"os"`
 			Arch    string `json:"arch"`
 		}{version, buildID, runtime.GOOS, runtime.GOARCH})
+	}
+	if args[0] == "serve" {
+		return serve(ctx, args[1:], stdout, stderr)
 	}
 	if len(args) < 2 || args[0] != "db" {
 		return errors.New("unknown command; run 'homebox --help'")

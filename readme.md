@@ -52,7 +52,7 @@ go -C server test -run TestAllPendingMigrationsRollbackWithTheirChecksumRows -v 
 
 The suite validates OpenAPI 3.1, all original API operation identities, offline projection equivalence, security/concurrency requirements, and negative payload cases. Real Go/SQLite integration tests cover safe connection replacement, process locking, fresh/legacy upgrades, checksum refusal, multi-migration rollback, explicit unit mappings, WAL-aware online snapshots, and corruption detection. See [the API reference](contracts/README.md) and [the offline protocol](contracts/sync.md).
 
-The database core is implemented, but these checks do not establish HTTP handler, browser, camera, worker, or QNAP runtime coverage. Application startup/deployment instructions will accompany those tested implementations.
+The database core is implemented. HTTP tests cover public liveness, static-file isolation, SPA routing, and shutdown only; private domain APIs, the React frontend, camera, worker, and QNAP runtime acceptance remain unfinished. The `serve` command requires a real frontend build and refuses a missing `index.html`; it never substitutes a fake application page.
 
 ## Contributing
 

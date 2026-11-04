@@ -16,6 +16,7 @@
 - Real Go integration, race-detector, and CGO-disabled tests for persistence and failure handling.
 - A runnable database CLI for version information, explicit migration, integrity checks, and snapshot verification, with bounded mapping-file parsing and cancellation.
 - English database operations documentation and reproducible CGO-free Linux amd64/arm64 build targets.
+- A minimal same-origin HTTP foundation with public liveness, rooted static-file containment, safe SPA deep links, structured errors, security headers, and graceful shutdown. Private domain APIs are not yet implemented.
 
 ### Security
 
