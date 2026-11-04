@@ -429,8 +429,25 @@ paths:
     get:
       operationId: get_locations_tree
       summary: Location tree
+      description: Flat parent-linked metadata in stable ID order, including archived but not deleted locations. Follow opaque scoped cursors; this is not a frozen offline bootstrap snapshot.
       tags:
       - locations
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 100
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
       responses:
         '200':
           description: Success
@@ -538,6 +555,16 @@ paths:
           minLength: 1
           maxLength: 32
         description: Semantic application version. Incompatible writes return 426.
+      - name: If-Match
+        in: header
+        required: false
+        description: Required when parent_id is non-null; send the quoted current parent aggregate revision. Omit for root creation. Exact retries retain the original precondition.
+        schema:
+          type: string
+          minLength: 3
+          maxLength: 18
+          pattern: ^"[1-9][0-9]{0,15}"$
+      x-parent-revision-required-when: parent_id
       requestBody:
         required: true
         content:
@@ -693,7 +720,8 @@ paths:
         service validates invariants and commits projections in same SQLite transaction.
     delete:
       operationId: delete_locations_id
-      summary: DELETE /locations/{id}
+      summary: Delete an unused leaf location
+      description: Logical deletion retains immutable history and reserves the code/ID. Reject live children and all unit/stock references, including disposed units and zero balances. Unlink owner photos with independent media-link tombstones; never delete shared media. The original acknowledgement remains replayable with an active completed session.
       tags:
       - locations
       responses:
@@ -12139,15 +12167,28 @@ components:
     Location:
       type: object
       additionalProperties: false
+      description: Stable location metadata with an aggregate revision. Descendant metadata or membership changes advance all affected ancestors; paths remain derived from parent links.
       properties:
-        id: &id005
-          type: string
-        revision: &id006
-          type: integer
-        parent_id: &id007
-          type:
-          - string
-          - 'null'
+        id:
+          allOf:
+          - &id005
+            type: string
+          - minLength: 1
+            maxLength: 128
+        revision:
+          allOf:
+          - &id006
+            type: integer
+          - minimum: 1
+            maximum: 9007199254740991
+        parent_id:
+          allOf:
+          - &id007
+            type:
+            - string
+            - 'null'
+          - minLength: 1
+            maxLength: 128
         name:
           type: string
           minLength: 1
@@ -12156,12 +12197,18 @@ components:
           type: string
           minLength: 1
           maxLength: 100
-        kind: *id005
+        kind:
+          type: string
+          minLength: 1
+          maxLength: 32
         status: &id008
           enum:
           - active
           - archived
-        sort_order: *id006
+        sort_order:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
         description:
           type: string
           minLength: 0
@@ -12194,8 +12241,13 @@ components:
       type: object
       minProperties: 1
       additionalProperties: false
+      description: Omitted fields are unchanged. An explicit null parent moves the location to the root. Archiving via PATCH never implicitly archives active descendants; use the reviewed archive action for a subtree.
       properties:
-        parent_id: *id007
+        parent_id:
+          allOf:
+          - *id007
+          - minLength: 1
+            maxLength: 128
         name:
           type: string
           minLength: 1
@@ -12204,8 +12256,14 @@ components:
           type: string
           minLength: 1
           maxLength: 100
-        kind: *id005
-        sort_order: *id006
+        kind:
+          type: string
+          minLength: 1
+          maxLength: 32
+        sort_order:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
         status: *id008
         description:
           type: string
@@ -13359,7 +13417,11 @@ components:
       required:
       - target_parent_id
       properties:
-        target_parent_id: *id007
+        target_parent_id:
+          allOf:
+          - *id007
+          - minLength: 1
+            maxLength: 128
     UnitMove:
       type: object
       additionalProperties: false
@@ -13507,6 +13569,7 @@ components:
     LocationArchiveInput:
       type: object
       additionalProperties: false
+      description: Archive an empty location or explicitly reviewed subtree. Active descendants require archive_children=true. Positive stock or any nondisposed unit in the subtree blocks archival. Restore a location with PATCH status=active only beneath active ancestors; descendants are not implicitly restored.
       properties:
         reason: &id019
           type: string
@@ -14341,11 +14404,14 @@ components:
     LocationCreate:
       type: object
       additionalProperties: false
+      description: A non-null parent requires its current quoted aggregate revision in If-Match. Root creation omits If-Match. Codes are unique and remain reserved after logical deletion.
       properties:
         parent_id:
           type:
           - string
           - 'null'
+          minLength: 1
+          maxLength: 128
         name:
           type: string
           minLength: 1
@@ -14356,12 +14422,19 @@ components:
           maxLength: 100
         kind:
           type: string
+          minLength: 1
+          maxLength: 32
+          default: other
         sort_order:
           type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+          default: 0
         status:
           enum:
           - active
           - archived
+          default: active
         description:
           type: string
           minLength: 0

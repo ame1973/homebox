@@ -3,7 +3,7 @@ import type { components, operations } from '../src/lib/api/schema'
 type Record = components['schemas']['OfflineRecord']
 
 const stock = {
-  entity_type: 'stock', entity_id: 'item-1:location-1', entity_revision: 1,
+  entity_type: 'stock', entity_id: '["item-1","location-1"]', entity_revision: 1,
   operation: 'upsert', projection_version: 1,
   payload: {
     item_id: 'item-1', location_id: 'location-1', quantity_base: 250,
@@ -38,4 +38,19 @@ const rawCredentialAdmin: components['schemas']['Admin'] = { id: 'admin-1', revi
 // @ts-expect-error Login accepts the password, not a caller-supplied database hash.
 const hashLogin: components['schemas']['LoginInput'] = { username: 'owner', password_hash: 'must-not-be-accepted' }
 
-void [invalidDelete, missingRevision, invalidQuantity, authHeaders, noOrigin, noCSRF, rawCredentialAdmin, hashLogin]
+type LocationCreateHeaders = operations['post_locations']['parameters']['header']
+const childLocationHeaders = { ...authHeaders, 'If-Match': '"3"' } satisfies LocationCreateHeaders
+const rootLocationHeaders = { ...authHeaders } satisfies LocationCreateHeaders
+const rootLocation = { name: 'Box', code: 'BOX-1', parent_id: null, sort_order: -1 } satisfies components['schemas']['LocationCreate']
+const minimalLocation = { name: 'Box', code: 'BOX-1' } satisfies components['schemas']['LocationCreate']
+const minimalItem = { name: 'Item' } satisfies components['schemas']['ItemCreate']
+const rootMove = { target_parent_id: null } satisfies components['schemas']['LocationMove']
+// @ts-expect-error The internal presence wrapper is not the nullable wire field.
+const parentWrapper: components['schemas']['LocationWrite'] = { parent_id: { set: true, value: null } }
+// @ts-expect-error Sort order is a safe integer on the wire, never text.
+const textSortOrder: components['schemas']['LocationCreate'] = { name: 'Box', code: 'BOX-1', sort_order: '1' }
+// @ts-expect-error Only the parent field is nullable; kind is not.
+const nullKind: components['schemas']['LocationWrite'] = { kind: null }
+
+void [invalidDelete, missingRevision, invalidQuantity, authHeaders, noOrigin, noCSRF, rawCredentialAdmin, hashLogin,
+  childLocationHeaders, rootLocationHeaders, rootLocation, minimalLocation, minimalItem, rootMove, parentWrapper, textSortOrder, nullKind]

@@ -4,6 +4,9 @@
 
 ### Added
 
+- Add the authoritative location service with Unicode/safe-integer bounds, parent/subtree aggregate revisions, cycle and archival/holding guards, immutable movements, logical deletion, and independent owner-media-link tombstones. Source changes, final-state current/frozen projections, catalog invalidation, immutable audit, and principal/epoch-scoped replies commit together; add statement/commit-failure, concurrency, deep-tree, retention, and replay tests. Location HTTP/UI and complete sync remain separate unfinished work.
+- Add migration 0007 for location metadata, independently retained current projections with deferred revision integrity, and append-only mutation audit; preserve original migration files and legacy quantities. Refine root location concurrency, pagination, nullable-field, and bounds contracts with generated-client fixtures and English rules documentation.
+
 - Add responsive real-server setup/login/mandatory-password-change/logout pages with React Hook Form/Zod, official fields/dialogs, password-manager support, dirty/back/reload guards, secret clearing, safe session-cache transitions, uncertain-outcome reconciliation, and lazy-chunk recovery. Add isolated per-test Go/browser fixtures, light/dark accessibility, two-times text, and committed-but-malformed-response coverage; fix transient theme contrast and narrow enlarged menus without editing generated primitives.
 
 - Pin React Hook Form/Zod resolver tooling and generate official Radix Nova Input/Field/Alert/AlertDialog primitives for the account UI, preserving the existing button implementation and third-party notice.
@@ -26,6 +29,8 @@
 - SHA-pinned GitHub Actions checks for the backend/frontend, frozen dependencies, dependency audits, and browser test artifacts. Remote CI execution and physical acceptance are not yet claimed.
 
 ### Fixed
+
+- Preserve optional request fields with server defaults in generated TypeScript using the official generator option, with minimal location/item create fixtures. Keep root location sort orders signed while constraining positive resource revisions independently of shared YAML anchors.
 
 - Move OpenAPI offline payload definitions into reusable components so generated TypeScript does not incorrectly require a `$defs` data field. The wire format and standalone JSON Schema remain unchanged and equivalence is tested.
 

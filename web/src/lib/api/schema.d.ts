@@ -1011,7 +1011,10 @@ export interface paths {
         readonly get: operations["get_locations_id"];
         readonly put?: never;
         readonly post?: never;
-        /** DELETE /locations/{id} */
+        /**
+         * Delete an unused leaf location
+         * @description Logical deletion retains immutable history and reserves the code/ID. Reject live children and all unit/stock references, including disposed units and zero balances. Unlink owner photos with independent media-link tombstones; never delete shared media. The original acknowledgement remains replayable with an active completed session.
+         */
         readonly delete: operations["delete_locations_id"];
         readonly options?: never;
         readonly head?: never;
@@ -1120,7 +1123,10 @@ export interface paths {
             readonly path?: never;
             readonly cookie?: never;
         };
-        /** Location tree */
+        /**
+         * Location tree
+         * @description Flat parent-linked metadata in stable ID order, including archived but not deleted locations. Follow opaque scoped cursors; this is not a frozen offline bootstrap snapshot.
+         */
         readonly get: operations["get_locations_tree"];
         readonly put?: never;
         readonly post?: never;
@@ -2299,7 +2305,7 @@ export interface components {
              * @default true
              * @constant
              */
-            readonly encrypt: true;
+            readonly encrypt?: true;
             /** @enum {string} */
             readonly kind: "full" | "database";
             readonly note?: string;
@@ -2584,7 +2590,7 @@ export interface components {
              * @default individual
              * @enum {unknown}
              */
-            readonly tracking_mode: "individual" | "quantity";
+            readonly tracking_mode?: "individual" | "quantity";
             readonly unit_code?: string;
         };
         readonly ItemList: {
@@ -2629,21 +2635,23 @@ export interface components {
         } | {
             readonly item_id: string;
         };
+        /** @description Stable location metadata with an aggregate revision. Descendant metadata or membership changes advance all affected ancestors; paths remain derived from parent links. */
         readonly Location: {
             readonly code: string;
             readonly description: string;
-            readonly id: string;
+            readonly id: string & unknown;
             readonly kind: string;
             readonly name: string;
-            readonly parent_id: string | null;
-            readonly revision: number;
+            readonly parent_id: (string | null) & unknown;
+            readonly revision: number & unknown;
             readonly sort_order: number;
             /** @enum {unknown} */
             readonly status: "active" | "archived";
         };
+        /** @description Archive an empty location or explicitly reviewed subtree. Active descendants require archive_children=true. Positive stock or any nondisposed unit in the subtree blocks archival. Restore a location with PATCH status=active only beneath active ancestors; descendants are not implicitly restored. */
         readonly LocationArchiveInput: {
             /** @default false */
-            readonly archive_children: boolean;
+            readonly archive_children?: boolean;
             readonly reason?: string;
         };
         readonly LocationContents: {
@@ -2654,14 +2662,20 @@ export interface components {
             readonly sub_locations: readonly components["schemas"]["Location"][];
             readonly units: readonly components["schemas"]["Unit"][];
         };
+        /** @description A non-null parent requires its current quoted aggregate revision in If-Match. Root creation omits If-Match. Codes are unique and remain reserved after logical deletion. */
         readonly LocationCreate: {
             readonly code: string;
             readonly description?: string;
+            /** @default other */
             readonly kind?: string;
             readonly name: string;
             readonly parent_id?: string | null;
+            /** @default 0 */
             readonly sort_order?: number;
-            /** @enum {unknown} */
+            /**
+             * @default active
+             * @enum {unknown}
+             */
             readonly status?: "active" | "archived";
         };
         readonly LocationList: {
@@ -2669,7 +2683,7 @@ export interface components {
             readonly next_cursor?: string | null;
         };
         readonly LocationMove: {
-            readonly target_parent_id: string | null;
+            readonly target_parent_id: (string | null) & unknown;
         };
         readonly LocationSummary: {
             readonly direct_quantities?: readonly components["schemas"]["QuantityGroup"][];
@@ -2679,12 +2693,13 @@ export interface components {
             readonly subtree_quantities?: readonly components["schemas"]["QuantityGroup"][];
             readonly subtree_units: number;
         };
+        /** @description Omitted fields are unchanged. An explicit null parent moves the location to the root. Archiving via PATCH never implicitly archives active descendants; use the reviewed archive action for a subtree. */
         readonly LocationWrite: {
             readonly code?: string;
             readonly description?: string;
             readonly kind?: string;
             readonly name?: string;
-            readonly parent_id?: string | null;
+            readonly parent_id?: (string | null) & unknown;
             readonly sort_order?: number;
             /** @enum {unknown} */
             readonly status?: "active" | "archived";
@@ -3276,13 +3291,13 @@ export interface components {
             readonly purchase?: components["schemas"]["QuickPurchaseInput"] | null;
             readonly quantity_base?: number;
             /** @default true */
-            readonly queue_ai_index: boolean;
+            readonly queue_ai_index?: boolean;
             readonly scale_factor?: number;
             /**
              * @default individual
              * @enum {unknown}
              */
-            readonly tracking_mode: "individual" | "quantity";
+            readonly tracking_mode?: "individual" | "quantity";
             readonly unit_code?: string;
         };
         readonly QuickCreateResult: {
@@ -3508,7 +3523,7 @@ export interface components {
              * @default stored
              * @enum {unknown}
              */
-            readonly status: "stored" | "in_use" | "lent" | "lost";
+            readonly status?: "stored" | "in_use" | "lent" | "lost";
         };
         readonly UnitList: {
             readonly data: readonly components["schemas"]["Unit"][];
@@ -6543,6 +6558,8 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
+                /** @description Required when parent_id is non-null; send the quoted current parent aggregate revision. Omit for root creation. Exact retries retain the original precondition. */
+                readonly "If-Match"?: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -6916,7 +6933,10 @@ export interface operations {
     };
     readonly get_locations_tree: {
         readonly parameters: {
-            readonly query?: never;
+            readonly query?: {
+                readonly cursor?: string;
+                readonly limit?: number;
+            };
             readonly header?: never;
             readonly path?: never;
             readonly cookie?: never;

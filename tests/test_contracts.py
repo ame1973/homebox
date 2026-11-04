@@ -222,6 +222,56 @@ class OpenAPIContractTests(unittest.TestCase):
             self.assertIn("file", SCHEMAS[name]["required"])
             self.assertEqual("binary", SCHEMAS[name]["properties"]["file"]["format"])
 
+    def test_location_create_parent_proof_defaults_and_safe_bounds(self):
+        operation = API["paths"]["/locations"]["post"]
+        headers = {p["name"]: p for p in operation["parameters"] if p["in"] == "header"}
+        self.assertFalse(headers["If-Match"]["required"])
+        self.assertEqual("parent_id", operation["x-parent-revision-required-when"])
+        validator("LocationCreate").validate({"name": "Box", "code": "BOX-1"})
+        props = SCHEMAS["LocationCreate"]["properties"]
+        self.assertEqual("other", props["kind"]["default"])
+        self.assertEqual("active", props["status"]["default"])
+        self.assertEqual(0, props["sort_order"]["default"])
+        for patch in [{"kind": ""}, {"kind": "x" * 33}, {"parent_id": ""},
+                      {"parent_id": "x" * 129}, {"sort_order": 9007199254740992},
+                      {"sort_order": -9007199254740992}, {"sort_order": 0.5}]:
+            with self.subTest(patch=patch), self.assertRaises(ValidationError):
+                validator("LocationCreate").validate({"name": "Box", "code": "BOX-1", **patch})
+        validator("LocationCreate").validate({"name": "📦" * 200, "code": "📦" * 100,
+                                               "parent_id": None, "sort_order": -9007199254740991})
+
+    def test_location_patch_preserves_nullable_parent_not_command_wrappers(self):
+        for payload in [{"name": "New name"}, {"parent_id": None}, {"parent_id": "parent"},
+                        {"description": ""}, {"sort_order": -1}, {"status": "active"}]:
+            validator("LocationWrite").validate(payload)
+        for payload in [{}, {"parent_id": {"set": True, "value": None}}, {"parent_id": ""},
+                        {"kind": None}, {"sort_order": 9007199254740992}, {"unexpected": True}]:
+            with self.subTest(payload=payload), self.assertRaises(ValidationError):
+                validator("LocationWrite").validate(payload)
+        validator("LocationMove").validate({"target_parent_id": None})
+        with self.assertRaises(ValidationError):
+            validator("LocationMove").validate({"target_parent_id": ""})
+
+    def test_location_response_is_offline_compatible_without_inner_revision(self):
+        payload = {"id": "location-1", "parent_id": None, "code": "BOX-1", "name": "Box",
+                   "status": "active", "kind": "other", "sort_order": -1, "description": ""}
+        validator("Location").validate({**payload, "revision": 1})
+        Draft202012Validator(PROJECTION).validate(record("location", payload, identity=payload["id"]))
+        for revision in [0, -1, 9007199254740992]:
+            with self.subTest(revision=revision), self.assertRaises(ValidationError):
+                validator("Location").validate({**payload, "revision": revision})
+        for payload_patch in [{"id": ""}, {"parent_id": ""}, {"kind": "x" * 33}]:
+            with self.subTest(patch=payload_patch), self.assertRaises(ValidationError):
+                validator("Location").validate({**payload, **payload_patch, "revision": 1})
+
+    def test_location_tree_has_bounded_non_snapshot_pagination(self):
+        operation = API["paths"]["/locations/tree"]["get"]
+        parameters = {p["name"]: p for p in operation["parameters"]}
+        self.assertEqual(100, parameters["limit"]["schema"]["maximum"])
+        self.assertEqual(1, parameters["limit"]["schema"]["minimum"])
+        self.assertEqual(2048, parameters["cursor"]["schema"]["maxLength"])
+        validator("LocationList").validate({"data": [], "next_cursor": None})
+
     def test_item_creation_requires_name_but_defaults_to_individual(self):
         name = API["paths"]["/items"]["post"]["requestBody"]["content"]["application/json"]["schema"]["$ref"].split("/")[-1]
         self.assertEqual("ItemCreate", name)
