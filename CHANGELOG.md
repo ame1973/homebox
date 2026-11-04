@@ -27,6 +27,8 @@
 
 ### Security
 
+- Add the offline `auth bootstrap` CLI with exclusive private-file delivery, metadata-only output, file-before-database durability ordering, no-overwrite/symlink/special-file refusal, rollback cleanup, and native CLI smoke coverage. HTTP setup/login remains pending.
+
 - Add short-lived, session/revision/epoch-bound single-use reauthentication grants with hash-only storage, deterministic safe replay, atomic private consumption, concurrent-use exclusion, and commit-failure rollback tests. Migration 0005 adds private grant storage; HTTP integration remains pending.
 
 - Add atomic password change with current-password verification, mandatory-change completion, all-session revocation, safe frozen acknowledgement replay, operation/body-bound auth keys, and keyed credential fingerprints. HTTP routes remain pending.

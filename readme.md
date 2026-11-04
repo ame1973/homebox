@@ -30,6 +30,16 @@ make build
 
 See [Database Operations](docs/database.md) for private storage permissions, explicit legacy adoption, precision mappings, verified pre-migration snapshots, failure recovery, timeouts, and Linux amd64/arm64 builds. Local migration snapshots are sensitive, unencrypted database-only recovery files, not full encrypted off-host backups.
 
+## Private setup credential (available now)
+
+With the server stopped and the database already migrated, create a new private setup-token file:
+
+```sh
+./bin/homebox auth bootstrap --database ./data/homebox.sqlite --output ./data/bootstrap.token
+```
+
+The command prints only the absolute file path and expiry, not the secret. The output directory must be private, the new file is mode `0600`, and existing files/symlinks are never overwritten. The credential expires after 30 minutes and is disabled after successful administrator provisioning. This CLI delivery is implemented; the user-facing HTTP setup/login flow is still pending, so it does not make the build production-ready. See [Security](docs/security.md) for delivery, failure, and retry behavior.
+
 ## Local web application (available now)
 
 The React interface currently provides a real, read-only server connectivity check, retry/error/loading states, and system/light/dark appearance. It does not display invented inventory data or claim that private domain APIs are ready.

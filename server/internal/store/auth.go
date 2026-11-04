@@ -95,6 +95,11 @@ func (s *Store) NewAuth(cfg AuthConfig) (*Auth, error) {
 // IssueBootstrap rotates a short-lived setup secret only before provisioning.
 // The caller must write the returned token to a private file, never stdout or logs.
 func (a *Auth) IssueBootstrap(ctx context.Context) (token string, expires time.Time, err error) {
+	return a.issueBootstrap(ctx, nil)
+}
+
+// Delivery must durably publish the private file before the database activates its secret.
+func (a *Auth) issueBootstrap(ctx context.Context, deliver func(string) error) (token string, expires time.Time, err error) {
 	token, err = newAuthToken()
 	if err != nil {
 		return "", expires, err
@@ -118,6 +123,11 @@ func (a *Auth) IssueBootstrap(ctx context.Context) (token string, expires time.T
 	}
 	if _, err = appendAuthAudit(ctx, tx, "bootstrap_issued", nil, now); err != nil {
 		return "", time.Time{}, err
+	}
+	if deliver != nil {
+		if err = deliver(token); err != nil {
+			return "", time.Time{}, err
+		}
 	}
 	if err = tx.Commit(); err != nil {
 		return "", time.Time{}, err

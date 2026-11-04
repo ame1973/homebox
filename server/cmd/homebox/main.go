@@ -30,6 +30,7 @@ Usage:
                      [--backup-dir DIR] [--reserve-bytes BYTES] [--timeout DURATION]
   homebox db check [--database PATH] [--timeout DURATION]
   homebox db verify-snapshot --snapshot PATH [--timeout DURATION]
+  homebox auth bootstrap --output PRIVATE_FILE [--database PATH] [--timeout DURATION]
 
 Database commands require exclusive access to a local, private data directory.
 Serve requires a real frontend build and an already migrated database.
@@ -60,6 +61,9 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) (finalErr
 	}
 	if args[0] == "serve" {
 		return serve(ctx, args[1:], stdout, stderr)
+	}
+	if args[0] == "auth" {
+		return authCommand(ctx, args[1:], stdout, stderr)
 	}
 	if len(args) < 2 || args[0] != "db" {
 		return errors.New("unknown command; run 'homebox --help'")
