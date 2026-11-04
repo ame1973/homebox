@@ -4,6 +4,8 @@
 
 ### Added
 
+- Pin React Hook Form/Zod resolver tooling and generate official Radix Nova Input/Field/Alert/AlertDialog primitives for the account UI, preserving the existing button implementation and third-party notice.
+
 - MIT license, private-data ignore rules, and an English Conventional Commits contribution policy.
 - Initial product and contribution documentation.
 - Executable OpenAPI 3.1 and offline-projection contracts, with all 103 original operations preserved and workflow-completing endpoints added.
