@@ -25,19 +25,21 @@ Local specifications, environment files, databases, private media, backups, keys
 
 ## Development checks
 
-Prerequisites for the current contract suite: Python 3.12 and [uv](https://docs.astral.sh/uv/). Python is a development-only tool, not a NAS runtime dependency. Exact dependencies and artifact hashes are recorded in `uv.lock`.
+Prerequisites: Linux (including WSL2), Go 1.26.2, Python 3.12, and [uv](https://docs.astral.sh/uv/). The race detector also needs a C compiler; the application SQLite driver itself does not require CGO. Python is a development-only tool, not a NAS runtime dependency. Exact dependencies and artifact hashes are recorded in `go.sum` and `uv.lock`.
 
 ```sh
 uv sync --frozen
-make test
+make check
+make test-go-pure
 
-# Run one test.
+# Run individual tests.
 uv run --frozen python -m unittest tests.test_contracts.OpenAPIContractTests.test_entire_document_validates_as_openapi_31 -v
+go -C server test -run TestAllPendingMigrationsRollbackWithTheirChecksumRows -v ./internal/store
 ```
 
-The suite validates OpenAPI 3.1, all original API operation identities, offline projection equivalence, security/concurrency requirements, negative payload cases, and fresh/legacy SQLite migration invariants. See [the API reference](contracts/README.md) and [the offline protocol](contracts/sync.md).
+The suite validates OpenAPI 3.1, all original API operation identities, offline projection equivalence, security/concurrency requirements, and negative payload cases. Real Go/SQLite integration tests cover safe connection replacement, process locking, fresh/legacy upgrades, checksum refusal, multi-migration rollback, explicit unit mappings, WAL-aware online snapshots, and corruption detection. See [the API reference](contracts/README.md) and [the offline protocol](contracts/sync.md).
 
-These checks do not establish HTTP handler, browser, camera, worker, or QNAP runtime coverage. Application startup/deployment instructions will accompany those tested implementations.
+The database core is implemented, but these checks do not establish HTTP handler, browser, camera, worker, or QNAP runtime coverage. Application startup/deployment instructions will accompany those tested implementations.
 
 ## Contributing
 
