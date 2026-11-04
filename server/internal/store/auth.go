@@ -8,7 +8,6 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -48,6 +47,7 @@ type AuthSession struct {
 type ActionAck struct {
 	OK          bool   `json:"ok"`
 	OperationID string `json:"operation_id"`
+	Revision    int64  `json:"revision,omitempty"`
 }
 
 // AuthConfig configures trusted server policy, never request-supplied hash or expiry parameters.
@@ -195,9 +195,7 @@ func (a *Auth) Login(ctx context.Context, username, secret string) (AuthSession,
 		if !missing {
 			adminID = admin.ID
 		}
-		_, err = a.store.db.ExecContext(ctx, `INSERT INTO security_audit(id,event_type,admin_id,occurred_at,details_json)
- VALUES(?,'login_failed',?,?,'{}')`, rand.Text(), adminID, stamp(a.now()))
-		if err != nil {
+		if err = a.recordCredentialFailure(ctx, "login_failed", adminID); err != nil {
 			return AuthSession{}, "", err
 		}
 		return AuthSession{}, "", ErrAuthentication
@@ -269,6 +267,10 @@ func (a *Auth) Logout(ctx context.Context, token, key string) (ActionAck, error)
 	if !authString(key, 8, 128) {
 		return ActionAck{}, ErrAuthInput
 	}
+	fingerprint, err := authFingerprint(token, key, logoutOperation, struct{}{})
+	if err != nil {
+		return ActionAck{}, err
+	}
 	tx, err := a.store.db.BeginTx(ctx, nil)
 	if err != nil {
 		return ActionAck{}, err
@@ -279,24 +281,19 @@ func (a *Auth) Logout(ctx context.Context, token, key string) (ActionAck, error)
 	if err != nil {
 		return ActionAck{}, err
 	}
-	identity := authDigest("post_auth_logout\x00" + session.ID + "\x00" + key)
-	fingerprint := authDigest("post_auth_logout\x00" + session.ID)
-	var operation, storedFingerprint, body string
-	var status int
-	err = tx.QueryRowContext(ctx, `SELECT operation,request_sha256,response_status,response_json FROM api_idempotency WHERE key=?`, identity).
-		Scan(&operation, &storedFingerprint, &status, &body)
-	if err == nil {
-		var ack ActionAck
-		if operation != "post_auth_logout" || storedFingerprint != fingerprint || status != 200 || json.Unmarshal([]byte(body), &ack) != nil || !ack.OK || ack.OperationID == "" {
-			return ActionAck{}, ErrAuthState
+	body, err := readAuthReply(ctx, tx, session, key, logoutOperation, fingerprint)
+	if err != nil {
+		return ActionAck{}, err
+	}
+	if body != "" {
+		ack, err := decodeAuthAck(body)
+		if err != nil {
+			return ActionAck{}, err
 		}
 		if err = tx.Commit(); err != nil {
 			return ActionAck{}, err
 		}
 		return ack, nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return ActionAck{}, err
 	}
 	if session.revoked {
 		return ActionAck{}, ErrAuthentication
@@ -309,13 +306,7 @@ func (a *Auth) Logout(ctx context.Context, token, key string) (ActionAck, error)
 		return ActionAck{}, err
 	}
 	ack := ActionAck{OK: true, OperationID: eventID}
-	response, err := json.Marshal(ack)
-	if err != nil {
-		return ActionAck{}, err
-	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO api_idempotency(key,operation,request_sha256,response_status,response_json,created_at,expires_at)
- VALUES(?,'post_auth_logout',?,200,?,?,?)`, identity, fingerprint, string(response), stamp(now), stamp(session.ExpiresAt))
-	if err != nil {
+	if err = saveAuthReply(ctx, tx, session, key, logoutOperation, fingerprint, ack, now); err != nil {
 		return ActionAck{}, err
 	}
 	if err = tx.Commit(); err != nil {

@@ -2255,6 +2255,7 @@ export interface components {
             readonly attribute_key: string;
             readonly attribute_value: string;
         };
+        /** @description Verify the current password and choose a different new password. Success revokes all sessions and requires a fresh login; an exact idempotent retry returns the original acknowledgement without issuing a session. */
         readonly AuthPasswordChange: {
             readonly new_password: string;
             readonly old_password: string;

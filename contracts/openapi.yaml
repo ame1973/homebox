@@ -13428,6 +13428,7 @@ components:
       - item
       - transaction_id
     AuthPasswordChange:
+      description: Verify the current password and choose a different new password. Success revokes all sessions and requires a fresh login; an exact idempotent retry returns the original acknowledgement without issuing a session.
       type: object
       additionalProperties: false
       properties:

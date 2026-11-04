@@ -22,6 +22,7 @@ Errors use `{ "error": { "code", "message", "request_id", "details" } }`. Detail
 - Stock operations check the catalog item's aggregate revision. Every stock mutation advances that revision as well as affected stock projections.
 - Child creation checks its parent revision. Initial asset creation checks the unit revision; later asset-profile/usage/cost/lifecycle mutations check the asset aggregate revision.
 - Idempotency binds the authenticated principal, operation, request body, and concurrency preconditions. The same key with the same request returns the original committed response; a changed request conflicts. The response and business effects commit in the same transaction.
+- Authentication mutation keys are scoped to the current administrator session and bind the operation and typed request. Reusing a key for another operation or payload conflicts. Credential request fingerprints are keyed, not unkeyed password digests. Password change requires a different new password, revokes every session, and returns an acknowledgement rather than a new cookie; an exact retry may retrieve only that frozen acknowledgement from the original session context.
 - Posted usage/cost events are immutable. Corrections append a new event referencing the original. Neither usage nor quantity stock may become negative.
 - Quick create defaults to individual tracking. Commercial barcode strings retain leading zeros and are not globally unique. Location/unit QR identifiers remain stable after edits and moves.
 
