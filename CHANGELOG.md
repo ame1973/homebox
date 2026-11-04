@@ -4,6 +4,8 @@
 
 ### Added
 
+- Add a foreground-only location mutation controller with explicit review/confirmation, original-key/proof retention for uncertain outcomes, read-only cache invalidation, interruption handling, session-loss cleanup, and no automatic write replay. Controller tests cover concurrent confirmation, pre-send failures, conflicts, malformed replies, cancellation and late results; screen integration remains separate.
+
 - Add complete iterative location-graph validation and traversal, exact original-text metadata validation, explicit dirty-field reconciliation, frozen command dispatch, and restricted location-only authentication return paths, with executable edge-case tests. These helpers do not by themselves enable location screens.
 
 - Generate official Radix Nova NativeSelect and Textarea primitives for location forms, preserving upstream code/licensing and the existing exact dependency lockfile. Apply touch sizing and field semantics in feature composition rather than altering the generated controls.
