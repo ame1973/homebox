@@ -23,6 +23,22 @@ Use trusted HTTPS over LAN/VPN. A VPN does not replace the secure context requir
 
 Local specifications, environment files, databases, private media, backups, keys, and internal development records are excluded from version control. Public builds and tests must not depend on the local specification pack.
 
+## Development checks
+
+Prerequisites for the current contract suite: Python 3.12 and [uv](https://docs.astral.sh/uv/). Python is a development-only tool, not a NAS runtime dependency. Exact dependencies and artifact hashes are recorded in `uv.lock`.
+
+```sh
+uv sync --frozen
+make test
+
+# Run one test.
+uv run --frozen python -m unittest tests.test_contracts.OpenAPIContractTests.test_entire_document_validates_as_openapi_31 -v
+```
+
+The suite validates OpenAPI 3.1, all original API operation identities, offline projection equivalence, security/concurrency requirements, negative payload cases, and fresh/legacy SQLite migration invariants. See [the API reference](contracts/README.md) and [the offline protocol](contracts/sync.md).
+
+These checks do not establish HTTP handler, browser, camera, worker, or QNAP runtime coverage. Application startup/deployment instructions will accompany those tested implementations.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Use English Conventional Commits and English source comments. English documentation is canonical; Traditional Chinese translations will be provided after the English originals are complete. The default product interface is Traditional Chinese.

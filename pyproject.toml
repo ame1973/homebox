@@ -1,0 +1,16 @@
+[project]
+name = "homebox-contract-tests"
+version = "0.1.0"
+description = "Development-only validation tools for the HomeBox contracts"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = [
+    "jsonschema==4.26.0",
+    "openapi-spec-validator==0.9.0",
+    "pyyaml==6.0.3",
+]

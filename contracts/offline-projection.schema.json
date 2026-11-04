@@ -1,0 +1,1864 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homebox.invalid/contracts/offline_projection.v0.9.schema.json",
+  "title": "HomeBox offline projection record v0.9",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entity_type",
+        "entity_id",
+        "entity_revision",
+        "operation",
+        "projection_version",
+        "payload"
+      ],
+      "properties": {
+        "entity_type": {
+          "const": "location"
+        },
+        "entity_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entity_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "operation": {
+          "const": "upsert"
+        },
+        "projection_version": {
+          "const": 1
+        },
+        "payload": {
+          "$ref": "#/$defs/location"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entity_type",
+        "entity_id",
+        "entity_revision",
+        "operation",
+        "projection_version",
+        "payload"
+      ],
+      "properties": {
+        "entity_type": {
+          "const": "item"
+        },
+        "entity_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entity_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "operation": {
+          "const": "upsert"
+        },
+        "projection_version": {
+          "const": 1
+        },
+        "payload": {
+          "$ref": "#/$defs/item"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entity_type",
+        "entity_id",
+        "entity_revision",
+        "operation",
+        "projection_version",
+        "payload"
+      ],
+      "properties": {
+        "entity_type": {
+          "const": "unit"
+        },
+        "entity_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entity_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "operation": {
+          "const": "upsert"
+        },
+        "projection_version": {
+          "const": 1
+        },
+        "payload": {
+          "$ref": "#/$defs/unit"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entity_type",
+        "entity_id",
+        "entity_revision",
+        "operation",
+        "projection_version",
+        "payload"
+      ],
+      "properties": {
+        "entity_type": {
+          "const": "stock"
+        },
+        "entity_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entity_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "operation": {
+          "const": "upsert"
+        },
+        "projection_version": {
+          "const": 1
+        },
+        "payload": {
+          "$ref": "#/$defs/stock"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entity_type",
+        "entity_id",
+        "entity_revision",
+        "operation",
+        "projection_version",
+        "payload"
+      ],
+      "properties": {
+        "entity_type": {
+          "const": "barcode"
+        },
+        "entity_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entity_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "operation": {
+          "const": "upsert"
+        },
+        "projection_version": {
+          "const": 1
+        },
+        "payload": {
+          "$ref": "#/$defs/barcode"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entity_type",
+        "entity_id",
+        "entity_revision",
+        "operation",
+        "projection_version",
+        "payload"
+      ],
+      "properties": {
+        "entity_type": {
+          "const": "media"
+        },
+        "entity_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entity_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "operation": {
+          "const": "upsert"
+        },
+        "projection_version": {
+          "const": 1
+        },
+        "payload": {
+          "$ref": "#/$defs/media"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entity_type",
+        "entity_id",
+        "entity_revision",
+        "operation",
+        "projection_version",
+        "payload"
+      ],
+      "properties": {
+        "entity_type": {
+          "const": "media_link"
+        },
+        "entity_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entity_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "operation": {
+          "const": "upsert"
+        },
+        "projection_version": {
+          "const": 1
+        },
+        "payload": {
+          "$ref": "#/$defs/media_link"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entity_type",
+        "entity_id",
+        "entity_revision",
+        "operation",
+        "projection_version",
+        "payload"
+      ],
+      "properties": {
+        "entity_type": {
+          "const": "category"
+        },
+        "entity_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entity_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "operation": {
+          "const": "upsert"
+        },
+        "projection_version": {
+          "const": 1
+        },
+        "payload": {
+          "$ref": "#/$defs/category"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entity_type",
+        "entity_id",
+        "entity_revision",
+        "operation",
+        "projection_version",
+        "payload"
+      ],
+      "properties": {
+        "entity_type": {
+          "const": "tag"
+        },
+        "entity_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entity_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "operation": {
+          "const": "upsert"
+        },
+        "projection_version": {
+          "const": 1
+        },
+        "payload": {
+          "$ref": "#/$defs/tag"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entity_type",
+        "entity_id",
+        "entity_revision",
+        "operation",
+        "projection_version",
+        "payload"
+      ],
+      "properties": {
+        "entity_type": {
+          "const": "item_tag"
+        },
+        "entity_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entity_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "operation": {
+          "const": "upsert"
+        },
+        "projection_version": {
+          "const": 1
+        },
+        "payload": {
+          "$ref": "#/$defs/item_tag"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entity_type",
+        "entity_id",
+        "entity_revision",
+        "operation",
+        "projection_version",
+        "payload"
+      ],
+      "properties": {
+        "entity_type": {
+          "const": "search_doc"
+        },
+        "entity_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entity_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "operation": {
+          "const": "upsert"
+        },
+        "projection_version": {
+          "const": 1
+        },
+        "payload": {
+          "$ref": "#/$defs/search_doc"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entity_type",
+        "entity_id",
+        "entity_revision",
+        "operation",
+        "projection_version",
+        "payload"
+      ],
+      "properties": {
+        "entity_type": {
+          "const": "purchase"
+        },
+        "entity_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entity_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "operation": {
+          "const": "upsert"
+        },
+        "projection_version": {
+          "const": 1
+        },
+        "payload": {
+          "$ref": "#/$defs/purchase"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entity_type",
+        "entity_id",
+        "entity_revision",
+        "operation",
+        "projection_version",
+        "payload"
+      ],
+      "properties": {
+        "entity_type": {
+          "const": "purchase_line"
+        },
+        "entity_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entity_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "operation": {
+          "const": "upsert"
+        },
+        "projection_version": {
+          "const": 1
+        },
+        "payload": {
+          "$ref": "#/$defs/purchase_line"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entity_type",
+        "entity_id",
+        "entity_revision",
+        "operation",
+        "projection_version",
+        "payload"
+      ],
+      "properties": {
+        "entity_type": {
+          "const": "asset"
+        },
+        "entity_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entity_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "operation": {
+          "const": "upsert"
+        },
+        "projection_version": {
+          "const": 1
+        },
+        "payload": {
+          "$ref": "#/$defs/asset"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entity_type",
+        "entity_id",
+        "entity_revision",
+        "operation",
+        "projection_version",
+        "payload"
+      ],
+      "properties": {
+        "entity_type": {
+          "const": "usage"
+        },
+        "entity_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entity_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "operation": {
+          "const": "upsert"
+        },
+        "projection_version": {
+          "const": 1
+        },
+        "payload": {
+          "$ref": "#/$defs/usage"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entity_type",
+        "entity_id",
+        "entity_revision",
+        "operation",
+        "projection_version",
+        "payload"
+      ],
+      "properties": {
+        "entity_type": {
+          "const": "cost"
+        },
+        "entity_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entity_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "operation": {
+          "const": "upsert"
+        },
+        "projection_version": {
+          "const": 1
+        },
+        "payload": {
+          "$ref": "#/$defs/cost"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entity_type",
+        "entity_id",
+        "entity_revision",
+        "operation",
+        "projection_version",
+        "payload"
+      ],
+      "properties": {
+        "entity_type": {
+          "const": "disposal"
+        },
+        "entity_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entity_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "operation": {
+          "const": "upsert"
+        },
+        "projection_version": {
+          "const": 1
+        },
+        "payload": {
+          "$ref": "#/$defs/disposal"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entity_type",
+        "entity_id",
+        "entity_revision",
+        "operation",
+        "projection_version",
+        "payload"
+      ],
+      "properties": {
+        "entity_type": {
+          "const": "alias"
+        },
+        "entity_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entity_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "operation": {
+          "const": "upsert"
+        },
+        "projection_version": {
+          "const": 1
+        },
+        "payload": {
+          "$ref": "#/$defs/alias"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entity_type",
+        "entity_id",
+        "entity_revision",
+        "operation",
+        "projection_version",
+        "payload"
+      ],
+      "properties": {
+        "entity_type": {
+          "const": "attribute"
+        },
+        "entity_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entity_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "operation": {
+          "const": "upsert"
+        },
+        "projection_version": {
+          "const": 1
+        },
+        "payload": {
+          "$ref": "#/$defs/attribute"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entity_type",
+        "entity_id",
+        "entity_revision",
+        "operation",
+        "projection_version",
+        "payload"
+      ],
+      "properties": {
+        "entity_type": {
+          "const": "location_event"
+        },
+        "entity_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entity_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "operation": {
+          "const": "upsert"
+        },
+        "projection_version": {
+          "const": 1
+        },
+        "payload": {
+          "$ref": "#/$defs/location_event"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entity_type",
+        "entity_id",
+        "entity_revision",
+        "operation",
+        "projection_version",
+        "payload"
+      ],
+      "properties": {
+        "entity_type": {
+          "const": "inventory_event"
+        },
+        "entity_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entity_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "operation": {
+          "const": "upsert"
+        },
+        "projection_version": {
+          "const": 1
+        },
+        "payload": {
+          "$ref": "#/$defs/inventory_event"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entity_type",
+        "entity_id",
+        "entity_revision",
+        "operation",
+        "projection_version",
+        "payload"
+      ],
+      "properties": {
+        "entity_type": {
+          "const": "ai_review"
+        },
+        "entity_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entity_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "operation": {
+          "const": "upsert"
+        },
+        "projection_version": {
+          "const": 1
+        },
+        "payload": {
+          "$ref": "#/$defs/ai_review"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entity_type",
+        "entity_id",
+        "entity_revision",
+        "operation",
+        "projection_version",
+        "payload"
+      ],
+      "properties": {
+        "entity_type": {
+          "enum": [
+            "location",
+            "item",
+            "unit",
+            "stock",
+            "barcode",
+            "media",
+            "media_link",
+            "category",
+            "tag",
+            "item_tag",
+            "search_doc",
+            "purchase",
+            "purchase_line",
+            "asset",
+            "usage",
+            "cost",
+            "disposal",
+            "alias",
+            "attribute",
+            "location_event",
+            "inventory_event",
+            "ai_review"
+          ]
+        },
+        "entity_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entity_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "operation": {
+          "const": "delete"
+        },
+        "projection_version": {
+          "const": 1
+        },
+        "payload": {
+          "type": "null"
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "parent_id",
+        "code",
+        "name",
+        "status",
+        "kind",
+        "sort_order",
+        "description"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "parent_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": [
+            "active",
+            "archived"
+          ]
+        },
+        "kind": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "sort_order": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "description": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 10000
+        }
+      }
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "tracking_mode",
+        "unit_code",
+        "category_id",
+        "brand",
+        "model",
+        "description",
+        "notes",
+        "base_unit",
+        "scale_factor",
+        "status"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tracking_mode": {
+          "enum": [
+            "individual",
+            "quantity"
+          ]
+        },
+        "unit_code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "category_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "brand": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 10000
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 10000
+        },
+        "base_unit": {
+          "type": "string"
+        },
+        "scale_factor": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "status": {
+          "enum": [
+            "active",
+            "archived"
+          ]
+        }
+      }
+    },
+    "unit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "item_id",
+        "location_id",
+        "asset_code",
+        "status",
+        "serial_number",
+        "notes"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "item_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "location_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "asset_code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "minLength": 1
+        },
+        "serial_number": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 10000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 10000
+        }
+      }
+    },
+    "stock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "item_id",
+        "location_id",
+        "quantity_base",
+        "unit_code",
+        "base_unit",
+        "scale_factor"
+      ],
+      "properties": {
+        "item_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "location_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "quantity_base": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unit_code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "base_unit": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scale_factor": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "barcode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "item_id",
+        "symbology",
+        "raw_value",
+        "normalized_value"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "item_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "symbology": {
+          "type": "string",
+          "minLength": 1
+        },
+        "raw_value": {
+          "type": "string",
+          "minLength": 1
+        },
+        "normalized_value": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "media": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "sha256",
+        "thumb_url",
+        "width",
+        "height",
+        "thumb_sha256",
+        "mime_type",
+        "bytes",
+        "perceptual_hash"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "thumb_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "thumb_sha256": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mime_type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "perceptual_hash": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 16
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "media_link": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "media_id",
+        "owner_type",
+        "owner_id",
+        "is_cover",
+        "sort_order",
+        "description"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "media_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "owner_type": {
+          "enum": [
+            "location",
+            "item",
+            "unit"
+          ]
+        },
+        "owner_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "is_cover": {
+          "type": "boolean"
+        },
+        "sort_order": {
+          "type": "integer"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 10000
+        }
+      }
+    },
+    "category": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "parent_id",
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "parent_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "tag": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "item_tag": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "item_id",
+        "tag_id"
+      ],
+      "properties": {
+        "item_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tag_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "search_doc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entity_type",
+        "entity_id",
+        "approved_text"
+      ],
+      "properties": {
+        "entity_type": {
+          "enum": [
+            "item",
+            "unit"
+          ]
+        },
+        "entity_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "approved_text": {
+          "type": "string"
+        }
+      }
+    },
+    "purchase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "merchant_name",
+        "purchased_at",
+        "currency",
+        "receipt_note"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "merchant_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "purchased_at": {
+          "type": "string",
+          "minLength": 1
+        },
+        "currency": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 3
+        },
+        "receipt_note": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 10000
+        }
+      }
+    },
+    "purchase_line": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "purchase_id",
+        "item_id",
+        "quantity_base",
+        "paid_minor",
+        "item_unit_id",
+        "note"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "purchase_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "item_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "quantity_base": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "paid_minor": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "item_unit_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "note": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 10000
+        }
+      }
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "item_unit_id",
+        "cost_basis",
+        "currency",
+        "in_service_at",
+        "retired_at",
+        "manual_acquisition_minor",
+        "estimated_residual_minor",
+        "usage_unit"
+      ],
+      "properties": {
+        "item_unit_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cost_basis": {
+          "enum": [
+            "purchase",
+            "manual"
+          ]
+        },
+        "currency": {
+          "type": "string",
+          "minLength": 1
+        },
+        "in_service_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "retired_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "manual_acquisition_minor": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "estimated_residual_minor": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "usage_unit": {
+          "enum": [
+            "times",
+            "minutes",
+            "cycles"
+          ]
+        }
+      }
+    },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "item_unit_id",
+        "delta",
+        "occurred_at",
+        "usage_unit",
+        "event_type",
+        "note",
+        "correction_of"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "item_unit_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "delta": {
+          "type": "integer"
+        },
+        "occurred_at": {
+          "type": "string",
+          "minLength": 1
+        },
+        "usage_unit": {
+          "enum": [
+            "times",
+            "minutes",
+            "cycles"
+          ]
+        },
+        "event_type": {
+          "enum": [
+            "use",
+            "correction"
+          ]
+        },
+        "note": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 10000
+        },
+        "correction_of": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "cost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "item_unit_id",
+        "amount_minor",
+        "direction",
+        "currency",
+        "kind",
+        "occurred_at",
+        "note",
+        "correction_of"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "item_unit_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "amount_minor": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "direction": {
+          "enum": [
+            "expense",
+            "credit"
+          ]
+        },
+        "currency": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 3,
+          "pattern": "^[A-Z]{3}$"
+        },
+        "kind": {
+          "enum": [
+            "maintenance",
+            "repair",
+            "accessory",
+            "fee",
+            "refund",
+            "adjustment"
+          ]
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "note": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 10000
+        },
+        "correction_of": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "disposal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "item_unit_id",
+        "disposed_at",
+        "realized_proceeds_minor",
+        "currency",
+        "kind",
+        "note"
+      ],
+      "properties": {
+        "item_unit_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "disposed_at": {
+          "type": "string",
+          "minLength": 1
+        },
+        "realized_proceeds_minor": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "currency": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 3,
+          "pattern": "^[A-Z]{3}$"
+        },
+        "kind": {
+          "enum": [
+            "sold",
+            "donated",
+            "recycled",
+            "discarded",
+            "other"
+          ]
+        },
+        "note": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 10000
+        }
+      }
+    },
+    "alias": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "item_id",
+        "alias"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "item_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "alias": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "attribute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "item_id",
+        "attribute_key",
+        "attribute_value"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "item_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "attribute_key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "attribute_value": {
+          "type": "string"
+        }
+      }
+    },
+    "location_event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "location_id",
+        "occurred_at",
+        "from_parent_id",
+        "to_parent_id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "location_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "minLength": 1
+        },
+        "from_parent_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "to_parent_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "inventory_event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "item_id",
+        "action",
+        "occurred_at",
+        "item_unit_id",
+        "from_location_id",
+        "to_location_id",
+        "quantity_base"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "item_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "action": {
+          "type": "string",
+          "minLength": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "minLength": 1
+        },
+        "item_unit_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "from_location_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "to_location_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "quantity_base": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "ai_review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "item_id",
+        "state",
+        "effective_value",
+        "field_key",
+        "media_id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "item_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "state": {
+          "enum": [
+            "needs_review",
+            "accepted",
+            "corrected",
+            "rejected"
+          ]
+        },
+        "effective_value": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "field_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "media_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "enum": [
+                  "needs_review",
+                  "rejected"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "effective_value": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
