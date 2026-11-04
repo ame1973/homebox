@@ -50,7 +50,7 @@ func (a *Auth) ChangePassword(ctx context.Context, token, key, oldPassword, newP
 	if oldPassword == newPassword {
 		return ActionAck{}, ErrPasswordUnchanged
 	}
-	fingerprint, err := authFingerprint(token, key, passwordOperation, passwordChangeRequest{oldPassword, newPassword})
+	fingerprint, err := a.authFingerprint(token, key, passwordOperation, passwordChangeRequest{oldPassword, newPassword})
 	if err != nil {
 		return ActionAck{}, err
 	}
@@ -185,9 +185,12 @@ func (a *Auth) recordCredentialFailure(ctx context.Context, event string, adminI
 	return err
 }
 
-// Fingerprints of credential requests must not be unkeyed password digests.
-// The raw session secret is never stored beside the resulting HMAC.
-func authFingerprint(token, key, operation string, payload any) (string, error) {
+// Fingerprints require a server secret independent of client/session credentials.
+// The raw session credential is bound as input and is never persisted beside the HMAC.
+func (a *Auth) authFingerprint(token, key, operation string, payload any) (string, error) {
+	if len(a.serverSecret) != 32 {
+		return "", ErrAuthState
+	}
 	if !validAuthToken(token) {
 		return "", ErrAuthentication
 	}
@@ -199,12 +202,14 @@ func authFingerprint(token, key, operation string, payload any) (string, error) 
 	if err != nil {
 		return "", err
 	}
-	return hex.EncodeToString(authMAC(token, "auth-request-v1", body)), nil
+	return hex.EncodeToString(a.authMAC(token, "auth-request-v2", body)), nil
 }
 
-func authMAC(token, purpose string, payload []byte) []byte {
-	mac := hmac.New(sha256.New, []byte(token))
+func (a *Auth) authMAC(token, purpose string, payload []byte) []byte {
+	mac := hmac.New(sha256.New, a.serverSecret)
 	_, _ = mac.Write([]byte(purpose))
+	_, _ = mac.Write([]byte{0})
+	_, _ = mac.Write([]byte(token))
 	_, _ = mac.Write([]byte{0})
 	_, _ = mac.Write(payload)
 	return mac.Sum(nil)

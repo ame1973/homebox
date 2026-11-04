@@ -3292,7 +3292,7 @@ export interface components {
             readonly purchased_at: string;
             readonly receipt_note?: string;
         };
-        /** @description A single-use capability valid for at most five minutes and bounded by the current session. It is bound to the session, account revision, and dataset epoch. Exact idempotent retry returns the same capability and deadline without renewing or resetting consumption; privileged authorization consumes it in the authoritative transaction. */
+        /** @description A single-use capability requiring an independent server secret, not derivable from a session cookie and request key alone. It is valid for at most five minutes and bounded by the current session. It is bound to the session, account revision, and dataset epoch. Exact idempotent retry returns the same capability and deadline without renewing or resetting consumption; privileged authorization consumes it in the authoritative transaction. */
         readonly ReauthResult: {
             readonly admin: components["schemas"]["Admin"];
             /** Format: date-time */

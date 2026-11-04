@@ -92,7 +92,7 @@ func TestPasswordChangeRevalidatesItsProofAndLifetimeAtCommit(t *testing.T) {
 			s, a, now := authFixture(t)
 			provision(t, a)
 			_, token := login(t, a)
-			fingerprint, err := authFingerprint(token, "password-key", passwordOperation, passwordChangeRequest{testAdminPassword, changedAdminPassword})
+			fingerprint, err := a.authFingerprint(token, "password-key", passwordOperation, passwordChangeRequest{testAdminPassword, changedAdminPassword})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -131,7 +131,7 @@ func TestConcurrentVerifiedPasswordChangeUsesTheCommittedResponse(t *testing.T) 
 	s, a, _ := authFixture(t)
 	provision(t, a)
 	_, token := login(t, a)
-	fingerprint, err := authFingerprint(token, "password-key", passwordOperation, passwordChangeRequest{testAdminPassword, changedAdminPassword})
+	fingerprint, err := a.authFingerprint(token, "password-key", passwordOperation, passwordChangeRequest{testAdminPassword, changedAdminPassword})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,20 +200,20 @@ func TestAuthFingerprintsAreKeyedScopedAndRejectInvalidCookies(t *testing.T) {
 	provision(t, a)
 	_, token := login(t, a)
 	payload := passwordChangeRequest{testAdminPassword, changedAdminPassword}
-	first, err := authFingerprint(token, "password-key", passwordOperation, payload)
+	first, err := a.authFingerprint(token, "password-key", passwordOperation, payload)
 	if err != nil || len(first) != 64 {
 		t.Fatal("invalid credential fingerprint", err)
 	}
-	otherKey, _ := authFingerprint(token, "other-key", passwordOperation, payload)
-	otherOperation, _ := authFingerprint(token, "password-key", logoutOperation, payload)
-	otherCookie, _ := authFingerprint(strings.Repeat("A", 43), "password-key", passwordOperation, payload)
+	otherKey, _ := a.authFingerprint(token, "other-key", passwordOperation, payload)
+	otherOperation, _ := a.authFingerprint(token, "password-key", logoutOperation, payload)
+	otherCookie, _ := a.authFingerprint(strings.Repeat("A", 43), "password-key", passwordOperation, payload)
 	if first == otherKey || first == otherOperation || first == otherCookie || first == authDigest(changedAdminPassword) {
 		t.Fatal("credential fingerprint lost its key, operation, or session binding")
 	}
-	if _, err := authFingerprint("bad", "password-key", passwordOperation, payload); !errors.Is(err, ErrAuthentication) {
+	if _, err := a.authFingerprint("bad", "password-key", passwordOperation, payload); !errors.Is(err, ErrAuthentication) {
 		t.Fatal("invalid cookie reached credential fingerprinting")
 	}
-	if _, err := authFingerprint(token, "password-key", passwordOperation, make(chan int)); err == nil {
+	if _, err := a.authFingerprint(token, "password-key", passwordOperation, make(chan int)); err == nil {
 		t.Fatal("unencodable request reached idempotency state")
 	}
 }

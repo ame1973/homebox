@@ -60,12 +60,13 @@ type AuthConfig struct {
 // Auth owns security transactions without exposing the underlying SQL connection.
 // HTTP callers must additionally enforce Origin/CSRF, client versions, and rate limits.
 type Auth struct {
-	store    *Store
-	hasher   *password.Hasher
-	dummyPHC string
-	idle     time.Duration
-	lifetime time.Duration
-	now      func() time.Time
+	store        *Store
+	hasher       *password.Hasher
+	serverSecret []byte
+	dummyPHC     string
+	idle         time.Duration
+	lifetime     time.Duration
+	now          func() time.Time
 }
 
 func (s *Store) NewAuth(cfg AuthConfig) (*Auth, error) {
@@ -85,11 +86,17 @@ func (s *Store) NewAuth(cfg AuthConfig) (*Auth, error) {
 	if err != nil {
 		return nil, err
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	serverSecret, err := s.loadAuthServerSecret(ctx)
+	if err != nil {
+		return nil, err
+	}
 	p := cfg.PasswordParams
 	// The dummy envelope consumes the configured work when no account exists. It
 	// is never an account credential, and its comparison result cannot authorize.
 	dummy := fmt.Sprintf("$argon2id$v=19$m=%d,t=%d,p=%d$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", p.MemoryKiB, p.Iterations, p.Parallelism)
-	return &Auth{store: s, hasher: hasher, dummyPHC: dummy, idle: cfg.IdleTimeout, lifetime: cfg.SessionLifetime, now: time.Now}, nil
+	return &Auth{store: s, hasher: hasher, serverSecret: serverSecret, dummyPHC: dummy, idle: cfg.IdleTimeout, lifetime: cfg.SessionLifetime, now: time.Now}, nil
 }
 
 // IssueBootstrap rotates a short-lived setup secret only before provisioning.
@@ -277,7 +284,7 @@ func (a *Auth) Logout(ctx context.Context, token, key string) (ActionAck, error)
 	if !authString(key, 8, 128) {
 		return ActionAck{}, ErrAuthInput
 	}
-	fingerprint, err := authFingerprint(token, key, logoutOperation, struct{}{})
+	fingerprint, err := a.authFingerprint(token, key, logoutOperation, struct{}{})
 	if err != nil {
 		return ActionAck{}, err
 	}

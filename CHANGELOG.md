@@ -27,6 +27,8 @@
 
 ### Security
 
+- Fix reauthentication capability derivation to require independent server-only key material as well as the raw session credential. Cookie/key knowledge no longer reconstructs an issued capability. Migration 0006 invalidates the earlier auth protocol without deleting domain replies; adversarial and restart/missing-key tests cover the change.
+
 - Add the offline `auth bootstrap` CLI with exclusive private-file delivery, metadata-only output, file-before-database durability ordering, no-overwrite/symlink/special-file refusal, rollback cleanup, and native CLI smoke coverage. HTTP setup/login remains pending.
 
 - Add short-lived, session/revision/epoch-bound single-use reauthentication grants with hash-only storage, deterministic safe replay, atomic private consumption, concurrent-use exclusion, and commit-failure rollback tests. Migration 0005 adds private grant storage; HTTP integration remains pending.

@@ -102,7 +102,7 @@ func TestReauthGrantIsSingleUseAndCannotBeForgedOrMovedBetweenSessions(t *testin
 	if err := consumeGrant(t.Context(), a, otherCookie, token); !errors.Is(err, ErrReauthRequired) {
 		t.Fatal("another session consumed a grant")
 	}
-	for _, forged := range []string{"bad", reauthToken(cookie, "never-issued-key")} {
+	for _, forged := range []string{"bad", a.reauthToken(cookie, "never-issued-key")} {
 		if err := consumeGrant(t.Context(), a, cookie, forged); !errors.Is(err, ErrReauthRequired) {
 			t.Fatal("a fabricated capability was accepted without a persisted grant")
 		}
@@ -207,7 +207,7 @@ func TestReauthRejectsStaleProofsAndRevokedOrRestoredSessions(t *testing.T) {
 	for _, mutation := range []string{"revision", "hash", "revocation", "epoch", "idle", "mandatory change"} {
 		t.Run(mutation, func(t *testing.T) {
 			s, a, now, _, cookie := completedAuthFixture(t)
-			fingerprint, err := authFingerprint(cookie, "reauth-key", reauthOperation, reauthRequest{"家中管理員", testAdminPassword})
+			fingerprint, err := a.authFingerprint(cookie, "reauth-key", reauthOperation, reauthRequest{"家中管理員", testAdminPassword})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -299,7 +299,7 @@ func TestReauthWritesAndCommitRollBackWithoutPublishingCapabilities(t *testing.T
 
 func TestDuplicateVerifiedReauthAndConsumedReplayNeverMintAnotherGrant(t *testing.T) {
 	s, a, _, _, cookie := completedAuthFixture(t)
-	fingerprint, err := authFingerprint(cookie, "reauth-key", reauthOperation, reauthRequest{"家中管理員", testAdminPassword})
+	fingerprint, err := a.authFingerprint(cookie, "reauth-key", reauthOperation, reauthRequest{"家中管理員", testAdminPassword})
 	if err != nil {
 		t.Fatal(err)
 	}

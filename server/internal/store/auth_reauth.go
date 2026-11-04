@@ -34,7 +34,7 @@ func (a *Auth) Reauthenticate(ctx context.Context, token, key, username, secret 
 	if !authString(key, 8, 128) || !authString(username, 1, 64) || !authString(secret, 1, 256) {
 		return ReauthGrant{}, "", ErrAuthInput
 	}
-	fingerprint, err := authFingerprint(token, key, reauthOperation, reauthRequest{username, secret})
+	fingerprint, err := a.authFingerprint(token, key, reauthOperation, reauthRequest{username, secret})
 	if err != nil {
 		return ReauthGrant{}, "", err
 	}
@@ -43,7 +43,7 @@ func (a *Auth) Reauthenticate(ctx context.Context, token, key, username, secret 
 		return ReauthGrant{}, "", err
 	}
 	if replay != nil {
-		return *replay, reauthToken(token, key), nil
+		return *replay, a.reauthToken(token, key), nil
 	}
 	matched, err := a.hasher.Verify(ctx, secret, proof.hash)
 	if err != nil {
@@ -121,7 +121,7 @@ func (a *Auth) commitReauth(ctx context.Context, token, key, fingerprint string,
 		if err = tx.Commit(); err != nil {
 			return ReauthGrant{}, "", err
 		}
-		return grant, reauthToken(token, key), nil
+		return grant, a.reauthToken(token, key), nil
 	}
 	if err = a.revalidateCredentialProof(ctx, tx, session, proof); err != nil {
 		return ReauthGrant{}, "", err
@@ -134,7 +134,7 @@ func (a *Auth) commitReauth(ctx context.Context, token, key, fingerprint string,
 		expires = session.ExpiresAt
 	}
 	grant := ReauthGrant{Admin: session.Admin, ExpiresAt: expires}
-	raw := reauthToken(token, key)
+	raw := a.reauthToken(token, key)
 	_, err = tx.ExecContext(ctx, `INSERT INTO auth_reauth_grants(token_hash,session_id,admin_revision,created_at,expires_at)
  VALUES(?,?,?,?,?)`, authDigest(raw), session.ID, session.Admin.Revision, stamp(now), stamp(expires))
 	if err != nil {
@@ -211,8 +211,8 @@ func requireCompleteSession(session AuthSession) error {
 	return nil
 }
 
-func reauthToken(sessionToken, key string) string {
-	return base64.RawURLEncoding.EncodeToString(authMAC(sessionToken, "reauth-token-v1", []byte(key)))
+func (a *Auth) reauthToken(sessionToken, key string) string {
+	return base64.RawURLEncoding.EncodeToString(a.authMAC(sessionToken, "reauth-token-v2", []byte(key)))
 }
 
 func decodeReauthGrant(body string, session AuthSession) (ReauthGrant, error) {

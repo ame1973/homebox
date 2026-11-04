@@ -32,7 +32,7 @@ Errors use `{ "error": { "code", "message", "request_id", "details" } }`. Detail
 
 Media content and thumbnails use authenticated stream endpoints. Imports require upload, preview, explicit confirmation, and transactional commit. Exports use authenticated expiring download tokens. Backups include credential hashes and must be encrypted with an operator-configured recipient; ordinary exports must not contain these hashes.
 
-Reauthentication returns a single-use capability with a maximum five-minute lifetime, further bounded by session idle/absolute limits. It is tied to the session, account revision, and dataset epoch; the privileged mutation or job authorization consumes it in the same SQLite transaction. A retry never renews an expired/consumed capability. Raw grants are delivered only in the authenticated response, not saved in audit or idempotency payloads.
+Reauthentication returns a single-use capability with a maximum five-minute lifetime, further bounded by session idle/absolute limits. It requires an independent server secret, so knowing a session cookie and request key is not enough to compute the capability. It is tied to the session, account revision, and dataset epoch; the privileged mutation or job authorization consumes it in the same SQLite transaction. A retry never renews an expired/consumed capability. Raw grants are delivered only in the authenticated response, not saved in audit or idempotency payloads.
 
 Restore requires recent reauthentication, a successful unexpired dry-run ID, the typed confirmation `RESTORE`, and explicit dataset-reset acknowledgment. Restoring invalidates sessions and rotates the dataset epoch. The server does not execute a destructive release deployment from a browser request.
 
