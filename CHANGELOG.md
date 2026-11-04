@@ -27,6 +27,8 @@
 
 ### Security
 
+- Add bounded Argon2id PHC hashing/verification with unique salts, constant-time comparison, process-wide work admission, strict cost/encoding checks, Unicode password bounds, independent-vector tests, and parser fuzzing. HTTP authentication is not yet wired.
+
 - Reject permissive or symlinked SQLite sidecars before opening a database, and reject unhashed sidecars or unsafe checksum markers when verifying a migration snapshot.
 
 ### Acceptance status

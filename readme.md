@@ -44,7 +44,7 @@ Open `http://127.0.0.1:8080`. Keep this development build on loopback until auth
 
 ## Security and data
 
-Use trusted HTTPS over LAN/VPN. A VPN does not replace the secure context required by camera/PWA APIs. Do not expose NAS administration, the Docker socket, or unprotected data directories. Do not place SQLite on SMB/NFS. Browser storage can be evicted and is not a durable backup.
+Use trusted HTTPS over LAN/VPN. See [Security](docs/security.md) for implemented password primitives, cost benchmarking, and the current authentication limits. A VPN does not replace the secure context required by camera/PWA APIs. Do not expose NAS administration, the Docker socket, or unprotected data directories. Do not place SQLite on SMB/NFS. Browser storage can be evicted and is not a durable backup.
 
 Local specifications, environment files, databases, private media, backups, keys, and internal development records are excluded from version control. Public builds and tests must not depend on the local specification pack.
 
