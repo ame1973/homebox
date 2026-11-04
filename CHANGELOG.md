@@ -4,6 +4,8 @@
 
 ### Added
 
+- Add principal/epoch/page-size-scoped signed location-list continuations with a 15-minute lifetime, private-key and credential-purpose isolation, canonical encoding checks, active-session enforcement, and live-list rather than fake-snapshot semantics.
+
 - Add the authoritative location service with Unicode/safe-integer bounds, parent/subtree aggregate revisions, cycle and archival/holding guards, immutable movements, logical deletion, and independent owner-media-link tombstones. Source changes, final-state current/frozen projections, catalog invalidation, immutable audit, and principal/epoch-scoped replies commit together; add statement/commit-failure, concurrency, deep-tree, retention, and replay tests. Location HTTP/UI and complete sync remain separate unfinished work.
 - Add migration 0007 for location metadata, independently retained current projections with deferred revision integrity, and append-only mutation audit; preserve original migration files and legacy quantities. Refine root location concurrency, pagination, nullable-field, and bounds contracts with generated-client fixtures and English rules documentation.
 

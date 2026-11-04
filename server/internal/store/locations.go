@@ -70,6 +70,15 @@ type LocationPage struct {
 // the store boundary. HTTP still owns Origin/CSRF/version/admission checks.
 type Locations struct{ auth *Auth }
 
+// NewLocations binds an HTTP/module consumer to the authentication service's
+// existing private store; it cannot accidentally select a second database.
+func NewLocations(a *Auth) (*Locations, error) {
+	if a == nil || a.store == nil {
+		return nil, ErrDomainInput
+	}
+	return a.store.NewLocations(a)
+}
+
 func (s *Store) NewLocations(a *Auth) (*Locations, error) {
 	if s == nil || a == nil || a.store != s {
 		return nil, ErrDomainInput
@@ -93,28 +102,32 @@ func (l *Locations) List(ctx context.Context, token, afterID string, limit int) 
 		return LocationPage{}, ErrDomainInput
 	}
 	return readDomain(ctx, l.auth, token, func(tx *sql.Tx) (LocationPage, error) {
-		rows, err := tx.QueryContext(ctx, locationSelect+" WHERE l.deleted_at IS NULL AND l.id>? ORDER BY l.id LIMIT ?", afterID, limit+1)
+		return listLocations(ctx, tx, afterID, limit)
+	})
+}
+
+func listLocations(ctx context.Context, tx *sql.Tx, afterID string, limit int) (LocationPage, error) {
+	rows, err := tx.QueryContext(ctx, locationSelect+" WHERE l.deleted_at IS NULL AND l.id>? ORDER BY l.id LIMIT ?", afterID, limit+1)
+	if err != nil {
+		return LocationPage{}, err
+	}
+	defer rows.Close()
+	page := LocationPage{Data: make([]Location, 0)}
+	for rows.Next() {
+		location, err := scanLocation(rows)
 		if err != nil {
 			return LocationPage{}, err
 		}
-		defer rows.Close()
-		page := LocationPage{Data: make([]Location, 0)}
-		for rows.Next() {
-			location, err := scanLocation(rows)
-			if err != nil {
-				return LocationPage{}, err
-			}
-			page.Data = append(page.Data, location)
-		}
-		if err = rows.Err(); err != nil {
-			return LocationPage{}, err
-		}
-		if len(page.Data) > limit {
-			page.Data = page.Data[:limit]
-			page.NextID = page.Data[limit-1].ID
-		}
-		return page, nil
-	})
+		page.Data = append(page.Data, location)
+	}
+	if err = rows.Err(); err != nil {
+		return LocationPage{}, err
+	}
+	if len(page.Data) > limit {
+		page.Data = page.Data[:limit]
+		page.NextID = page.Data[limit-1].ID
+	}
+	return page, nil
 }
 
 // Create checks a non-root parent's aggregate revision inside the write

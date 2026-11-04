@@ -57,6 +57,12 @@ An exact retry binds operation, typed input, target, and original revision preco
 
 Timeout or cancellation after sending does not prove rollback. No client should automatically replay, retry with a new key, or infer success from a local optimistic view.
 
+## Ordinary list pagination
+
+The location-list service returns stable-ID pages of at most 100 records and an opaque HMAC-signed continuation. Each cursor binds the administrator, dataset epoch, page size, final ID, and a 15-minute expiry in a dedicated signing namespace. Changing a token, page size, principal, or dataset invalidates it. A fresh active session for the same principal may continue the read; the cursor is not a credential and cannot reactivate a revoked session. It contains no raw cookie/password, and private signing key material never leaves SQLite/server memory.
+
+These are live metadata pages, not a frozen offline snapshot. Mutations between pages are reflected in later reads; callers must refresh ordinary tree reads when needed rather than treating them as a certified replica. HTTP integration remains pending at this stage.
+
 ## Projections and verification
 
 Current projections are independent of retained change history. Pruning the outbox cannot remove a live location from a later bootstrap. Outbox updates and historical event updates/deletes are rejected by database triggers; current payload revisions must match their counters at commit.
