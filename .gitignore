@@ -1,0 +1,56 @@
+# Read-only local specification pack.
+/dev/
+
+# Local development guidance and work records.
+/CLAUDE.md
+/claude.md
+/docs/PROGRESS.md
+/docs/DECISIONS.md
+/docs/CONTRACT_AUDIT.md
+/docs/spec-manifest.sha256
+/docs/reports/
+
+# Local settings and credentials.
+.env
+.env.*
+!.env.example
+!*.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+/.claude/
+
+# Private runtime data and backups.
+/data/
+/backups/
+/secrets/
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.sqlite3-*
+*.db
+*.db-*
+*.log
+
+# Dependencies and generated build/test artifacts.
+node_modules/
+.venv/
+__pycache__/
+*.py[cod]
+/dist/
+/web/dist/
+/server/dist/
+/bin/
+coverage/
+*.coverprofile
+playwright-report/
+test-results/
+.vite/
+*.tsbuildinfo
+
+# Editor and operating-system files.
+.DS_Store
+.idea/
+.vscode/
+*.swp
