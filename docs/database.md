@@ -36,6 +36,8 @@ Do not store the database in the public web directory, a network share, or a con
 
 Migration files are immutable once applied. The runner records their original SHA-256 values and filenames in a transactional checksum ledger. A modified checksum, missing history entry, unexpected gap, or newer schema blocks startup. Compatible changes must be new sequential migration files, never edits to an applied file.
 
+Migration 0003 adds private authentication metadata. It revokes reference sessions without idle-expiry history, marks existing accounts for password change, and enforces a single administrator. More than one legacy administrator causes the whole upgrade to roll back; resolve the intended account ownership explicitly rather than deleting accounts automatically. The public HTTP authentication workflow is not yet implemented. Migration 0004 binds new session/bootstrap credentials to the dataset epoch and invalidates older unbound credentials; rotating the epoch then invalidates existing credentials as well.
+
 Before changing an existing database, the runner:
 
 1. Validates known history, checksums, SQLite integrity, and foreign keys.

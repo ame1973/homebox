@@ -198,7 +198,11 @@ func TestLegacyAdoptionRequiresApprovalAndPreservesVerifiedSnapshot(t *testing.T
 	}
 	defer s.Close()
 	report := s.Report()
-	if report.From != 1 || report.To != 2 || !report.LegacyAdopted || len(report.BackupSHA256) != 64 {
+	all, err := migrations.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.From != 1 || report.To != len(all) || !report.LegacyAdopted || len(report.BackupSHA256) != 64 {
 		t.Fatalf("invalid upgrade evidence: %+v", report)
 	}
 	if err = VerifySnapshot(t.Context(), report.BackupPath); err != nil {
@@ -334,9 +338,11 @@ func TestAllPendingMigrationsRollbackWithTheirChecksumRows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for offset, query := range []string{"CREATE TABLE rollback_probe(value INTEGER) STRICT;", "INSERT INTO rollback_probe VALUES(1); INVALID SQL;"} {
+	current := len(all)
+	for _, query := range []string{"CREATE TABLE rollback_probe(value INTEGER) STRICT;", "INSERT INTO rollback_probe VALUES(1); INVALID SQL;"} {
 		digest := sha256.Sum256([]byte(query))
-		all = append(all, migrations.Migration{Version: 3 + offset, Filename: fmt.Sprintf("%04d_test.sql", 3+offset), Checksum: hex.EncodeToString(digest[:]), SQL: query})
+		version := len(all) + 1
+		all = append(all, migrations.Migration{Version: version, Filename: fmt.Sprintf("%04d_test.sql", version), Checksum: hex.EncodeToString(digest[:]), SQL: query})
 	}
 	report, err := s.migrate(t.Context(), Config{Migrate: true, ReserveBytes: defaultReserveBytes}, all)
 	if err == nil || report.BackupPath == "" {
@@ -346,8 +352,8 @@ func TestAllPendingMigrationsRollbackWithTheirChecksumRows(t *testing.T) {
 		t.Fatal(err)
 	}
 	if scalar[int](t, s.db, "SELECT COUNT(*) FROM sqlite_schema WHERE name='rollback_probe'") != 0 ||
-		scalar[int](t, s.db, "SELECT MAX(version) FROM schema_migrations") != 2 ||
-		scalar[int](t, s.db, "SELECT COUNT(*) FROM schema_migration_checksums") != 2 ||
+		scalar[int](t, s.db, "SELECT MAX(version) FROM schema_migrations") != current ||
+		scalar[int](t, s.db, "SELECT COUNT(*) FROM schema_migration_checksums") != current ||
 		scalar[string](t, s.db, "SELECT name FROM tags WHERE id='kept'") != "Preserved" {
 		t.Fatal("failed migration leaked DDL, data, or checksum metadata")
 	}
