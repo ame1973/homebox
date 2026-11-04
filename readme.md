@@ -38,7 +38,7 @@ With the server stopped and the database already migrated, create a new private 
 ./bin/homebox auth bootstrap --database ./data/homebox.sqlite --output ./data/bootstrap.token
 ```
 
-The command prints only the absolute file path and expiry, not the secret. The output directory must be private, the new file is mode `0600`, and existing files/symlinks are never overwritten. The credential expires after 30 minutes and is disabled after successful administrator provisioning. The HTTP setup/login endpoints are implemented, but their React screens are still pending; this is not a production-ready product. See [HTTP Authentication and Transport](docs/http-authentication.md) and [Security](docs/security.md) for the current workflow, delivery, failure, and retry behavior.
+The command prints only the absolute file path and expiry, not the secret. The output directory must be private, the new file is mode `0600`, and existing files/symlinks are never overwritten. The credential expires after 30 minutes and is disabled after successful administrator provisioning. Start the server, open `/setup` on its printed origin, and enter the private code plus the initial account/password. Setup does not sign in automatically: use `/login`, complete the required password change at `/settings/account`, then sign in again with the new password. See [HTTP Authentication and Transport](docs/http-authentication.md) and [Security](docs/security.md) for delivery, failure, and explicit retry behavior. The wider product is still under development.
 
 ## Offline account recovery (available now)
 
@@ -49,11 +49,11 @@ A local filesystem owner can replace a forgotten or unsupported legacy password 
   --output ./data/recovery-password.txt --confirm RESET_PASSWORD
 ```
 
-The command requires an already provisioned account and explicit confirmation. It generates a random temporary password into a new mode-`0600` private file, prints only account/file/revision metadata, revokes all sessions, and requires password change after the next login. Existing files are never overwritten. Recovery is deliberately unavailable in normal serving-store mode and has no HTTP route. Read the file through a trusted local channel; do not paste secrets into logs or issues. The HTTP login/password-change endpoints are available; their React screens are still being implemented.
+The command requires an already provisioned account and explicit confirmation. It generates a random temporary password into a new mode-`0600` private file, prints only account/file/revision metadata, revokes all sessions, and requires password change after the next login. Existing files are never overwritten. Recovery is deliberately unavailable in normal serving-store mode and has no HTTP route. Read the file through a trusted local channel; do not paste secrets into logs or issues. After restarting the server, sign in at `/login` with the temporary password, complete the forced password change, and sign in again. There is deliberately no browser password-reset endpoint.
 
 ## Local web application (available now)
 
-The React interface currently provides a real, read-only server connectivity check, retry/error/loading states, and system/light/dark appearance. A generated-types/Zod authentication adapter is implemented and tested in Chromium against the real server, but the account screens are still pending. It does not display invented inventory data or claim that private domain APIs are ready.
+The React interface provides real server connectivity and administrator setup/login/password-change/logout flows at `/setup`, `/login`, and `/settings/account`, with inline validation, explicit confirmations, secret clearing, offline guidance, uncertain-outcome reconciliation, and system/light/dark appearance. It uses the actual authentication API, not simulated sessions. Private inventory/domain APIs are still being built; no invented inventory data is displayed.
 
 ```sh
 make setup-web build-web build

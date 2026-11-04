@@ -1,6 +1,6 @@
 # HomeBox web client
 
-This is the same-origin React/TypeScript application served by the Go executable. The current screen checks real server liveness; it does not simulate inventory or expose unimplemented management actions. A typed/runtime-validated authentication adapter is implemented and tested, but account screens, a service worker, the offline replica, and camera flows are not shipped yet.
+This is the same-origin React/TypeScript application served by the Go executable. It provides real server liveness plus administrator setup/login/forced-password-change/logout at `/setup`, `/login`, and `/settings/account`, using the actual Go API. It does not simulate inventory or expose unimplemented management actions. The service worker, offline replica, camera, privileged reauthentication consumers, and domain management flows are still being built.
 
 ## Install and run
 
@@ -12,7 +12,7 @@ make setup-web build-web build
 ./bin/homebox serve --database ./data/homebox.sqlite --web-dir ./web/dist
 ```
 
-Open exactly the printed `public_origin` (normally `http://127.0.0.1:8080`). Keep this incomplete build on loopback. The backend authentication and direct TLS/explicit proxy features are implemented; the React account screens and production deployment remain pending. See [HTTP Authentication and Transport](../docs/http-authentication.md). `serve` requires a migrated database and a nonempty frontend build and does not silently migrate data. Stop it with Ctrl+C.
+Open exactly the printed `public_origin` (normally `http://127.0.0.1:8080`). Keep this incomplete build on loopback. The backend authentication, account pages, and direct TLS/explicit proxy features are implemented; private domain APIs and production deployment remain pending. See [HTTP Authentication and Transport](../docs/http-authentication.md). `serve` requires a migrated database and a nonempty frontend build and does not silently migrate data. Stop it with Ctrl+C.
 
 For hot reload, the Go origin must match the browser's Vite origin, and Vite must preserve that Host while forwarding `/api`:
 
@@ -25,7 +25,7 @@ For hot reload, the Go origin must match the browser's Vite origin, and Vite mus
 npm --prefix web run dev -- --host 127.0.0.1 --port 5173 --strictPort
 ```
 
-The default Vite proxy targets `http://127.0.0.1:8080`; it does not change Host or enable proxy-header trust. Do not reuse an unrelated service if either port is occupied. For another local port pair, update the Vite proxy target and Go public origin together. The adapter was additionally smoke-tested in Chromium through Vite and the actual Go binary on isolated ephemeral ports. This manual integration smoke is not part of the current Playwright suite and is not authentication-UI acceptance. The production runtime needs only the Go executable and `web/dist`, not Node.js, npm, or Python. Linux amd64/arm64 binaries are built with `make build-linux`; hardware execution is a separate acceptance gate.
+The default Vite proxy targets `http://127.0.0.1:8080`; it does not change Host or enable proxy-header trust. Do not reuse an unrelated service if either port is occupied. For another local port pair, update the Vite proxy target and Go public origin together. The adapters are covered by unit/runtime-contract tests and the built account pages by isolated real-server browser tests; an earlier development-module smoke also used separate Vite/Go ports. The production runtime needs only the Go executable and `web/dist`, not Node.js, npm, or Python. Linux amd64/arm64 binaries are built with `make build-linux`; hardware execution is a separate acceptance gate.
 
 ## Checks
 
@@ -47,7 +47,7 @@ npm exec --prefix web -- playwright install chromium
 
 Linux browser system libraries may also be required; the disposable CI runner uses `playwright install --with-deps chromium`. Do not substitute desktop emulation for real iPhone/Android or QNAP evidence.
 
-E2E tests compile the real Go executable, create a private disposable database, migrate it, serve the production frontend on loopback port 4179, and clean up after graceful shutdown. An already-running service on that port is never reused. Coverage includes 320/390/768/1440 widths and landscape, light/dark axe checks, keyboard/menu/focus behavior, reduced motion, malformed/slow responses, offline failure and reconnect, and deep-link recovery. Adverse API responses are explicitly intercepted only in the corresponding tests. Normal connectivity tests use the actual API.
+E2E tests compile the real Go executable, create private disposable databases, migrate them, and serve the production frontend. Connectivity tests use port 4179; account tests use independent ephemeral servers/bootstrap files per test so they do not weaken or share production setup/rate rules. Already-running services are never reused. Coverage includes 320/390/768/1440 widths and landscape, light/dark axe, keyboard/menu/focus/dialog behavior, reduced motion, 200% text, failed lazy-chunk recovery, offline failure/reconnect without mutation replay, real setup/rotation/logout, and an actually committed password change with a deliberately malformed response. Adverse responses are intercepted only in their explicit tests. Credential traces/videos/automatic failure images are disabled; manually captured account images contain empty secret fields.
 
 Unit coverage gates apply to application logic, excluding official generated primitives, declaration files, the one-line utility re-export, and the browser entrypoint (exercised through E2E). They do not establish full-product coverage. Build checks bound initial static-import JavaScript to 250 KiB gzip and individual lazy entry chunks to 150 KiB gzip; actual device latency still requires measurement.
 
@@ -55,10 +55,11 @@ Unit coverage gates apply to application logic, excluding official generated pri
 
 - `components/ui` comes from the official shadcn CLI 4.23.0, Radix base, Nova preset. Its upstream MIT notice is retained. Compose these primitives in feature components; do not create another base-control framework. Theme menu targets are 48 px; primary controls are at least 44 px.
 - Tailwind semantic tokens provide paired light/dark colors and local system/CJK fonts. There are no hosted fonts, CDN assets, analytics, or third-party requests in the application.
-- React Router owns routes. TanStack Query owns temporary server-read state; Zustand stores only the theme preference. Neither is an authoritative inventory store.
+- React Router's data router owns routes and the real dirty-navigation blocker. TanStack Query owns temporary server-read state; Zustand stores only the theme preference. Neither is an authoritative inventory store. Account mutations use nonserializable short-lived work closures with immediate cache GC/reset; session transitions cancel/purge query and mutation state.
+- Account forms use React Hook Form/Zod and official Field/Input/AlertDialog composition. Secrets clear on background/unmount/completion; uncertain sent writes are reconciled through fresh reads/login, never silently replayed. A failed lazy chunk has explicit recovery. Theme pairs switch atomically and menus are viewport-bounded at larger text sizes.
 - The shared generated OpenAPI client uses same-origin credentials/no-store and rejects redirects. Reads have an eight-second deadline; auth writes have 30 seconds. Pre-canceled requests are not sent, late canceled results are discarded, and all timers/listeners are cleaned up. Cancel/timeout after a write was sent does not prove the server rolled it back: treat the result as uncertain and reconcile explicitly, never silently replay it.
 - The seven auth adapters validate success payloads with strict Zod schemas. They accept CSRF/idempotency/signal explicitly, send the package's application version, never read cookies or retain tokens in storage, and never secretly refresh/retry/replay a write. CSRF/grants remain the caller's memory-only responsibility. Errors retain only allowlisted codes, status, bounded Retry-After, and safe request IDs, not arbitrary server messages/details/transport causes. `validAuthText` counts Unicode code points and rejects lone surrogates without trimming/normalizing credentials.
-- Queries can recheck after reconnect. Mutations explicitly use `networkMode: always` and no retry so an offline write cannot be paused and silently replayed. This is tested. Future writes still require explicit confirmation and authoritative server validation.
+- Queries can recheck after reconnect. Mutations explicitly use `networkMode: always` and no retry so an offline write cannot be paused and silently replayed. This is tested. All writes still require explicit confirmation and authoritative server validation.
 - Generated `src/lib/api/schema.d.ts` is committed and checked for drift. Compile fixtures deliberately use `skipLibCheck: false`. JSON Schema constraints such as integer bounds and conditional OCR visibility still require runtime validation; TypeScript alone cannot enforce them.
 - UI strings use stable keys in `src/lib/messages.ts`; the default language is Traditional Chinese. Canonical documentation remains English.
 

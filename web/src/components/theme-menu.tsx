@@ -14,9 +14,14 @@ export function ThemeMenu() {
     const media = window.matchMedia('(prefers-color-scheme: dark)')
     const apply = () => {
       const dark = theme === 'dark' || (theme === 'system' && media.matches)
-      document.documentElement.classList.toggle('dark', dark)
-      document.documentElement.dataset.theme = dark ? 'dark' : 'light'
-      document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+      const root = document.documentElement
+      // Apply paired colors atomically; interpolating a theme crosses unreadable contrast.
+      root.classList.add('theme-switching')
+      root.classList.toggle('dark', dark)
+      root.dataset.theme = dark ? 'dark' : 'light'
+      root.style.colorScheme = dark ? 'dark' : 'light'
+      void root.offsetWidth
+      root.classList.remove('theme-switching')
     }
     apply()
     media.addEventListener('change', apply)
@@ -34,7 +39,7 @@ export function ThemeMenu() {
           <Icon aria-hidden="true" />{messages.theme.label}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-44">
+      <DropdownMenuContent align="end" className="min-w-[min(11rem,calc(100vw_-_2rem))] max-w-[calc(100vw_-_2rem)]">
         <DropdownMenuRadioGroup value={theme} onValueChange={(value) => { if (isTheme(value)) setTheme(value) }} aria-label={messages.theme.label}>
           {options.map(({ value, Icon: OptionIcon }) => (
             <DropdownMenuRadioItem key={value} value={value} className="min-h-12 gap-3 px-3 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">

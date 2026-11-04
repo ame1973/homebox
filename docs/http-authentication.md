@@ -1,6 +1,6 @@
 # HTTP Authentication and Transport
 
-**Development status:** all seven authentication API routes and their transport/security checks are implemented. The React authentication screens, inventory/domain routes, offline PWA, and production deployment are not complete. These commands document working server capabilities, not QNAP or physical-device acceptance.
+**Development status:** all seven authentication API routes, their transport/security checks, and the React setup/login/password-change/logout workflow are implemented. Privileged reauthentication consumers, inventory/domain routes, offline PWA, and production deployment are not complete. These commands document working server capabilities, not QNAP or physical-device acceptance.
 
 ## Start locally
 
@@ -15,7 +15,7 @@ make setup-web build-web build
 
 Startup prints `listening`, `public_origin`, `version`, and `build_id`, never credentials. Open exactly the printed origin; `localhost` and `127.0.0.1` are different browser origins. The default is `http://127.0.0.1:8080`. Authentication over HTTP is limited to an actual loopback socket peer and a configured loopback IP or `localhost`, without proxy trust. Only this development mode omits the cookie's Secure attribute. Forged forwarding headers do not turn a LAN client into a loopback client.
 
-The current React page is a connectivity interface, not a login form. Use the documented API for development/integration until the authentication UI is added. Read the bootstrap token only through a trusted private channel; never put it in a URL, shell history, issue, screenshot, or log. Its 30-minute expiry and no-overwrite delivery behavior are described in [Security](security.md).
+Open `/setup` for first-time provisioning, `/login` to sign in, and `/settings/account` for password change or logout. These routes have the same capabilities on phone, tablet, and desktop. Read the bootstrap token only through a trusted private channel; never put it in a URL, shell history, issue, screenshot, or log. Its 30-minute expiry and no-overwrite delivery behavior are described in [Security](security.md). Setup creates the account but never pretends to sign it in.
 
 ## Direct HTTPS
 
@@ -77,6 +77,16 @@ The cookie is host-only `homebox_session`, HttpOnly, SameSite=Strict, `Path=/`, 
 
 Reauthentication does not replace a session or authorize an arbitrary operation. A privileged transaction must consume the persisted session/revision/epoch-bound capability exactly once. No standalone HTTP check/consume or password-recovery endpoint exists. Owner recovery remains an [offline CLI operation](security.md#offline-owner-recovery).
 
+## Browser form behavior
+
+The account pages use React Hook Form/Zod and official shadcn/Radix fields/dialogs. Password-manager autocomplete is supported without copying cookie credentials into JavaScript. New-password lengths count Unicode code points, preserve whitespace/normalization, reject lone surrogates, and require matching confirmation. Secret visibility is explicit and resets on backgrounding.
+
+Dirty in-app navigation opens a keyboard-accessible stay/clear-and-leave dialog; hard reload/close uses the browser's unsaved-change prompt. Secrets are not drafts: they clear on backgrounding, route exit, and completion. Pending actions reject duplicates and are aborted on backgrounding/offline/unmount. Abort or timeout after sending does **not** prove rollback. An uncertain result clears the previous session view and performs read-only reconciliation, never another credential mutation. If the server committed a password change but its reply was lost/malformed, the UI does not claim failure or success blindly; use the new password for an explicit fresh login.
+
+Successful login/rotation/logout and expired/uncertain session transitions cancel and clear query/mutation state while preserving theme preferences. There is no shipped IndexedDB inventory replica or thumbnail cache yet, so this is not a claim of the later full offline-purge workflow or remote erasure of another disconnected device. Reconnection can refresh account reads but never submit a form automatically. Privileged reauthentication UI will be composed with its first real consumer; no decorative capability-minting button is exposed.
+
+Lazy route-load failures show an explicit reload/recovery screen instead of a blank page. Phone/tablet/desktop share the routes and controls, with wrapping at 200% text size. Theme token changes avoid interpolating foreground/background pairs through unreadable intermediate contrast. Critical confirmation content appears fully opaque without a fade, so its text is readable from the first frame.
+
 ## Write protection and explicit retries
 
 All auth POSTs require one exact configured `Origin`, even for anonymous login/setup. An absent, null, duplicate, different-scheme/host/port Origin is rejected. Host rebinding, cross-site/same-site fetch metadata, and untrusted proxy claims cannot authorize a write. Reads may omit Origin but must still match Host/transport/session and cannot present cross-origin metadata.
@@ -113,4 +123,4 @@ make check
 make test-go-pure
 ```
 
-Tests exercise actual TLS sockets with verified test certificates/cookie jars, all seven auth routes, CLI TLS/proxy wiring, same-origin/CSRF/client-version/rate limits, mandatory password change, strict parsing, safe acknowledgement retries, and graceful lock release. These automated tests are not physical iPhone/Android/QNAP/TLS/VPN acceptance, complete domain HTTP conformance, or browser authentication-UI evidence.
+Tests exercise actual TLS sockets with verified test certificates/cookie jars, all seven auth routes, CLI TLS/proxy wiring, same-origin/CSRF/client-version/rate limits, mandatory password change, strict parsing, safe acknowledgement retries, and graceful lock release. The real-server browser suite additionally drives setup/login/rotation/logout, dirty navigation/focus, no offline replay, 200% text, lazy-chunk recovery, and a committed mutation whose response is deliberately malformed. Each account test has its own private server/database/bootstrap/rate state; credential traces/videos/automatic failure images are disabled. These automated checks are not physical iPhone/Android/QNAP/TLS/VPN acceptance or complete domain HTTP conformance.

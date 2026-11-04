@@ -77,6 +77,8 @@
   padding-bottom: env(safe-area-inset-bottom);
 }
 
+.theme-switching, .theme-switching * { transition: none !important; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
