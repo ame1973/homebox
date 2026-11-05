@@ -6,7 +6,7 @@ These are executable interface specifications, not a claim that every HTTP handl
 - [`offline-projection.schema.json`](offline-projection.schema.json): strict, discriminated offline upsert/tombstone records. The embedded OpenAPI copy is checked for exact equivalence.
 - [`sync.md`](sync.md): snapshot, delta, retention, offline identity, and draft safety rules.
 - [Categories and Tags](../docs/taxonomy.md): explicit taxonomy creation/patch, hierarchy, membership, deletion, and projection rules; implementation availability is tracked separately.
-- [Catalog Item Rules](../docs/catalog.md): implemented private Go/SQLite catalog transactions plus the maintained bounded metadata, explicit measurement/defaults, nullable edits, archival/history guards, original proofs and complete live-list filter contracts. Public filtered pages and item handlers/screens remain separate unfinished work.
+- [Catalog Item Rules](../docs/catalog.md): implemented private Go/SQLite catalog transactions and complete filter-scoped signed live pages, plus bounded metadata, explicit measurement/defaults, nullable edits, archival/history guards and original proofs. Item HTTP handlers/screens remain separate unfinished work.
 
 ## Transport and authorization
 

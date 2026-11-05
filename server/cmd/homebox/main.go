@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"syscall"
 	"time"
+	_ "time/tzdata" // Keep IANA civil-date rules available without NAS zone files.
 
 	"homebox/internal/store"
 )

@@ -430,6 +430,29 @@ class OpenAPIContractTests(unittest.TestCase):
         for path in ["/items", "/items/{id}"]:
             self.assertEqual(0, API["paths"][path]["get"]["x-max-body-bytes"])
 
+    def test_item_date_and_text_filters_preserve_strict_civil_bounds_and_all_query_fields(self):
+        operation = API["paths"]["/items"]["get"]
+        params = {entry["name"]: entry["schema"] for entry in operation["parameters"]}
+        for field in ["from", "to"]:
+            check = Draft202012Validator(params[field], format_checker=FORMAT)
+            for value in ["0001-01-01", "2024-02-29", "9999-12-31"]:
+                check.validate(value)
+            for value in ["0000-01-01", "2026-02-29", "2026-2-01", "2026-11-05T00:00:00Z"]:
+                with self.subTest(field=field, value=value), self.assertRaises(ValidationError):
+                    check.validate(value)
+        for field, good, bad in [("q", ["", "濾", "😀" * 500], ["x" * 501]),
+                                 ("merchant", [" Exact merchant ", "😀" * 300], ["", "x" * 301]),
+                                 ("currency", ["TWD", "USD"], ["usd", "US", "USDX"])]:
+            check = Draft202012Validator(params[field])
+            for value in good:
+                check.validate(value)
+            for value in bad:
+                with self.subTest(field=field, value=value), self.assertRaises(ValidationError):
+                    check.validate(value)
+        for rule in ["before page slicing", "exact stored merchant", "UTC when unset", "read-only",
+                     "home timezone", "never authorize", "not frozen snapshots"]:
+            self.assertIn(rule, operation["description"])
+
     def test_item_resources_return_only_strong_revision_etags(self):
         for path, method in [("/items", "post"), ("/items/{id}", "get"),
                              ("/items/{id}", "patch"), ("/items/{id}/archive", "post")]:

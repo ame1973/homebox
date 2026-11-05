@@ -127,8 +127,8 @@ type searchText struct {
 // accepted labels must not resurrect a later user override. Only approved free
 // OCR text contributes separately; raw jobs/results and old caches never do.
 // Unit searches include only purchase evidence attached to that exact unit.
-func (m *mutationTx) loadSearchText(item ItemData, unitID string) (searchText, error) {
-	category, err := categoryPathText(m.ctx, m.tx, item.CategoryID)
+func loadSearchText(ctx context.Context, query queryer, item ItemData, unitID string) (searchText, error) {
+	category, err := categoryPathText(ctx, query, item.CategoryID)
 	if err != nil {
 		return searchText{}, err
 	}
@@ -139,7 +139,7 @@ func (m *mutationTx) loadSearchText(item ItemData, unitID string) (searchText, e
 	if item.Model != nil {
 		model = *item.Model
 	}
-	barcodes, err := sourceTextRows(m.ctx, m.tx, "SELECT raw_value||char(10)||normalized_value FROM item_barcodes WHERE item_id=? ORDER BY id", item.ID)
+	barcodes, err := sourceTextRows(ctx, query, "SELECT raw_value||char(10)||normalized_value FROM item_barcodes WHERE item_id=? ORDER BY id", item.ID)
 	if err != nil {
 		return searchText{}, err
 	}
@@ -149,7 +149,7 @@ func (m *mutationTx) loadSearchText(item ItemData, unitID string) (searchText, e
 		"SELECT alias FROM item_aliases WHERE item_id=? ORDER BY id",
 		"SELECT attribute_key||char(10)||attribute_value FROM item_attributes WHERE item_id=? ORDER BY id",
 	} {
-		text, err := sourceTextRows(m.ctx, m.tx, statement, item.ID)
+		text, err := sourceTextRows(ctx, query, statement, item.ID)
 		if err != nil {
 			return searchText{}, err
 		}
@@ -164,13 +164,13 @@ func (m *mutationTx) loadSearchText(item ItemData, unitID string) (searchText, e
 		"SELECT p.merchant_name||char(10)||p.receipt_note FROM purchases p WHERE EXISTS(SELECT 1 FROM purchase_lines l WHERE l.purchase_id=p.id AND " + condition + ") ORDER BY p.id",
 		"SELECT l.note FROM purchase_lines l WHERE " + condition + " ORDER BY l.id",
 	} {
-		text, err := sourceTextRows(m.ctx, m.tx, statement, args...)
+		text, err := sourceTextRows(ctx, query, statement, args...)
 		if err != nil {
 			return searchText{}, err
 		}
 		value.details = sourceText(value.details, text)
 	}
-	value.reviewed, err = sourceTextRows(m.ctx, m.tx, `SELECT CASE WHEN state='corrected' THEN corrected_value ELSE raw_value END
+	value.reviewed, err = sourceTextRows(ctx, query, `SELECT CASE WHEN state='corrected' THEN corrected_value ELSE raw_value END
  FROM ai_review_entries WHERE item_id=? AND field_key IN('specification','keyword')
  AND state IN('accepted','corrected') AND reviewed_at IS NOT NULL ORDER BY id`, item.ID)
 	if err != nil {
@@ -210,7 +210,7 @@ func (m *mutationTx) materializeSearch(identity string) (searchData, error) {
 	if kind == "unit" && item.TrackingMode != "individual" {
 		return searchData{}, ErrDomainState
 	}
-	text, err := m.loadSearchText(item.ItemData, unitID)
+	text, err := loadSearchText(m.ctx, m.tx, item.ItemData, unitID)
 	if err != nil {
 		return searchData{}, err
 	}

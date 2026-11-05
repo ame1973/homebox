@@ -66,39 +66,47 @@ func readMetadataPage[T any](ctx context.Context, a *Auth, token, cursor string,
 		return metadataList[T]{}, ErrDomainInput
 	}
 	return readDomain(ctx, a, token, func(tx *sql.Tx) (metadataList[T], error) {
-		now := a.now().UTC()
-		session, err := a.loadSession(ctx, tx, token, now)
-		if err != nil {
-			return metadataList[T]{}, err
-		}
-		var epoch string
-		if err = tx.QueryRowContext(ctx, "SELECT dataset_epoch FROM sync_state WHERE singleton=1").Scan(&epoch); err != nil {
-			return metadataList[T]{}, err
-		}
-		afterID := ""
-		if cursor != "" {
-			value, err := decodeMetadataCursor(a, purpose, cursor, session.Admin.ID, epoch, limit, now)
-			if err != nil {
-				return metadataList[T]{}, err
-			}
-			afterID = value.AfterID
-		}
-		page, err := list(ctx, tx, afterID, limit)
-		if err != nil {
-			return metadataList[T]{}, err
-		}
-		result := metadataList[T]{Data: page.Data}
-		if page.NextID != "" {
-			value := metadataCursor{AdminID: session.Admin.ID, Epoch: epoch, AfterID: page.NextID,
-				Limit: limit, Issued: now.Unix(), Expires: now.Add(metadataCursorLifetime).Unix()}
-			next, err := encodeMetadataCursor(a, purpose, value)
-			if err != nil {
-				return metadataList[T]{}, err
-			}
-			result.NextCursor = &next
-		}
-		return result, nil
+		return readMetadataPageTx(ctx, tx, a, token, cursor, limit, purpose, list)
 	})
+}
+
+// Reuse the cursor/read boundary inside an existing authorized transaction. The
+// caller may resolve filter settings there; never nest a public readDomain call.
+func readMetadataPageTx[T any](ctx context.Context, tx *sql.Tx, a *Auth, token, cursor string, limit int, purpose string,
+	list func(context.Context, *sql.Tx, string, int) (metadataPage[T], error),
+) (metadataList[T], error) {
+	now := a.now().UTC()
+	session, err := a.loadSession(ctx, tx, token, now)
+	if err != nil {
+		return metadataList[T]{}, err
+	}
+	var epoch string
+	if err = tx.QueryRowContext(ctx, "SELECT dataset_epoch FROM sync_state WHERE singleton=1").Scan(&epoch); err != nil {
+		return metadataList[T]{}, err
+	}
+	afterID := ""
+	if cursor != "" {
+		value, err := decodeMetadataCursor(a, purpose, cursor, session.Admin.ID, epoch, limit, now)
+		if err != nil {
+			return metadataList[T]{}, err
+		}
+		afterID = value.AfterID
+	}
+	page, err := list(ctx, tx, afterID, limit)
+	if err != nil {
+		return metadataList[T]{}, err
+	}
+	result := metadataList[T]{Data: page.Data}
+	if page.NextID != "" {
+		value := metadataCursor{AdminID: session.Admin.ID, Epoch: epoch, AfterID: page.NextID,
+			Limit: limit, Issued: now.Unix(), Expires: now.Add(metadataCursorLifetime).Unix()}
+		next, err := encodeMetadataCursor(a, purpose, value)
+		if err != nil {
+			return metadataList[T]{}, err
+		}
+		result.NextCursor = &next
+	}
+	return result, nil
 }
 
 func encodeMetadataCursor(a *Auth, purpose string, value metadataCursor) (string, error) {
