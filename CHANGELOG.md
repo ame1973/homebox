@@ -4,6 +4,8 @@
 
 ### Added
 
+- Add responsive authenticated settings/category/tag lists and create/edit/delete screens with full signed-page validation, native acyclic parent selection, exact text, original aggregate proofs, explicit deletion effects, dirty-navigation protection, safe login returns, and manual changed-field adoption. Retain uncertain original commands even after a genuinely committed deletion disappears from current reads; never replay on reconnect or overwrite query state with historical acknowledgements. Share review/leave composition with locations without editing generated primitives. Add real-server taxonomy workflows, malformed-deletion reconciliation, light/dark accessibility and 200% long-path checks across five layouts.
+
 - Share complete signed-metadata reads, iterative hierarchy/path/search preparation, volatile reviewed-command snapshots and the foreground mutation controller between location and taxonomy workflows. Add category/tag graph/name consistency and command/parent-proof/controller tests while preserving existing location behavior. Taxonomy settings composition remains separate; these models do not enable new screens by themselves.
 
 - Add typed stateless browser adapters for all eight taxonomy operations, with reviewed child/target proofs, root/tag proof exclusion, strict exact-text/nullable-parent/page/resource/ETag/acknowledgement validation, caller-owned keys/signals, safe errors and no automatic refresh/retry/rebase/persistence. Share domain primitives with locations without changing its reserved route policy. Add 80 adapter cases and strict proof fixtures; verify the actual module in Chromium through isolated Vite/Go processes. Taxonomy settings screens remain separate.
@@ -55,6 +57,8 @@
 - SHA-pinned GitHub Actions checks for the backend/frontend, frozen dependencies, dependency audits, and browser test artifacts. Remote CI execution and physical acceptance are not yet claimed.
 
 ### Fixed
+
+- Keep long read-only review fields in the keyboard-accessible outer dialog scroller instead of creating unfocusable nested scroll regions, including location reviews. Verify enlarged long category paths with axe rather than suppressing its keyboard rules.
 
 - Admit composite item-tag/search projection identities by validating their original components, not a single-row ID length. Use canonical Unicode JSON pairs consistent with browser JSON.stringify and SQLite json_array, reject alternate spellings/invalid UTF and delimiter collisions, and verify a full-length link deletion commits its independent tombstone atomically.
 

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef } from 'react'
 import { Link, NavLink, Route, Routes, useLocation } from 'react-router'
-import { MapPin, Package, UserRound } from 'lucide-react'
+import { MapPin, Package, Settings, UserRound } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ThemeMenu } from '@/components/theme-menu'
 import { AppErrorBoundary } from '@/components/app-error-boundary'
@@ -8,6 +8,7 @@ import { messages } from '@/lib/messages'
 
 const ConnectionPage = lazy(() => import('@/features/system/connection-page'))
 const AccountPage = lazy(() => import('@/features/auth/account-page'))
+const SettingsPage = lazy(() => import('@/features/taxonomy/settings-page'))
 const LocationsPage = lazy(() => import('@/features/locations/locations-page'))
 const LocationAlias = lazy(() => import('@/features/locations/locations-page').then((module) => ({ default: module.LocationAlias })))
 
@@ -29,6 +30,7 @@ export default function App() {
         <nav aria-label={messages.app.navigation} className="flex max-w-full flex-wrap items-center gap-2">
           <Button variant="outline" asChild className="min-h-11 h-auto gap-2 whitespace-normal text-base aria-[current=page]:border-primary aria-[current=page]:bg-muted"><NavLink to="/locations"><MapPin className="size-4" aria-hidden="true" />{messages.locations.nav}</NavLink></Button>
           <Button variant="outline" asChild className="min-h-11 gap-2 text-base"><Link to="/login"><UserRound className="size-4" aria-hidden="true" />{messages.app.account}</Link></Button>
+          <Button variant="outline" asChild className="min-h-11 h-auto gap-2 whitespace-normal text-base aria-[current=page]:border-primary aria-[current=page]:bg-muted"><NavLink to="/settings"><Settings className="size-4" aria-hidden="true" />{messages.settings.nav}</NavLink></Button>
           <ThemeMenu />
         </nav>
       </header>
@@ -40,6 +42,13 @@ export default function App() {
               <Route path="/login" element={<AccountPage key={location.key} mode="login" />} />
               <Route path="/setup" element={<AccountPage key={location.key} mode="setup" />} />
               <Route path="/settings/account" element={<AccountPage key={location.key} mode="account" />} />
+              <Route path="/settings" element={<SettingsPage key={location.key} mode="home" />} />
+              <Route path="/settings/categories" element={<SettingsPage key={location.key} kind="categories" mode="list" />} />
+              <Route path="/settings/categories/new" element={<SettingsPage key={location.key} kind="categories" mode="create" />} />
+              <Route path="/settings/categories/:id/edit" element={<SettingsPage key={location.key} kind="categories" mode="edit" />} />
+              <Route path="/settings/tags" element={<SettingsPage key={location.key} kind="tags" mode="list" />} />
+              <Route path="/settings/tags/new" element={<SettingsPage key={location.key} kind="tags" mode="create" />} />
+              <Route path="/settings/tags/:id/edit" element={<SettingsPage key={location.key} kind="tags" mode="edit" />} />
               <Route path="/locations" element={<LocationsPage key={location.key} mode="list" />} />
               <Route path="/locations/new" element={<LocationsPage key={location.key} mode="create" />} />
               <Route path="/locations/:id/view" element={<LocationsPage key={location.key} mode="detail" />} />

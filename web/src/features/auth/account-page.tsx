@@ -9,7 +9,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import * as api from '@/lib/api/auth'
 import { messages } from '@/lib/messages'
 import { useOnline } from '@/lib/use-online'
-import { locationReturnPath } from '@/lib/location-navigation'
+import { applicationReturnPath } from '@/lib/settings-navigation'
 import { AuthError } from './auth-error'
 import { CredentialsForm } from './credentials-form'
 import { clearSessionQueries, useAuthAction, type AuthNotice, type AuthOutcome } from './use-auth-action'
@@ -23,7 +23,7 @@ export default function AccountPage({ mode }: { mode: 'login' | 'setup' | 'accou
   const client = useQueryClient()
   const navigate = useNavigate()
   const location = useLocation()
-  const returnTo = locationReturnPath(location.state?.returnTo)
+  const returnTo = applicationReturnPath(location.state?.returnTo)
   const online = useOnline()
   const [logoutOpen, setLogoutOpen] = useState(false)
   const [transitioning, setTransitioning] = useState(false)

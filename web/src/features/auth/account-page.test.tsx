@@ -3,7 +3,7 @@ import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import * as api from '@/lib/api/auth'
 import { createQueryClient } from '@/lib/query'
 import { messages } from '@/lib/messages'
@@ -21,6 +21,10 @@ const secret = 'a private temporary password'
 const replacement = 'a different private password'
 let current: api.Admin | null
 const disposers: (() => void)[] = []
+
+// Real browser tests own cold lazy-chunk recovery; preload the actual module
+// here so its compilation cannot consume the UI-state assertion deadline.
+beforeAll(async () => { await import('./account-page') })
 
 beforeEach(() => {
   vi.clearAllMocks()

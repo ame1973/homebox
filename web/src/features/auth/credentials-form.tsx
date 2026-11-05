@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import * as api from '@/lib/api/auth'
 import { messages } from '@/lib/messages'
-import { locationReturnPath } from '@/lib/location-navigation'
+import { applicationReturnPath } from '@/lib/settings-navigation'
 import { AuthError } from './auth-error'
 import { credentialSchema, emptyCredentials, type AuthMode, type CredentialValues } from './form-schema'
 import type { AuthOperation } from './use-auth-action'
@@ -20,7 +20,7 @@ const text = messages.auth
 export function CredentialsForm({ mode, operation, username }: { mode: AuthMode; operation: AuthOperation; username?: string }) {
   const prefix = useId()
   const route = useLocation()
-  const returnTo = locationReturnPath(route.state?.returnTo)
+  const returnTo = applicationReturnPath(route.state?.returnTo)
   const [visible, setVisible] = useState<Partial<Record<keyof CredentialValues, boolean>>>({})
   const errorRef = useRef<HTMLDivElement>(null)
   const form = useForm<CredentialValues>({ resolver: zodResolver(credentialSchema(mode)), defaultValues: { ...emptyCredentials }, mode: 'onBlur', reValidateMode: 'onBlur' })

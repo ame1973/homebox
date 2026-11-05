@@ -3,7 +3,7 @@ import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import App from '@/App'
 import * as auth from '@/lib/api/auth'
 import { ApiError } from '@/lib/api/client'
@@ -21,6 +21,10 @@ let administrator: auth.Admin | null
 let records: Map<string, api.Location>
 const disposers: (() => void)[] = []
 const field = (label: string) => screen.getByLabelText(new RegExp(`^${label}`))
+
+// UI-state assertions exclude cold module-compilation time; real lazy-load
+// failure/recovery is exercised by the production-browser suite.
+beforeAll(async () => { await Promise.all([import('./locations-page'), import('@/features/auth/account-page')]) })
 
 beforeEach(() => {
   vi.clearAllMocks()

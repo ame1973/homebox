@@ -1,6 +1,6 @@
 # Categories and Tags
 
-**Implementation status:** the eight category/tag HTTP operations below, stateless typed browser adapters, signed live metadata pages, authoritative Go/SQLite transaction services, and dependent item/link/approved-search publication are implemented and tested. Settings screens remain pending. Complete item/stock/media/search/worker workflows and 22-entity sync remain in progress.
+**Implementation status:** responsive settings/category/tag screens, the eight category/tag HTTP operations below, stateless typed browser adapters, signed live metadata pages, authoritative Go/SQLite transaction services, and dependent item/link/approved-search publication are implemented and tested. Complete item/stock/media/search/worker workflows and 22-entity sync remain in progress.
 
 ## Identity and names
 
@@ -8,9 +8,25 @@ Categories organize items in a parent-linked, acyclic hierarchy. They have indep
 
 Category/tag names contain 1–200 Unicode code points; IDs and nonnull parent IDs contain 1–128. Revisions are positive safe integers up to `9007199254740991`. A category response always includes its parent, including explicit null for roots. The version-one offline payloads contain source metadata only; the sync envelope carries their revision.
 
+## Settings workflow
+
+Open `/settings` after completing the initial password rotation. The same category/tag capabilities are available on phone, tablet and desktop:
+
+1. Choose categories (`/settings/categories`) or tags (`/settings/tags`). Lists read every signed page before displaying a checked hierarchy/index. Search changes only the view; category matches retain their ancestor path. Expand/collapse is explicit, without a depth limit or silently truncated first page.
+2. Create a root category or tag from the list. To create a child category, use its parent's add-child action or choose a native searchable parent in the form. Nonroot creation retains the reviewed parent's aggregate revision; a live parent change requires explicit rechecking before submission.
+3. Open an edit link to rename a tag or change a category name/parent. Self/descendant category destinations are excluded, full selected ancestry remains available in native details, and unavailable selections never become root silently. Only changed fields are sent; choosing root sends explicit `parent_id: null`. Imported IDs such as `new` and `tree` use an explicit `/edit` suffix, distinct from creation routes.
+4. Review the exact proposed fields, original target/parent proof and stable identity before confirming. Category deletion is enabled only for known leaves and clears item classifications, not inventory. Tag deletion detaches only its links. The UI explains these effects but does not invent assignment/holding impact counts; full item assignment interfaces remain in development.
+5. When current source metadata changes, the form retains its original draft/proof. Explicitly choose either to retain only fields actually edited while adopting untouched current fields, or discard the draft and load the current record. Neither refresh nor reconnect rebases/submits a write automatically.
+
+A pending action excludes duplicates. Backgrounding/offline/route exit can abort local waiting, not undo a server commit. An unknown sent result locks the original proposal and exposes its request key, a read-only current-state check and an explicit identical-request retry. If a deletion committed but its reply was malformed, disappearance from the live list does not erase that retained proposal or fabricate a new acknowledgement. A successful frozen reply invalidates reads and is never installed as current metadata. Escape interrupts pending waiting or closes an unsent review; long reviews start at visible static content and use one keyboard-accessible outer scrolling region.
+
+Drafts and retained proposals are still volatile, not persistent offline drafts. Dirty/Back/reload guards warn before leaving. Do not reload/close an uncertain request assuming it failed; reconcile it explicitly first. Offline-first visits do not invent empty data, cached read errors disable writes, and active/mandatory-password-change/session checks remain server-authoritative. Known session loss clears private read/mutation state; login returns only to whitelisted implemented settings/location routes.
+
+Settings currently links the real account, category and tag workflows and displays the actual client version. Inventory assignment, system/backup administration, installable/offline behavior and persistent draft recovery remain separate product work; no fake counts, disabled decorative routes or worker dependency is added.
+
 ## Request boundaries
 
-All routes below are relative to `/api/v1` and protected by the same configured Origin, session, mandatory-password-change, CSRF, idempotency, client-version, and admission policy as other domain operations. They are available through the Go server; there is no taxonomy settings screen yet. Resource writes return a strong quoted revision ETag. Live lists and deletion acknowledgements do not invent a resource ETag, and no taxonomy response changes the session cookie.
+All routes below are relative to `/api/v1` and protected by the same configured Origin, session, mandatory-password-change, CSRF, idempotency, client-version, and admission policy as other domain operations. They are available through the Go server and the settings workflows above. Resource writes return a strong quoted revision ETag. Live lists and deletion acknowledgements do not invent a resource ETag, and no taxonomy response changes the session cookie.
 
 | Operation | Contract |
 | --- | --- |
@@ -42,7 +58,7 @@ Deletion never implicitly deletes a category subtree. Remove or reparent childre
 
 Category-create overloads require a reviewed parent proof for a child and exclude unrelated proofs for roots; tag creation likewise excludes unrelated proofs. Runtime validation also protects JavaScript callers. The caller supplies the original key, CSRF token, revision and AbortSignal. Each call makes one request, with eight-second reads and thirty-second writes, no implicit pagination, token refresh, rebase, retry, queue, or storage. Opaque cursors are encoded as query values, never interpreted as extra parameters. Safe errors retain only allowlisted metadata, not server messages/details. A frozen acknowledgement is not a current-state cache update.
 
-Location/category/tag adapters share the same Unicode, path, revision, acknowledgement, root/child-header and versioned-response primitives. Location's reserved `tree` read path remains location-specific; supported taxonomy IDs such as `new` and `tree` are not rewritten. Settings screens and persistent/offline drafts are still separate unfinished work.
+Location/category/tag adapters share the same Unicode, path, revision, acknowledgement, root/child-header and versioned-response primitives. Location's reserved `tree` read path remains location-specific; supported taxonomy IDs such as `new` and `tree` are not rewritten. Settings forms use these adapters and the same shared volatile review/leave/session boundaries as locations. Persistent/offline drafts are still separate unfinished work.
 
 ## Transaction service
 
@@ -72,7 +88,7 @@ npm --prefix web run api:generate
 npm --prefix web run typecheck
 ```
 
-Contract tests exercise separate create/partial-patch shapes, nullable parent presence, code-point/identity/revision bounds, exact offline payload compatibility, positive quoted proofs, Origin/body limits, and bounded live pagination. Strict generated-type fixtures reject missing creation names, missing response parents, internal command wrappers, missing Origin, and null tag names. Store tests replay every mutation's frozen changes onto the old current state and require exact equality, verify deep hierarchies/concurrent retries/stale proofs, inject dependent-write/deferred-commit/late-auth failures, and assert approved-only FTS publication without modifying inventory or AI source evidence. HTTP tests drive all eight operations through verified TLS and a real cookie jar, strict JSON/URL/header boundaries, cross-list cursors, unchanged admission limits, post-middleware revocation and changed proofs, no-op and fresh-session frozen replies. A bounded fuzz target exercises both taxonomy JSON readers. Taxonomy browser-screen acceptance remains pending; physical NAS/phone acceptance is not implied.
+Contract tests exercise separate create/partial-patch shapes, nullable parent presence, code-point/identity/revision bounds, exact offline payload compatibility, positive quoted proofs, Origin/body limits, and bounded live pagination. Strict generated-type fixtures reject missing creation names, missing response parents, internal command wrappers, missing Origin, and null tag names. Store tests replay every mutation's frozen changes onto the old current state and require exact equality, verify deep hierarchies/concurrent retries/stale proofs, inject dependent-write/deferred-commit/late-auth failures, and assert approved-only FTS publication without modifying inventory or AI source evidence. HTTP tests drive all eight operations through verified TLS and a real cookie jar, strict JSON/URL/header boundaries, cross-list cursors, unchanged admission limits, post-middleware revocation and changed proofs, no-op and fresh-session frozen replies. A bounded fuzz target exercises both taxonomy JSON readers. Browser tests exercise actual settings create/rename/reparent/delete, exact tag-name conflicts, dirty navigation, protected login return, explicit changed-field adoption, reconnect without replay, genuinely committed malformed deletion replies, light/dark accessibility, long paths and 200% text. Physical NAS/phone acceptance is not implied.
 
 ```sh
 go -C server test -race -count=1 ./internal/store -run '^TestTaxonomy'
