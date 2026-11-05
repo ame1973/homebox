@@ -120,6 +120,16 @@ All four collection replies require nullable `next_cursor`, unique bounded row I
 
 Read deadlines are eight seconds and writes thirty seconds. Pre-canceled requests are not sent; aborted/timed-out/late replies do not become success or imply rollback. No cookie access, token refresh, newer-proof lookup, automatic retry/rebase/reconnect submission, persistent credential/draft storage or mutation queue is added. Reconcile an uncertain committed reply explicitly with its original body/key/proof; invalidate current reads rather than installing historical responses. Real-browser SDK tests use private temporary composed entries and web roots only, never a production test route.
 
+## Complete reads and volatile review state
+
+The catalog-owned state helpers prepare real maintenance workflows without adding a screen by themselves. `readOwnedMetadata` completes all four signed collections plus the available Tag index using the existing metadata paging helpers. It brackets those reads with the actual Item and rejects changed item fields/revisions, duplicate/cyclic continuations, or missing/differently revised/labeled assigned Tags. A 205-member legacy assignment is complete data, not a silently capped first page. This is a checked live read, not the frozen offline snapshot protocol, and it never installs a newer command proof automatically.
+
+`owned-form` reuses the actual SDK schemas for outgoing values, preserves exact text/empty values and emits only changed row fields. New barcode forms start without an invented namespace. Explicit adoption keeps a locally edited symbology/raw pair together, retains invalid drafts and never moves edits to another row/owner. Attribute key/value adoption is field-specific. Tag adoption applies explicitly retained local additions/removals to the reviewed current set, preserving concurrent additions and order; an oversized legacy/invalid draft is not truncated or silently repaired. A new review must show that resulting complete set before confirmation.
+
+`owned-commands` copies the original Item, independent row, before/after labels and exact body under one volatile key. Creations/tag replacement dispatch only the Item proof; row edits/deletions dispatch only the retained row proof and owner. Tag requests derive one original ordered ID array from validated after-label snapshots; old before-sets can exceed 100, new sets cannot. Mismatched owners, invalid/duplicate reviewed Tags and empty typed attribute edits do not dispatch. Do not persist these proposals as offline write queues.
+
+`useOwnedMutation` reuses the shared foreground-only reviewed controller: review is read-only, confirmation sends once with a fresh caller-held CSRF, retry remains disabled and network mode is always. Confirmed or sent failed writes invalidate catalog/taxonomy reads only; frozen replies never replace newer query data. A pre-send failure does not invalidate those roots. Cancellation/unknown replies preserve uncertainty and original context even after current reads remove the target; only explicit original-key reconciliation can retry. Session loss clears volatile commands. Actual maintenance composition remains the next implementation gate.
+
 ## Verification and remaining work
 
 ```sh
