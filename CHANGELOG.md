@@ -4,6 +4,8 @@
 
 ### Added
 
+- Add responsive real-server location hierarchy/detail/editor/move/archive/restore/delete screens with complete graph validation, native parent selection, explicit before/after review, original parent/target proofs, dirty-navigation protection, safe protected deep links, and shared phone/tablet/desktop capabilities. Retain uncertain volatile requests for explicit original-key retry and fresh read reconciliation; never install historical acknowledgements as current state or replay writes on reconnect. Add isolated real-server workflows, conflict/committed-malformed-reply tests, light/dark accessibility, long paths and 200% text across five emulated layouts.
+
 - Add a foreground-only location mutation controller with explicit review/confirmation, original-key/proof retention for uncertain outcomes, read-only cache invalidation, interruption handling, session-loss cleanup, and no automatic write replay. Controller tests cover concurrent confirmation, pre-send failures, conflicts, malformed replies, cancellation and late results; screen integration remains separate.
 
 - Add complete iterative location-graph validation and traversal, exact original-text metadata validation, explicit dirty-field reconciliation, frozen command dispatch, and restricted location-only authentication return paths, with executable edge-case tests. These helpers do not by themselves enable location screens.
@@ -41,6 +43,8 @@
 - SHA-pinned GitHub Actions checks for the backend/frontend, frozen dependencies, dependency audits, and browser test artifacts. Remote CI execution and physical acceptance are not yet claimed.
 
 ### Fixed
+
+- Keep imported location IDs matching `new` distinct from the static create route through a safe detail escape without rewriting stored identity. Reject inconsistent live list/detail revisions before enabling writes. Preserve dialog layout at enlarged text sizes with shrinkable grid composition, start long reviews at visible static content, and avoid low-contrast enabled-opacity transitions without editing generated UI primitives.
 
 - Preserve optional request fields with server defaults in generated TypeScript using the official generator option, with minimal location/item create fixtures. Keep root location sort orders signed while constraining positive resource revisions independently of shared YAML anchors.
 

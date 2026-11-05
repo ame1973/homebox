@@ -8,6 +8,8 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import * as api from '@/lib/api/auth'
 import { messages } from '@/lib/messages'
+import { useOnline } from '@/lib/use-online'
+import { locationReturnPath } from '@/lib/location-navigation'
 import { AuthError } from './auth-error'
 import { CredentialsForm } from './credentials-form'
 import { clearSessionQueries, useAuthAction, type AuthNotice, type AuthOutcome } from './use-auth-action'
@@ -17,21 +19,11 @@ const authQueryKey = ['auth', 'me'] as const
 const control = 'min-h-12 h-auto whitespace-normal py-3 text-base! leading-normal'
 const notices: Record<AuthNotice, string> = { setup: text.setupDone, password: text.passwordDone, logout: text.logoutDone, expired: text.expired, uncertain: text.uncertain }
 
-function useOnline() {
-  const [online, setOnline] = useState(navigator.onLine)
-  useEffect(() => {
-    const update = () => setOnline(navigator.onLine)
-    window.addEventListener('online', update)
-    window.addEventListener('offline', update)
-    return () => { window.removeEventListener('online', update); window.removeEventListener('offline', update) }
-  }, [])
-  return online
-}
-
 export default function AccountPage({ mode }: { mode: 'login' | 'setup' | 'account' }) {
   const client = useQueryClient()
   const navigate = useNavigate()
   const location = useLocation()
+  const returnTo = locationReturnPath(location.state?.returnTo)
   const online = useOnline()
   const [logoutOpen, setLogoutOpen] = useState(false)
   const [transitioning, setTransitioning] = useState(false)
@@ -47,7 +39,7 @@ export default function AccountPage({ mode }: { mode: 'login' | 'setup' | 'accou
     setTransitioning(true)
     clearSessionQueries(client)
     if (notice !== 'uncertain') client.setQueryData(authQueryKey, null)
-    navigate('/login', { replace: true, state: { notice } })
+    navigate('/login', { replace: true, state: { notice, ...(returnTo ? { returnTo } : {}) } })
   }
 
   function succeeded(result: AuthOutcome) {
@@ -55,10 +47,10 @@ export default function AccountPage({ mode }: { mode: 'login' | 'setup' | 'accou
     clearSessionQueries(client)
     if (result.kind === 'login') {
       client.setQueryData(authQueryKey, result.admin)
-      navigate('/settings/account', { replace: true })
+      navigate(!result.admin.must_change_password && returnTo ? returnTo : '/settings/account', { replace: true, state: returnTo ? { returnTo } : undefined })
     } else {
       client.setQueryData(authQueryKey, null)
-      navigate('/login', { replace: true, state: { notice: result.kind } })
+      navigate('/login', { replace: true, state: { notice: result.kind, ...(result.kind !== 'logout' && returnTo ? { returnTo } : {}) } })
     }
   }
 
@@ -75,7 +67,7 @@ export default function AccountPage({ mode }: { mode: 'login' | 'setup' | 'accou
   const notice = typeof rawNotice === 'string' && Object.hasOwn(notices, rawNotice) ? notices[rawNotice as AuthNotice] : undefined
   // A read-driven redirect must not overwrite a mutation's explicit outcome notice.
   if (!transitioning && online && !query.isFetching && !query.isError && query.data !== undefined) {
-    if (query.data && mode !== 'account') return <Navigate to="/settings/account" replace state={location.state} />
+    if (query.data && mode !== 'account') return <Navigate to={!query.data.must_change_password && returnTo ? returnTo : '/settings/account'} replace state={returnTo ? { returnTo } : location.state} />
     if (!query.data && mode === 'account') return <Navigate to="/login" replace state={location.state} />
   }
 

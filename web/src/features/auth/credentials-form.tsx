@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Link, useBeforeUnload, useBlocker } from 'react-router'
+import { Link, useBeforeUnload, useBlocker, useLocation } from 'react-router'
 import { Eye, EyeOff, LoaderCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldSet } from '@/components/ui/field'
@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import * as api from '@/lib/api/auth'
 import { messages } from '@/lib/messages'
+import { locationReturnPath } from '@/lib/location-navigation'
 import { AuthError } from './auth-error'
 import { credentialSchema, emptyCredentials, type AuthMode, type CredentialValues } from './form-schema'
 import type { AuthOperation } from './use-auth-action'
@@ -18,6 +19,8 @@ const text = messages.auth
 
 export function CredentialsForm({ mode, operation, username }: { mode: AuthMode; operation: AuthOperation; username?: string }) {
   const prefix = useId()
+  const route = useLocation()
+  const returnTo = locationReturnPath(route.state?.returnTo)
   const [visible, setVisible] = useState<Partial<Record<keyof CredentialValues, boolean>>>({})
   const errorRef = useRef<HTMLDivElement>(null)
   const form = useForm<CredentialValues>({ resolver: zodResolver(credentialSchema(mode)), defaultValues: { ...emptyCredentials }, mode: 'onBlur', reValidateMode: 'onBlur' })
@@ -110,7 +113,7 @@ export function CredentialsForm({ mode, operation, username }: { mode: AuthMode;
           {operation.isPending && <LoaderCircle className="animate-spin motion-reduce:animate-none" aria-hidden="true" />}{operation.isPending ? pending : label}
         </Button>
         {mode !== 'password' && <Button variant="link" asChild className={`${control} w-full`}>
-          <Link to={mode === 'login' ? '/setup' : '/login'}>{mode === 'login' ? text.firstTime : text.alreadySetup}</Link>
+          <Link to={mode === 'login' ? '/setup' : '/login'} state={returnTo ? { returnTo } : undefined}>{mode === 'login' ? text.firstTime : text.alreadySetup}</Link>
         </Button>}
       </form>
       <AlertDialog open={blocker.state === 'blocked'} onOpenChange={(open) => { if (!open && !canLeave() && blocker.state === 'blocked') blocker.reset() }}>

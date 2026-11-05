@@ -154,5 +154,6 @@ test('recovers a failed lazy account chunk explicitly and supports 200 percent t
   expect(box?.x).toBeGreaterThanOrEqual(0)
   expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(page.viewportSize()?.width ?? 0)
   await page.keyboard.press('Escape')
+  await expect(menu).toHaveCount(0)
   expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze()).violations).toEqual([])
 })

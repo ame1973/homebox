@@ -1,3 +1,9 @@
+// React Router matches static routes without case sensitivity. Supported imported
+// IDs such as "new" must not accidentally open the collection creation form.
+export function locationRoute(id: string, mode: 'detail' | 'edit' = 'detail'): string {
+  return `/locations/${encodeURIComponent(id)}${mode === 'edit' ? '/edit' : id.toLowerCase() === 'new' ? '/view' : ''}`
+}
+
 // Only same-application location routes may survive an authentication round-trip.
 // Never accept an arbitrary URL/redirect target from history state or a query.
 export function locationReturnPath(value: unknown): string | undefined {
@@ -5,14 +11,14 @@ export function locationReturnPath(value: unknown): string | undefined {
   try {
     const url = new URL(value, 'https://homebox.invalid')
     if (url.origin !== 'https://homebox.invalid') return undefined
-    const match = /^\/locations(?:\/([^/]+)(\/edit)?)?$/.exec(url.pathname)
+    const match = /^\/locations(?:\/([^/]+)(\/(?:edit|view))?)?$/.exec(url.pathname)
     if (!match) return undefined
     const validID = (id: string) => id.length > 0 && id.length <= 256 && Array.from(id).length <= 128 &&
       !['.', '..', 'tree'].includes(id) && !['/', '\\', '\0'].some((character) => id.includes(character))
     const id = match[1] ? decodeURIComponent(match[1]) : undefined
-    if (id !== undefined && (!validID(id) || id === 'new' && match[2])) return undefined
+    if (id !== undefined && !validID(id)) return undefined
     if (url.search) {
-      if (id !== 'new') return undefined
+      if (id !== 'new' || match[2]) return undefined
       const entries = Array.from(url.searchParams.entries())
       if (entries.length !== 1 || entries[0]?.[0] !== 'parent' || !validID(entries[0][1])) return undefined
     }

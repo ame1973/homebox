@@ -71,6 +71,12 @@
   a, button { touch-action: manipulation; }
 }
 
+/* Keep intrinsic footer widths inside the dialog at enlarged text sizes. */
+@layer components {
+  [data-slot="alert-dialog-content"] { grid-template-columns: minmax(0, 1fr); }
+  [data-slot="alert-dialog-content"] > * { min-width: 0; }
+}
+
 .safe-page {
   padding-inline: max(1.25rem, env(safe-area-inset-left)) max(1.25rem, env(safe-area-inset-right));
   padding-top: env(safe-area-inset-top);

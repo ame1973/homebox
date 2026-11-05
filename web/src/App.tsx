@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef } from 'react'
-import { Link, Route, Routes, useLocation } from 'react-router'
-import { Package, UserRound } from 'lucide-react'
+import { Link, NavLink, Route, Routes, useLocation } from 'react-router'
+import { MapPin, Package, UserRound } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ThemeMenu } from '@/components/theme-menu'
 import { AppErrorBoundary } from '@/components/app-error-boundary'
@@ -8,6 +8,8 @@ import { messages } from '@/lib/messages'
 
 const ConnectionPage = lazy(() => import('@/features/system/connection-page'))
 const AccountPage = lazy(() => import('@/features/auth/account-page'))
+const LocationsPage = lazy(() => import('@/features/locations/locations-page'))
+const LocationAlias = lazy(() => import('@/features/locations/locations-page').then((module) => ({ default: module.LocationAlias })))
 
 export default function App() {
   const location = useLocation()
@@ -24,7 +26,8 @@ export default function App() {
         <Link to="/" aria-label={messages.app.home} className="flex min-h-11 items-center gap-3 rounded-md text-xl font-semibold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
           <Package className="size-7 text-primary" aria-hidden="true" />HomeBox
         </Link>
-        <nav aria-label={messages.app.account} className="flex max-w-full flex-wrap items-center gap-2">
+        <nav aria-label={messages.app.navigation} className="flex max-w-full flex-wrap items-center gap-2">
+          <Button variant="outline" asChild className="min-h-11 h-auto gap-2 whitespace-normal text-base aria-[current=page]:border-primary aria-[current=page]:bg-muted"><NavLink to="/locations"><MapPin className="size-4" aria-hidden="true" />{messages.locations.nav}</NavLink></Button>
           <Button variant="outline" asChild className="min-h-11 gap-2 text-base"><Link to="/login"><UserRound className="size-4" aria-hidden="true" />{messages.app.account}</Link></Button>
           <ThemeMenu />
         </nav>
@@ -37,6 +40,12 @@ export default function App() {
               <Route path="/login" element={<AccountPage key={location.key} mode="login" />} />
               <Route path="/setup" element={<AccountPage key={location.key} mode="setup" />} />
               <Route path="/settings/account" element={<AccountPage key={location.key} mode="account" />} />
+              <Route path="/locations" element={<LocationsPage key={location.key} mode="list" />} />
+              <Route path="/locations/new" element={<LocationsPage key={location.key} mode="create" />} />
+              <Route path="/locations/:id/view" element={<LocationsPage key={location.key} mode="detail" />} />
+              <Route path="/locations/:id" element={<LocationsPage key={location.key} mode="detail" />} />
+              <Route path="/locations/:id/edit" element={<LocationsPage key={location.key} mode="edit" />} />
+              <Route path="/l/:id" element={<LocationAlias />} />
               <Route path="*" element={
                 <section className="space-y-6 py-12">
                   <h1 className="text-3xl font-semibold">{messages.app.notFound}</h1>

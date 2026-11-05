@@ -1,6 +1,49 @@
 # Location Rules
 
-**Implementation status:** the authoritative Go/SQLite location service and seven location HTTP operations are implemented and tested. Browser screens, location contents/summary/QR routes, and full offline synchronization are separate unfinished features.
+**Implementation status:** the authoritative Go/SQLite service, seven HTTP operations, and responsive location-management screens are implemented and tested. Location contents/summary/QR endpoints, content/photo/history UI, persistent drafts, and full offline synchronization are separate unfinished features.
+
+## Browser usage
+
+Sign in and complete any mandatory password change first. The same routes and controls are available on phone, tablet, and desktop:
+
+| Route | Purpose |
+| --- | --- |
+| `/locations` | Browse, expand/collapse, search names/codes, and optionally show archived locations |
+| `/locations/new` | Create a root location or explicitly choose an active parent |
+| `/locations/new?parent=ID` | Start a child under the selected parent, with its reviewed aggregate revision |
+| `/locations/ID` | Read metadata/direct children and start move, archive, restore, or delete |
+| `/locations/ID/edit` | Edit descriptive metadata without implicitly changing parent or status |
+| `/l/ID` | Open a protected relative alias, returning to the location after login |
+
+Supported imported IDs matching the reserved create segment `new` (including case variants) use `/locations/ID/view` for detail, without rewriting their stored identity. Ordinary links and aliases choose this route automatically. URLs preserve only whitelisted relative location destinations across login; they cannot redirect to another host or carry arbitrary query data. QR generation is still pending; the alias is not a claim that printable labels already exist.
+
+### Browse and choose parents
+
+The screen follows every signed page before publishing a complete, validated hierarchy. Duplicate identities, repeated cursors, orphans, and cycles are rejected rather than displayed as invented roots. Traversal is iterative with no hierarchy-depth cutoff. Visual indentation is capped for narrow screens; actual depth, direct parent, and full expandable ancestry remain available. Search preserves matching ancestor paths; its expansion controls are disabled while search determines visibility. Displayed totals count location records, never mixed-unit inventory quantities.
+
+Parent selection uses native controls plus name/code filtering and a full-path disclosure. Only active locations with active ancestors are offered. Moving excludes the selected branch. An unavailable prior choice stays visibly unavailable, not silently changed to root. A changed creation-parent revision requires an explicit recheck before submission. These are live reads, not a frozen/offline replica: inconsistent list/detail revisions disable writes and request a fresh read.
+
+### Create, edit, and review
+
+1. Create a room/container with a unique human code, choose a common or custom kind, and optionally enter signed integer ordering and a description. Original whitespace/Unicode is preserved. The form rejects decimal, exponent, grouped, or unsafe ordering text before numeric conversion.
+2. Review the proposed values. The review starts keyboard focus at its visible static heading so a long review does not focus an offscreen footer. No domain request is sent until explicit confirmation.
+3. Confirm once. The page obtains current-session CSRF, sends the frozen key/body/original revision, and waits for the authoritative acknowledgement. Repeated activation, reconnection, and timers do not create another write.
+4. On success, fresh reads populate the destination page. A frozen replay response is never installed as if it were the latest resource.
+
+Metadata editing submits only changed descriptive fields. Moving and activation status use their separate reviewed actions. A concurrent revision does not overwrite input or silently update the form's base: read current data, then explicitly retain only edited logical fields against the new base or discard the draft. Retaining edits also preserves unfinished invalid text for validation; untouched concurrent names/types/order are not overwritten accidentally. An unchanged form sends no mutation.
+
+### Move, archive, restore, and delete
+
+- Moving changes only the branch's parent. Review the original and proposed parent; it never reassigns stock or individual units to the outer destination.
+- Archiving a branch with active descendants requires a separately unchecked, explicit subtree selection. The optional reason is preserved. The server still rejects retained live holdings or a stale aggregate proof.
+- Restoring activates only the reviewed node, not all descendants. Archived ancestor paths must be restored first.
+- Deleting is a separately emphasized confirmation showing the exact name/code/revision. Only an unused leaf is accepted. Shared image bytes, reserved codes/identities, and historical events are not erased.
+
+### Failures, uncertainty, and volatile inputs
+
+Known validation/state conflicts remain editable after dismissing the failed review; new content requires another explicit review. A sent timeout, cancellation, malformed reply, unknown error, or server failure is uncertain: stopping the wait does not cancel a server commit. The original request remains in memory, fields are locked, and its key can be inspected. Read current data, then explicitly retry the exact original request if appropriate; CSRF may be renewed, but body/key/revision are not changed. Closing the dialog retains this uncertain request and exposes read/reopen actions. Expired or conflicting keys cannot be silently reused; inspect current state before explicitly leaving/discarding that volatile screen and reviewing a genuinely new operation.
+
+Dirty browser Back/SPA navigation and reload require a warning. Choosing to stay preserves input; choosing to leave abandons that screen and aborts local waiting, not a committed mutation. Offline input is volatile only: there is no persistent draft queue or offline replica yet, and reconnection refreshes reads without replaying writes. Backgrounding/offline/unmount interrupts active writes, and session loss removes private cached location data and the form. The protected return URL contains no draft or credentials.
 
 ## HTTP operations
 
@@ -30,7 +73,7 @@ Root/child create overloads make their concurrency difference explicit: root con
 
 Read deadlines are eight seconds and write deadlines are 30 seconds. Cancellation, network failure, timeout, or malformed success after sending is an uncertain outcome, not evidence of rollback. An explicit retry retains the original key/body/proof. Conflict/expired-claim codes require current-state review, not automatic new-key resubmission. Safe error normalization is shared with account adapters and retains no arbitrary server text, details, response, or transport cause.
 
-These adapters are not a claim that location browser screens, draft storage, or offline replication are complete.
+The adapters and screens do not provide persistent draft storage or offline replication.
 
 ## Identity and hierarchy
 
@@ -107,4 +150,10 @@ go -C server test -race -count=1 ./internal/httpapi -run '^TestLocation'
 make check-backend
 ```
 
-Tests cover Unicode/safe-integer bounds, parent/subtree revisions, a hierarchy deeper than 1,000 levels, concurrent duplicate creation and opposite moves, stale parent proofs, owner/link tombstones, shared-media preservation, immutable/frozen records, retention independence, all dependent write failures, and deferred commit failure. HTTP checks additionally drive all seven operations through verified TLS/cookie jars, exact acknowledgement replay, signed pagination, safe errors, method/URL/Origin/CSRF/version/admission rules, and revocation after middleware but before the SQL mutation. The compiled CLI/server has also been driven through real loopback sockets with a disposable private database. These automated checks are not location-browser-screen or physical NAS/device acceptance.
+Tests cover Unicode/safe-integer bounds, parent/subtree revisions, a hierarchy deeper than 1,000 levels, concurrent duplicate creation and opposite moves, stale parent proofs, owner/link tombstones, shared-media preservation, immutable/frozen records, retention independence, all dependent write failures, and deferred commit failure. HTTP checks drive all seven operations through verified TLS/cookie jars, exact acknowledgement replay, signed pagination, safe errors, method/URL/Origin/CSRF/version/admission rules, and revocation after middleware but before SQL. Frontend tests cover complete/invalid graph reads, original-text forms, explicit reconciliation, frozen command dispatch, dirty navigation, parent selection, protected returns, and interruption without automatic replay. The isolated real-server browser suite exercises actual creation/edit/move/archive/restore/delete, reserved-code rejection, stale-version reconciliation, an actually committed write with a malformed response followed by explicit same-key retry, deep links through real login, light/dark accessibility, long paths and 200% text across five emulated layouts. These are automated checks, not physical NAS/iPhone/Android acceptance.
+
+```sh
+npm --prefix web test -- --coverage.enabled=false src/features/locations
+make build-web
+npm --prefix web run test:e2e -- tests/e2e/locations.spec.ts
+```
