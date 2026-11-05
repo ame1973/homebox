@@ -9,6 +9,7 @@ import { messages } from '@/lib/messages'
 const ConnectionPage = lazy(() => import('@/features/system/connection-page'))
 const AccountPage = lazy(() => import('@/features/auth/account-page'))
 const SettingsPage = lazy(() => import('@/features/taxonomy/settings-page'))
+const CatalogPage = lazy(() => import('@/features/catalog/catalog-page'))
 const LocationsPage = lazy(() => import('@/features/locations/locations-page'))
 const LocationAlias = lazy(() => import('@/features/locations/locations-page').then((module) => ({ default: module.LocationAlias })))
 
@@ -29,6 +30,7 @@ export default function App() {
         </Link>
         <nav aria-label={messages.app.navigation} className="flex max-w-full flex-wrap items-center gap-2">
           <Button variant="outline" asChild className="min-h-11 h-auto gap-2 whitespace-normal text-base aria-[current=page]:border-primary aria-[current=page]:bg-muted"><NavLink to="/locations"><MapPin className="size-4" aria-hidden="true" />{messages.locations.nav}</NavLink></Button>
+          <Button variant="outline" asChild className="min-h-11 h-auto gap-2 whitespace-normal text-base aria-[current=page]:border-primary aria-[current=page]:bg-muted"><NavLink to="/items"><Package className="size-4" aria-hidden="true" />{messages.catalog.nav}</NavLink></Button>
           <Button variant="outline" asChild className="min-h-11 gap-2 text-base"><Link to="/login"><UserRound className="size-4" aria-hidden="true" />{messages.app.account}</Link></Button>
           <Button variant="outline" asChild className="min-h-11 h-auto gap-2 whitespace-normal text-base aria-[current=page]:border-primary aria-[current=page]:bg-muted"><NavLink to="/settings"><Settings className="size-4" aria-hidden="true" />{messages.settings.nav}</NavLink></Button>
           <ThemeMenu />
@@ -54,6 +56,11 @@ export default function App() {
               <Route path="/locations/:id/view" element={<LocationsPage key={location.key} mode="detail" />} />
               <Route path="/locations/:id" element={<LocationsPage key={location.key} mode="detail" />} />
               <Route path="/locations/:id/edit" element={<LocationsPage key={location.key} mode="edit" />} />
+              <Route path="/items" element={<CatalogPage key={location.key} mode="list" />} />
+              <Route path="/items/new" element={<CatalogPage key={location.key} mode="create" />} />
+              <Route path="/items/:id/view" element={<CatalogPage key={location.key} mode="detail" />} />
+              <Route path="/items/:id/edit" element={<CatalogPage key={location.key} mode="edit" />} />
+              <Route path="/items/:id" element={<CatalogPage key={location.key} mode="detail" />} />
               <Route path="/l/:id" element={<LocationAlias />} />
               <Route path="*" element={
                 <section className="space-y-6 py-12">

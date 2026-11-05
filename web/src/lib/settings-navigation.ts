@@ -1,5 +1,6 @@
 import { validText } from '@/lib/api/client'
 import { locationReturnPath } from './location-navigation'
+import { catalogReturnPath } from './catalog-navigation'
 
 export type TaxonomyKind = 'categories' | 'tags'
 export const taxonomyListRoute = (kind: TaxonomyKind) => `/settings/${kind}`
@@ -31,5 +32,5 @@ export function settingsReturnPath(value: unknown): string | undefined {
 }
 
 export function applicationReturnPath(value: unknown): string | undefined {
-  return locationReturnPath(value) ?? settingsReturnPath(value)
+  return locationReturnPath(value) ?? settingsReturnPath(value) ?? catalogReturnPath(value)
 }

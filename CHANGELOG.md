@@ -4,6 +4,8 @@
 
 ### Added
 
+- Add responsive authenticated catalog metadata list/detail/create/edit/archive/restore/delete pages with all server-side filters, signed page controls, safe scoped-list returns, complete hierarchy selection, null-versus-empty fields, explicit measurement, original proofs, manual changed-field/category adoption and dirty navigation protection. Retain uncertain original commands after actual source deletion and never replay on reconnect or install historical replies. Add real-server workflows, selected-category metadata, enlarged light/dark accessibility and scoped pagination checks across five layouts; full holdings/media/assisted creation remain separate.
+
 - Prepare reviewed catalog metadata state using the SDK's exact validator, null-versus-empty text presence, safe decimal scale parsing, changed-only patches and explicit logical-field adoption without mixing concurrent measurement tuples. Freeze original item/category context and dispatch create/patch/archive/restore/delete with original keys/proofs through the shared no-replay controller. Invalidate catalog/taxonomy dependent reads in both directions on confirmed or sent failed writes, never historical cache installation or broad auth/location refresh. Add form/command/controller and dependency-scope regressions; catalog screens remain separate.
 
 - Add typed stateless browser adapters for all six catalog operations, with caller-owned original keys/proofs/signals, exact nullable metadata, conditional measurement validation at compile time and runtime, civil-date/filter bounds, required continuations and identity/strong-ETag/revision/acknowledgement checks. Never install server defaults into requests, refresh/rebase/retry writes or persist credentials. Add 88 adapter cases and actual SDK/Go browser workflows for signed pages, stale proofs, historical replies and explicit same-key reconciliation of a genuinely committed malformed response. Bundle the test SDK only into private disposable web roots; catalog screens remain separate.
@@ -69,6 +71,8 @@
 - SHA-pinned GitHub Actions checks for the backend/frontend, frozen dependencies, dependency audits, and browser test artifacts. Remote CI execution and physical acceptance are not yet claimed.
 
 ### Fixed
+
+- Keep localized catalog metadata error space stable during blur validation so clearing an error cannot move a native checkbox between pointer down/up. Reproduce the 24px shift with actual Chromium events, fix feature composition without editing generated primitives, and retain the original immediate checkbox assertion as a browser regression.
 
 - Refine catalog item contracts with independent Unicode/identity/safe-integer bounds, exact nullable response and partial-patch semantics, optional canonical defaults, explicit complete nondefault measurement tuples, metadata restoration, retained-history guards, Origin/body admission, original positive aggregate proofs, strong resource ETags and complete bounded live pages. Preserve every list filter, operation identity and version-one offline payload. Add negative schema/generated-type fixtures and English rules without claiming item handlers are implemented.
 

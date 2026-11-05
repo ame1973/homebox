@@ -33,7 +33,7 @@ export const itemArchiveSchema: z.ZodType<components['schemas']['ItemArchiveInpu
 const pageSchema: z.ZodType<ItemsPage> = z.strictObject({ data: z.array(itemSchema).max(100), next_cursor: text(1, 2048).nullable() })
   .refine((page) => new Set(page.data.map((item) => item.id)).size === page.data.length)
 const civilDateSchema = z.iso.date().refine((value) => !value.startsWith('0000-'))
-const querySchema: z.ZodType<ItemPageQuery> = z.strictObject({
+export const itemPageQuerySchema: z.ZodType<ItemPageQuery> = z.strictObject({
   ...pageQuerySchema.shape, from: civilDateSchema.optional(), to: civilDateSchema.optional(),
   currency: z.string().regex(/^[A-Z]{3}(?![\s\S])/).optional(), category_id: idSchema.optional(), location_id: idSchema.optional(),
   scope: z.enum(['direct', 'subtree']).optional(), status: fields.status.optional(), merchant: text(1, 300).optional(), q: text(0, 500).optional(),
@@ -47,7 +47,7 @@ export async function fetchItem(id: string, signal: AbortSignal): Promise<Item> 
 // One explicit live page, never hidden pagination, persistence or a snapshot
 // claim. q/filter text remains caller-owned; the server binds its effective scope.
 export async function fetchItemsPage(query: ItemPageQuery, signal: AbortSignal): Promise<ItemsPage> {
-  const values = input(querySchema, query)
+  const values = input(itemPageQuerySchema, query)
   const limit = values.limit ?? 50
   return requestData(signal, (signal) => apiClient.GET('/items', { signal, params: { query: values } }), pageSchema, 8_000,
     (page) => page.data.length <= limit && (page.next_cursor === null || page.data.length === limit && page.next_cursor !== values.cursor) &&
