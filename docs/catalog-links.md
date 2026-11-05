@@ -1,6 +1,6 @@
 # Catalog Links and Tag Membership
 
-**Implementation status:** the root executable contracts, generated browser types, schema/type regression checks and dependency-free Go barcode validator are implemented. The owned-link transaction services, authoritative HTTP integration, browser adapters and maintenance screens are not yet implemented. Passing these checks does not make those routes available. The separate [catalog metadata workflows](catalog.md) are functional without an AI worker.
+**Implementation status:** the root executable contracts, generated browser types, schema/type regression checks, dependency-free Go barcode validator and independent owned-row persistence/materialization foundation are implemented. The owned-link CRUD services, signed collection pages, authoritative HTTP integration, browser adapters and maintenance screens are not yet implemented. Passing foundation checks does not make those routes available. The separate [catalog metadata workflows](catalog.md) are functional without an AI worker.
 
 ## Independent identity and immutable ownership
 
@@ -37,6 +37,16 @@ JSON Schema enforces enum, type, width and ASCII shape. It does **not** perform 
 
 Fixed independent GTIN/UPC-E vectors, every single-digit EAN/UPC-A substitution, every UPC-E check-digit error, all compression branches, Unicode/ASCII/width/unsafe-repair boundaries and fuzz invariants exercise the actual implementation. Checksum validity does not certify GS1 allocation, ownership, a unique item, or a unique physical unit. The future transaction service must call this validator rather than trusting a client/schema result; its per-owner uniqueness, rollback, publication and original-proof requirements remain separate.
 
+## Retained source and additive materialization
+
+Migration 0009 adds independent barcode/alias/attribute current rows and indexed `(item_id, id)` lookup paths. A live source row with no counter receives revision one during explicit migration; a retained counter is preserved. Existing current payload bytes/timestamps and frozen outbox rows are not rewritten. A counter without a live source does not resurrect a row. Baseline backfill does not append fictional events, advance the catalog revision, rescale quantities or publish legacy search/OCR caches. This is not the full 22-entity sync backfill.
+
+Persisted-data validation and new-command validation are different boundaries. Retained row/owner IDs, supported symbologies, exact UTF-8 text bounds and safe revisions must be valid, but historical raw/normalized strings remain inspectable even when they differ or would fail today's new-write checksum/alphabet policy. Reads and upgrades never call the new-write normalizer to repair those strings. Future create/replace commands must call the real validator and derive the new normalized value. Source fields remain authoritative; cached projection text never supplies a replacement value.
+
+Go validates the complete backfill after its SQL and before the migration/checksum transaction commits. SQLite text length alone does not correctly enforce code-point bounds after native NUL controls, and JSON construction alone does not reject every malformed UTF-8 source. Invalid source or unsafe counters roll back all pending DDL/indexes/current/counter/ledger writes; the verified private pre-migration snapshot remains available. Stop the server and use the explicit commands in [Database Operations](database.md); serving never auto-migrates.
+
+The private row loaders require the actual retained counter and return no partial resource on missing/corrupt state or SQL failure. Final-state builders publish exactly the version-one source payload, with the revision only in its enclosing projection. Transaction tests exercise repeated staging, independent tombstones, owner/item/unit-search dependencies, source preservation, frozen replies after later edits/deletion and complete rollback on statement, authorization or deferred-commit failure. These are real SQLite/transaction tests, not an assertion that public owned-write handlers exist. Each future service must explicitly stage its independent row and all owner/search dependencies atomically; the row payload builder does not infer those writes.
+
 ## Proof scopes and acknowledgements
 
 | Operation | Original If-Match scope | Successful response |
@@ -67,6 +77,7 @@ Source changes, owned/owner/tag/search counters, final current/frozen projection
 ```sh
 uv run --frozen python -m unittest tests.test_catalog_links_contracts -v
 go -C server test -race -count=1 -cover ./internal/barcode
+go -C server test -race -count=1 ./internal/store -run '^TestCatalogLink'
 go -C server test ./internal/barcode -run '^$' -fuzz FuzzNormalize -fuzztime=3s -parallel=2
 uv run --frozen python -m unittest discover -s tests -v
 npm --prefix web run api:generate

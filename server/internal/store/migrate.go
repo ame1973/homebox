@@ -106,6 +106,11 @@ func (s *Store) migrate(ctx context.Context, cfg Config, all []migrations.Migrat
 		if _, err = tx.ExecContext(ctx, migration.SQL); err != nil {
 			return report, fmt.Errorf("apply migration %s: %w", migration.Filename, err)
 		}
+		if migration.Version == 9 {
+			if err = validateCatalogLinkBackfill(ctx, tx); err != nil {
+				return report, fmt.Errorf("validate catalog link backfill: %w", err)
+			}
+		}
 		// Reference migrations insert their own version row. New migrations can
 		// leave metadata to the runner, which always owns checksum publication.
 		if _, err = tx.ExecContext(ctx, `INSERT INTO schema_migrations(version,name,applied_at)

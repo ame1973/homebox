@@ -40,7 +40,11 @@ Migration 0003 adds private authentication metadata. It revokes reference sessio
 
 Migration 0007 adds location descriptions/logical-deletion metadata, independent current projections with commit-time revision integrity, and immutable mutation audit. Its backfill covers existing locations and movements, preserving source IDs, revisions, and quantity counts. See [Location Rules](locations.md) for the implemented service/HTTP/browser workflows and remaining contents/QR/sync limits.
 
-Migration 0008 adds indexed category-parent/tag-membership lookups and current category/tag/item-tag projections, preserving existing counters and canonical composite identities. It seeds item/search counters but does not copy unverified legacy search-cache text into published projections. Neither migration certifies the full 22-entity backfill or enables sync endpoints. [Categories and Tags](taxonomy.md) distinguishes the implemented transaction/publication module from its pending HTTP/UI workflows.
+Migration 0008 adds indexed category-parent/tag-membership lookups and current category/tag/item-tag projections, preserving existing counters and canonical composite identities. It seeds item/search counters but does not copy unverified legacy search-cache text into published projections. [Categories and Tags](taxonomy.md) describes the implemented transaction/publication, HTTP, typed-adapter and reviewed settings workflows, with remaining assignment limits.
+
+Migration 0009 adds owner/stable-ID lookup indexes and independent barcode/alias/attribute current projections. Missing counters begin at one; retained counters, existing current payload bytes/timestamps and frozen changes remain unchanged. Historical raw/normalized barcode text is not silently repaired or revalidated as a new write. UTF-8, field/identity bounds and safe counters are validated inside the same migration transaction before checksum publication; an invalid row rolls back every pending migration/index/backfill/ledger write. See [Catalog Links and Tag Membership](catalog-links.md) for the distinction between retained reads and new-write validation. A normal root upgrade preserves the dataset epoch; explicit reference adoption still rotates it as documented below.
+
+These partial backfills do not copy legacy search/OCR caches, fabricate mutation/outbox events, alter stock quantities or enable the full 22-entity frozen sync protocol. Owned-link CRUD, signed collection pages and HTTP/UI integration remain separate implementation gates.
 
 Before changing an existing database, the runner:
 
