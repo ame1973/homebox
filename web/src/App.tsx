@@ -10,6 +10,7 @@ const ConnectionPage = lazy(() => import('@/features/system/connection-page'))
 const AccountPage = lazy(() => import('@/features/auth/account-page'))
 const SettingsPage = lazy(() => import('@/features/taxonomy/settings-page'))
 const CatalogPage = lazy(() => import('@/features/catalog/catalog-page'))
+const OwnedPage = lazy(() => import('@/features/catalog/owned-page'))
 const LocationsPage = lazy(() => import('@/features/locations/locations-page'))
 const LocationAlias = lazy(() => import('@/features/locations/locations-page').then((module) => ({ default: module.LocationAlias })))
 
@@ -61,6 +62,12 @@ export default function App() {
               <Route path="/items/:id/view" element={<CatalogPage key={location.key} mode="detail" />} />
               <Route path="/items/:id/edit" element={<CatalogPage key={location.key} mode="edit" />} />
               <Route path="/items/:id" element={<CatalogPage key={location.key} mode="detail" />} />
+              {(['barcodes', 'aliases', 'attributes'] as const).map((kind) => <Route key={kind}>
+                <Route path={`/items/:id/${kind}`} element={<OwnedPage key={location.key} kind={kind} mode="list" />} />
+                <Route path={`/items/:id/${kind}/new`} element={<OwnedPage key={location.key} kind={kind} mode="create" />} />
+                <Route path={`/items/:id/${kind}/:rowID/edit`} element={<OwnedPage key={location.key} kind={kind} mode="edit" />} />
+              </Route>)}
+              <Route path="/items/:id/tags" element={<OwnedPage key={location.key} kind="tags" mode="list" />} />
               <Route path="/l/:id" element={<LocationAlias />} />
               <Route path="*" element={
                 <section className="space-y-6 py-12">

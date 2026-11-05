@@ -8,6 +8,8 @@ function guidance(error: unknown): string {
   if (!(error instanceof ApiError)) return common.busy
   switch (error.code) {
     case 'ITEM_HAS_HISTORY': return text.history
+    case 'BARCODE_CONFLICT': return messages.owned.barcodeConflict
+    case 'ALIAS_CONFLICT': return messages.owned.aliasConflict
     case 'VALIDATION_ERROR': case 'INVALID_REVISION': case 'INVALID_CATALOG_URL': case 'PRECONDITION_REQUIRED': return common.validation
     case 'REVISION_CONFLICT': return common.conflict
     case 'IDEMPOTENCY_CONFLICT': case 'IDEMPOTENCY_EXPIRED': return common.keyConflict

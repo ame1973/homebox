@@ -24,7 +24,7 @@ const fieldErrors = { name: text.nameError, brand: text.brandError, model: text.
 
 // Reserve the localized message size so blur validation cannot move a pointer
 // target between down/up, including wrapped errors at enlarged text sizes.
-function MetadataError({ message, error }: { message: string; error?: { message?: string } }) {
+export function MetadataError({ message, error }: { message: string; error?: { message?: string } }) {
   return <div className="grid text-sm font-normal"><span aria-hidden="true" data-error-space={message} className="invisible col-start-1 row-start-1 after:content-[attr(data-error-space)]" /><FieldError className="col-start-1 row-start-1" errors={[error]} /></div>
 }
 

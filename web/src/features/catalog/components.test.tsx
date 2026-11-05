@@ -31,7 +31,7 @@ function operation(command?: CatalogCommand): CatalogMutation {
 }
 
 it.each([
-  ['ITEM_HAS_HISTORY', text.history], ['VALIDATION_ERROR', common.validation], ['INVALID_REVISION', common.validation], ['INVALID_CATALOG_URL', common.validation], ['PRECONDITION_REQUIRED', common.validation],
+  ['ITEM_HAS_HISTORY', text.history], ['BARCODE_CONFLICT', messages.owned.barcodeConflict], ['ALIAS_CONFLICT', messages.owned.aliasConflict], ['VALIDATION_ERROR', common.validation], ['INVALID_REVISION', common.validation], ['INVALID_CATALOG_URL', common.validation], ['PRECONDITION_REQUIRED', common.validation],
   ['REVISION_CONFLICT', common.conflict], ['IDEMPOTENCY_CONFLICT', common.keyConflict], ['IDEMPOTENCY_EXPIRED', common.keyConflict],
   ['INVALID_RESPONSE', text.invalidRead], ['INVALID_CURSOR', text.invalidRead], ['INVALID_QUERY', text.invalidRead], ['NOT_FOUND', text.missingHelp],
   ['NETWORK_ERROR', common.network], ['REQUEST_TIMEOUT', common.network], ['REQUEST_ABORTED', common.network], ['CLIENT_UPGRADE_REQUIRED', common.upgrade], ['RATE_LIMITED', common.rate],

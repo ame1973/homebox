@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { catalogListRoute, catalogQuery, catalogReturnPath, catalogRoute } from './catalog-navigation'
+import { catalogListRoute, catalogNavigationState, catalogOwnedCreateRoute, catalogOwnedEditRoute, catalogOwnedKinds, catalogOwnedRoute, catalogQuery, catalogReturnPath, catalogRoute } from './catalog-navigation'
 import { applicationReturnPath } from './settings-navigation'
 
 it('keeps imported new/tree/Unicode identities independent of static creation and exact safe paths', () => {
@@ -25,6 +25,39 @@ it.each([null, undefined, 7, {}, '', '//evil.example/items', 'https://evil.examp
   '/items?from=2026-11-06&to=2026-11-05', '/items?merchant=', '/items?status=disposed', '/items?scope=all', '/items?currency=twd', '/items?', `/items?q=${'x'.repeat(18000)}`])('rejects unsafe catalog return %j', (path) => {
   expect(catalogReturnPath(path)).toBeUndefined()
   expect(applicationReturnPath(path)).toBeUndefined()
+})
+
+it('keeps every owned route same-origin, owner scoped and unambiguous for imported Item/row identities', () => {
+  for (const id of ['new', 'NEW', 'tree', '  盒子 é #?%  ']) for (const kind of catalogOwnedKinds) {
+    const path = `/items/${encodeURIComponent(id)}/${kind}`
+    expect(catalogOwnedRoute(id, kind)).toBe(path)
+    expect(catalogReturnPath(path)).toBe(path)
+    expect(applicationReturnPath(path)).toBe(path)
+    if (kind === 'tags') continue
+    expect(catalogOwnedCreateRoute(id, kind)).toBe(`${path}/new`)
+    expect(catalogReturnPath(`${path}/new`)).toBe(`${path}/new`)
+    for (const row of ['new', 'tree', '  Alias é #?%  ']) {
+      const edit = `${path}/${encodeURIComponent(row)}/edit`
+      expect(catalogOwnedEditRoute(id, kind, row)).toBe(edit)
+      expect(catalogReturnPath(edit)).toBe(edit)
+      expect(applicationReturnPath(edit)).toBe(edit)
+    }
+  }
+  for (const id of ['', '.', '..', 'a/b', 'a\\b', 'a\0b', '\uD800']) {
+    expect(() => catalogOwnedRoute(id, 'aliases')).toThrow(expect.objectContaining({ code: 'VALIDATION_ERROR' }))
+    expect(() => catalogOwnedEditRoute('item', 'aliases', id)).toThrow(expect.objectContaining({ code: 'VALIDATION_ERROR' }))
+  }
+})
+it.each(['/items/item/barcodes?limit=1', '/items/item/tags/new', '/items/item/tags/tag/edit', '/items/item/aliases/row',
+  '/items/item/aliases/%2f/edit', '/items/item/attributes/%00/edit', '/items/item/barcodes/%EF/edit', '/items/item/aliases/%2e%2e/edit', '/items/item/aliases/row/edit/extra'])('rejects unimplemented/unsafe owned return %s', (path) => {
+  expect(catalogReturnPath(path)).toBeUndefined()
+  expect(applicationReturnPath(path)).toBeUndefined()
+})
+it('shares exact scoped-list/cursor returns without trusting arbitrary navigation state', () => {
+  expect(catalogNavigationState('/items?q=Exact&limit=1&cursor=opaque', [null, 'previous'])).toEqual({ catalogList: '/items?q=Exact&limit=1&cursor=opaque', catalogCursors: [null, 'previous'] })
+  for (const candidate of [undefined, {}, 'https://evil.example/items', '/items/item/aliases', '/items?unknown=value']) for (const cursors of [undefined, [null, {}], [7], [''], ['\uD800']]) {
+    expect(catalogNavigationState(candidate, cursors)).toEqual({ catalogList: '/items', catalogCursors: [] })
+  }
 })
 
 it('round-trips every filter and opaque cursor without interpreting literals, dropping criteria or installing defaults', () => {

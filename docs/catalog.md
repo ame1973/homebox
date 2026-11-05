@@ -1,6 +1,6 @@
 # Catalog Item Rules
 
-**Implementation status:** responsive reviewed catalog metadata list/detail/create/edit/archive/restore/delete screens, authoritative Go/SQLite transactions, complete filtered/signed live pages, six item HTTP operations and typed stateless adapters, and final-state item/unit approved-search publication are implemented and tested. Related-link maintenance, holdings, purchase/photo-assisted creation, ranked search, bulk/import/export interfaces, settings writers and complete sync workflows remain in development. Core catalog CRUD requires no AI worker.
+**Implementation status:** responsive reviewed catalog metadata list/detail/create/edit/archive/restore/delete screens, authoritative Go/SQLite transactions, complete filtered/signed live pages, six item HTTP operations and typed stateless adapters, and final-state item/unit approved-search publication are implemented and tested. Related barcode/alias/attribute/Tag maintenance is available through the [owned catalog screens](catalog-links.md); holdings, purchase/photo-assisted creation, ranked search, bulk/import/export interfaces, settings writers and complete sync workflows remain in development. Core catalog CRUD requires no AI worker.
 
 ## Catalog metadata and holdings
 
@@ -56,9 +56,9 @@ After completing the initial password rotation, open `/items`. Phone, tablet and
 
 Loading, missing/invalid/partial data, offline coverage and session loss are explicit. Writes are disabled during unsafe reads; protected login returns accept only implemented same-application paths. Controls compose existing official primitives with visible focus, wrapping labels and enlarged-text reviews. Inline metadata error space is retained so blur validation does not move a mouse/touch target between down/up; generated primitives remain unchanged. Drafts and visited-page history are volatile, not a full offline replica or durable draft queue. Very deep cursor history remains bounded by browser history capacity; bidirectional server continuations would be the upgrade, not silently truncated records.
 
-Catalog photos/barcodes/aliases/attributes/tag assignment, units/stock, purchases, ranked/visual/AI search, bulk actions and import/export are still separate product work. No empty decorative tabs, fake totals, automatic receiving, or worker-dependent metadata CRUD is substituted for them.
+Catalog photos, camera/scanning, units/stock, purchases, ranked/visual/AI search, bulk actions and import/export are still separate product work. No empty decorative tabs, fake totals, automatic receiving, or worker-dependent metadata CRUD is substituted for them.
 
-Related-link rules and Item-versus-row proof scopes are documented in [Catalog Links and Tag Membership](catalog-links.md). Independent persistence, all nine row writes, complete tag-set replacement and four owner-scoped signed collection reads are implemented through real HTTP operations; typed stateless owned adapters are implemented and reviewed maintenance screens remain pending.
+From item detail, choose real barcode/alias/attribute/Tag assignment links. The [Catalog Links and Tag Membership](catalog-links.md) guide describes the implemented responsive screens, all fourteen services/HTTP operations and typed stateless adapters, complete owner-scoped collection reads, independent row proofs, original-key reconciliation and complete-set Tag adoption. Normal item-list filters/cursor returns survive these routes as well.
 
 ## Authoritative transaction service
 
@@ -74,7 +74,7 @@ Related-link rules and Item-versus-row proof scopes are documented in [Catalog L
 
 Nullable command presence is an internal `NullableString`/`NullableID` representation, never a wire wrapper. Source, final item/unit approved FTS, current/frozen projections, counters, immutable mutation events and principal/epoch-scoped original responses share one transaction. The active completed session is checked again before COMMIT, including on replay. Statement, later dependent write, exhausted revision/sequence, late authorization, or deferred commit failure returns no successful DTO/acknowledgement and preserves the entire original state.
 
-Deleting catalog metadata is not secure erasure. Immutable audit, retained counters, frozen replies/outbox rows, and shared media remain subject to their own retention rules. OCR tied to retained media stays private; deleting an owned job nulls its OCR job reference instead of copying raw text into publication. Complete history APIs and exact event-to-target/outbox associations are separate unfinished work. Owned barcode/alias/attribute writes, tag-set replacement and signed collection reads are implemented through fourteen HTTP operations; their reviewed browser maintenance, unit/stock CRUD and remaining multi-domain workflows are pending. The HTTP module binds catalog metadata services to the six routes below.
+Deleting catalog metadata is not secure erasure. Immutable audit, retained counters, frozen replies/outbox rows, and shared media remain subject to their own retention rules. OCR tied to retained media stays private; deleting an owned job nulls its OCR job reference instead of copying raw text into publication. Complete history APIs and exact event-to-target/outbox associations are separate unfinished work. Owned barcode/alias/attribute writes, tag-set replacement and signed collection reads are implemented through fourteen HTTP operations; their reviewed browser maintenance is available, while unit/stock CRUD and remaining multi-domain workflows are pending. The HTTP module binds catalog metadata services to the six routes below.
 
 ## Required HTTP boundary
 

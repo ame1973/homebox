@@ -26,7 +26,7 @@ export function watchDomainWrites(page: Page, prefixes: readonly string[]) {
   const requests: { method: string; path: string; key: string | undefined; proof: string | undefined; body: string | null }[] = []
   page.on('request', (request) => {
     const path = new URL(request.url()).pathname
-    if (prefixes.some((prefix) => path.startsWith(prefix)) && ['POST', 'PATCH', 'DELETE'].includes(request.method())) requests.push({ method: request.method(), path, key: request.headers()['idempotency-key'], proof: request.headers()['if-match'], body: request.postData() })
+    if (prefixes.some((prefix) => path.startsWith(prefix)) && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method())) requests.push({ method: request.method(), path, key: request.headers()['idempotency-key'], proof: request.headers()['if-match'], body: request.postData() })
   })
   return requests
 }

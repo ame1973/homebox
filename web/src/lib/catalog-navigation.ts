@@ -1,5 +1,29 @@
 import { itemPageQuerySchema, type ItemPageQuery } from './api/catalog'
+import { validText } from './api/client'
 import { input, pathIDSchema } from './api/domain'
+
+export const catalogRowKinds = ['barcodes', 'aliases', 'attributes'] as const
+export const catalogOwnedKinds = [...catalogRowKinds, 'tags'] as const
+export type CatalogRowKind = typeof catalogRowKinds[number]
+export type CatalogOwnedKind = typeof catalogOwnedKinds[number]
+
+export function catalogOwnedRoute(itemID: string, kind: CatalogOwnedKind): string {
+  return `/items/${encodeURIComponent(input(pathIDSchema, itemID))}/${kind}`
+}
+export function catalogOwnedCreateRoute(itemID: string, kind: CatalogRowKind): string {
+  return `${catalogOwnedRoute(itemID, kind)}/new`
+}
+export function catalogOwnedEditRoute(itemID: string, kind: CatalogRowKind, rowID: string): string {
+  return `${catalogOwnedRoute(itemID, kind)}/${encodeURIComponent(input(pathIDSchema, rowID))}/edit`
+}
+
+export function catalogNavigationState(candidate: unknown, cursors: unknown) {
+  const catalogList = typeof candidate === 'string' && candidate.split('?')[0] === '/items' && catalogReturnPath(candidate) ? candidate : '/items'
+  // ponytail: visited cursor history grows per page; use bidirectional server
+  // continuations if unusually deep navigation reaches browser history limits.
+  const catalogCursors: (string | null)[] = Array.isArray(cursors) && cursors.every((cursor) => cursor === null || typeof cursor === 'string' && validText(cursor, 1, 2048)) ? cursors : []
+  return { catalogList, catalogCursors }
+}
 
 export function catalogRoute(id: string, mode: 'detail' | 'edit' = 'detail'): string {
   const identity = input(pathIDSchema, id)
@@ -34,8 +58,13 @@ export function catalogReturnPath(value: unknown): string | undefined {
     const url = new URL(value, 'https://homebox.invalid')
     if (url.origin !== 'https://homebox.invalid' || url.pathname + url.search !== value) return undefined
     if (url.pathname === '/items') return catalogQuery(url.search) === undefined ? undefined : value
-    const match = /^\/items\/([^/]+)(?:\/(edit|view))?$/.exec(url.pathname)
-    if (!match || url.search || !pathIDSchema.safeParse(decodeURIComponent(match[1]!)).success) return undefined
+    const match = [
+      /^\/items\/([^/]+)(?:\/(?:edit|view))?$/,
+      /^\/items\/([^/]+)\/(?:barcodes|aliases|attributes|tags)$/,
+      /^\/items\/([^/]+)\/(?:barcodes|aliases|attributes)\/new$/,
+      /^\/items\/([^/]+)\/(?:barcodes|aliases|attributes)\/([^/]+)\/edit$/,
+    ].map((pattern) => pattern.exec(url.pathname)).find((result) => result !== null)
+    if (!match || url.search || !match.slice(1).every((id) => pathIDSchema.safeParse(decodeURIComponent(id)).success)) return undefined
     return value
   } catch { return undefined }
 }

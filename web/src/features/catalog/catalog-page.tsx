@@ -8,8 +8,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { MutationNotice, mutationControl as control } from '@/components/mutation-review'
 import { fetchAdmin } from '@/lib/api/auth'
 import { fetchItem, fetchItemsPage, type Item } from '@/lib/api/catalog'
-import { ApiError, validText } from '@/lib/api/client'
-import { catalogListRoute, catalogQuery, catalogReturnPath, catalogRoute } from '@/lib/catalog-navigation'
+import { ApiError } from '@/lib/api/client'
+import { catalogListRoute, catalogNavigationState, catalogOwnedKinds, catalogOwnedRoute, catalogQuery, catalogReturnPath, catalogRoute } from '@/lib/catalog-navigation'
 import { messages } from '@/lib/messages'
 import { useOnline } from '@/lib/use-online'
 import { clearSessionQueries } from '@/features/auth/use-auth-action'
@@ -37,13 +37,8 @@ export default function CatalogPage({ mode }: { mode: Mode }) {
   const validPath = catalogReturnPath(route.pathname + route.search) !== undefined
   const query = mode === 'list' ? catalogQuery(route.search) : undefined
   const needRecord = mode === 'edit' || mode === 'detail'
-  const candidate: unknown = mode === 'list' ? route.pathname + route.search : route.state?.catalogList
-  const listReturn = typeof candidate === 'string' && candidate.split('?')[0] === '/items' && catalogReturnPath(candidate) ? candidate : '/items'
-  // ponytail: visited cursor history grows per page; use bidirectional server
-  // continuations if unusually deep navigation reaches browser history limits.
-  const rawTrail: unknown = route.state?.catalogCursors
-  const trail: (string | null)[] = Array.isArray(rawTrail) && rawTrail.every((cursor) => cursor === null || typeof cursor === 'string' && validText(cursor, 1, 2048)) ? rawTrail : []
-  const navigationState = { catalogList: listReturn, catalogCursors: trail }
+  const navigationState = catalogNavigationState(mode === 'list' ? route.pathname + route.search : route.state?.catalogList, route.state?.catalogCursors)
+  const { catalogList: listReturn, catalogCursors: trail } = navigationState
   const returnTo = validPath ? route.pathname + route.search : '/items'
   const auth = useQuery({ queryKey: ['auth', 'me'], enabled: online && !transitioning, staleTime: 0, refetchOnMount: 'always', queryFn: async ({ signal }) => {
     try { return await fetchAdmin(signal) } catch (error) { if (error instanceof ApiError && error.status === 401) return null; throw error }
@@ -138,7 +133,9 @@ export default function CatalogPage({ mode }: { mode: Mode }) {
                 {(mode === 'create' || mode === 'edit' && subject) && <Card className="max-w-3xl [--card-spacing:--spacing(6)]"><CardContent className="pt-6"><CatalogEditor mode={mode === 'create' ? 'create' : 'edit'} subject={subject} categories={tree} operation={operation} online={online} canWrite={canWrite} /></CardContent></Card>}
                 {mode === 'detail' && subject && <section className="min-w-0 max-w-3xl space-y-6"><div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl font-semibold">{text.detail}</h2>{canWrite ? <Button asChild className={control}><Link to={catalogRoute(subject.id, 'edit')} state={navigationState}>{text.edit}</Link></Button> : <Button disabled className={control}>{text.edit}</Button>}</div>
                   <dl className="grid min-w-0 gap-5 sm:grid-cols-2">{Object.entries(text.fields).map(([key, label]) => <div key={key} className="min-w-0 space-y-2"><dt className="text-sm font-medium text-muted-foreground">{label}</dt><dd className="whitespace-pre-wrap text-base [overflow-wrap:anywhere]">{key === 'category_id' && subject.category_id && tree.byID.has(subject.category_id) ? `「${tree.byID.get(subject.category_id)!.name}」 (${subject.category_id})` : catalogDisplay(key, subject[key as keyof typeof text.fields])}</dd></div>)}</dl>
-                  <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">{text.identifier}：{subject.id}<br />{text.version}：{subject.revision}</p><CatalogActions item={subject} operation={operation} online={online} canWrite={canWrite} />
+                  <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">{text.identifier}：{subject.id}<br />{text.version}：{subject.revision}</p>
+                  <nav aria-label={messages.owned.navigation} className="flex flex-wrap gap-2">{catalogOwnedKinds.map((kind) => <Button key={kind} asChild variant="outline" className={control}><Link to={catalogOwnedRoute(subject.id, kind)} state={navigationState}>{messages.owned.collections[kind]}</Link></Button>)}</nav>
+                  <CatalogActions item={subject} operation={operation} online={online} canWrite={canWrite} />
                 </section>}
                 <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{text.future}</p>
                 {readAt > 0 && <p className="text-sm text-muted-foreground">{text.readAt}：{new Intl.DateTimeFormat('zh-TW', { dateStyle: 'short', timeStyle: 'short' }).format(readAt)}</p>}

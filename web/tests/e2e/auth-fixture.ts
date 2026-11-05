@@ -9,7 +9,8 @@ type Application = { url: string; bootstrapToken: string }
 
 // Private per-test stores avoid sharing a setup token/account/rate window across
 // viewports or bypassing the production limiter with a test-only HTTP endpoint.
-export const test = base.extend<{ application: Application }, { homeboxBinary: string; applicationWebDirectory: string }>({
+export const test = base.extend<{ application: Application; applicationDatabaseFixture: { prepare: (database: string) => void } | undefined }, { homeboxBinary: string; applicationWebDirectory: string }>({
+  applicationDatabaseFixture: [undefined, { option: true }],
   applicationWebDirectory: [fileURLToPath(new URL('../../dist', import.meta.url)), { scope: 'worker' }],
   homeboxBinary: [async ({ browserName }, provideFixture) => {
     const directory = mkdtempSync(join(tmpdir(), `homebox-auth-${browserName}-binary-`))
@@ -19,13 +20,19 @@ export const test = base.extend<{ application: Application }, { homeboxBinary: s
       await provideFixture(binary)
     } finally { rmSync(directory, { recursive: true, force: true }) }
   }, { scope: 'worker' }],
-  application: async ({ homeboxBinary, applicationWebDirectory }, provideFixture) => {
+  application: async ({ homeboxBinary, applicationWebDirectory, applicationDatabaseFixture }, provideFixture) => {
     const directory = mkdtempSync(join(tmpdir(), 'homebox-auth-browser-'))
     const database = join(directory, 'homebox.sqlite')
     const tokenFile = join(directory, 'bootstrap.token')
     let child: ReturnType<typeof spawn> | undefined
     try {
       execFileSync(homeboxBinary, ['db', 'migrate', '--database', database], { stdio: 'pipe' })
+      if (applicationDatabaseFixture) {
+        // Offline legacy data setup only: no server is running, and the callback
+        // must close its connection before the real CLI/server opens this file.
+        applicationDatabaseFixture.prepare(database)
+        execFileSync(homeboxBinary, ['db', 'check', '--database', database], { stdio: 'pipe' })
+      }
       execFileSync(homeboxBinary, ['auth', 'bootstrap', '--database', database, '--output', tokenFile], { stdio: 'pipe' })
       child = spawn(homeboxBinary, ['serve', '--listen', '127.0.0.1:0', '--database', database, '--web-dir', applicationWebDirectory], { stdio: ['ignore', 'pipe', 'pipe'] })
       const server = child
