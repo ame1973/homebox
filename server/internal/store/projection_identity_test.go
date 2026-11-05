@@ -39,11 +39,11 @@ func TestProjectionPairUsesUnambiguousCanonicalUnicodeJSON(t *testing.T) {
 func TestProjectionIdentityBoundsApplyToComponentsNotTheEncodedPair(t *testing.T) {
 	for _, text := range []string{strings.Repeat("x", 128), strings.Repeat("😀", 128), strings.Repeat("\x01", 128)} {
 		pair := projectionPair(text, text)
-		if !validProjectionIdentity("item_tag", pair) || !validProjectionIdentity("search_doc", projectionPair("item", text)) {
+		if !validProjectionIdentity("item_tag", pair) || !validProjectionIdentity("stock", pair) || !validProjectionIdentity("search_doc", projectionPair("item", text)) {
 			t.Fatal("valid maximum-length component was rejected by a single-row ID limit")
 		}
 	}
-	for _, kind := range []string{"location", "location_event", "media_link", "category", "tag", "item", "barcode", "alias", "attribute", "ai_review"} {
+	for _, kind := range []string{"location", "location_event", "media_link", "category", "tag", "item", "unit", "barcode", "alias", "attribute", "ai_review"} {
 		if !validProjectionIdentity(kind, strings.Repeat("😀", 128)) || validProjectionIdentity(kind, strings.Repeat("x", 129)) {
 			t.Fatal("single-row identity bounds changed", kind)
 		}
@@ -84,7 +84,7 @@ func TestProjectionPairRejectsAlternateSpellingsInvalidUTFAndWrongShapes(t *test
 		`["a","\u000a"]`, `["a","b"] trailing`, "[\"\xff\",\"tag\"]",
 		projectionPair(strings.Repeat("x", 129), "tag"), strings.Repeat("x", 1600),
 	} {
-		if _, valid := projectionPairParts(identity); valid || validProjectionIdentity("item_tag", identity) {
+		if _, valid := projectionPairParts(identity); valid || validProjectionIdentity("item_tag", identity) || validProjectionIdentity("stock", identity) {
 			t.Fatalf("noncanonical projection identity was accepted: %q", identity)
 		}
 	}

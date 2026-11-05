@@ -48,6 +48,22 @@ func (m *mutationTx) projectionPayload(key projectionKey) ([]byte, error) {
 			return nil, err
 		}
 		return json.Marshal(value.ItemData)
+	case "unit":
+		value, err := loadUnit(m.ctx, m.tx, key.id)
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(value.UnitData)
+	case "stock":
+		parts, valid := projectionPairParts(key.id)
+		if !valid {
+			return nil, ErrDomainState
+		}
+		value, err := loadStock(m.ctx, m.tx, parts[0], parts[1])
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(value.StockData)
 	case "barcode":
 		value, err := loadBarcode(m.ctx, m.tx, key.id)
 		if err != nil {

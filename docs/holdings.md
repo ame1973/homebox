@@ -1,6 +1,6 @@
 # Individual Units and Quantity Stock
 
-**Implementation status:** the root executable contracts and generated TypeScript types define the bounded unit/stock workflows below. Schema and strict compile tests are implemented. Authoritative unit/stock services, independent persistence backfill, HTTP handlers, typed runtime adapters and responsive operating screens are still being built. The existing catalog and owned-metadata screens do not receive stock or create physical units. Passing these contracts is not runtime or physical-device acceptance.
+**Implementation status:** bounded root contracts/generated TypeScript types, validated private Unit/Stock source loaders, independent current/frozen materializers and additive migration 0010 are implemented and tested. Authoritative unit/stock read/write/lifecycle services, HTTP handlers, typed runtime adapters and responsive operating screens are still being built. The existing catalog and owned-metadata screens do not receive stock or create physical units. Persistence/publication primitives and schema checks are not a claim of those complete workflows or physical-device acceptance.
 
 ## Distinct physical identities
 
@@ -75,11 +75,24 @@ Unit creation/metadata/status and stock write JSON are bounded to 128 KiB; a Uni
 
 A request canceled after sending may have committed. Retain the original body/key/proof for explicit foreground reconciliation, including after source deletion or a fresh same-principal login. Do not retry, refresh proofs, queue inventory writes or replay them on reconnect. Stock/unit mutation fingerprints, events, projections and responses share the domain transaction boundary, not credential mutation storage. Core physical CRUD must not require an AI worker.
 
+## Retained persistence and final-state publication
+
+`server/internal/store` contains the private Unit/Stock loaders and result validators. They read actual source and independent retained counters, not cached JSON or a synthetic revision one. They also require real bounded Item authority and the correct tracking mode. Unit null/supplied-empty fields remain distinct; all six retained lifecycle states are readable. Stock reads its current owner's complete measurement tuple without rescaling stored quantities. Missing source returns no resource; invalid UTF-8, field/counter/quantity/measurement state, mode mismatch or a failed query returns no partial DTO. These are internal transaction primitives, not a new unauthenticated read service or SQL handle exposed to HTTP.
+
+Migration 0010 appends the Unit owner/stable-ID lookup index, missing independent Unit counters/current payloads and canonical-pair Stock counters/current payloads. Only absent counters begin at one; existing counters and already materialized payload bytes/timestamps/frozen changes remain unchanged. A retained counter without source never recreates the Unit/balance. Zero balances, raw Unicode/control text, nullable serial/location and all source quantities remain exact. The stock primary key remains its real Item/location pair.
+
+Go validates every holding source and retained unit/stock counter after SQL but before migration/checksum commit. SQLite text length alone truncates at native NUL and is not full UTF-8 validation; noncanonical stock counter spelling must not silently become another revision-one identity. Invalid source/authority rolls back every pending DDL/index/backfill/checksum row, retaining the verified private pre-migration snapshot. Existing certified-root upgrades preserve epoch; explicit reference adoption still follows its documented epoch rotation. No pending upgrade repairs tracking modes, guesses conversion or publishes private/legacy FTS/OCR caches. This partial materialization does not enable all 22 sync entities.
+
+The existing private domain transaction can now materialize explicitly staged Unit/Stock upserts and independent null tombstones from final source. Repeated staging publishes one final version per identity, not intermediate values or historical cache text. Source, staged Item/location/search dependencies, retained counters, current/frozen rows, mutation audit and original response commit together; SQL, safe-counter/sequence exhaustion, late authorization or deferred COMMIT failure withholds the result and restores all state. Reconciliation can return an older frozen Stock after later changes/deletion without installing it as current authority.
+
+Each future producer must still validate its original proof, apply physical/lifecycle rules, append the actual immutable inventory events and explicitly stage every required dependency inside that transaction. The payload builder does not infer a complete receive/transfer/move workflow, create units/stock implicitly, or authorize a generic deletion of zero balances. Core services remain a separate implementation gate.
+
 ## Verification and remaining implementation
 
 ```sh
 uv run --frozen python -m unittest tests.test_holdings_contracts -v
 uv run --frozen python -m unittest discover -s tests -v
+go -C server test -count=1 ./internal/store -run '^TestHolding'
 npm --prefix web run api:generate
 npm --prefix web run api:check
 npm --prefix web run typecheck
@@ -88,4 +101,6 @@ make check-web
 
 Schema checks cover complete bounded Unit/Stock resources, unchanged offline payload identities, nullable/empty/omitted serial metadata, explicit creation/location/status shapes, complete live cursors, safe base quantities and measurement tuples, Item-versus-Unit/Stock proof scopes, affected-response identity, body/query limits and a required deletion revision. Strict generated-type fixtures reject missing location/proofs/Origin, caller identity/measurement fields, terminal creation, null notes, numeric serial/quantity text, incomplete transfer/adjustment/measurement/page data and unversioned deletion acknowledgements. Generated TypeScript cannot enforce numeric ranges, Unicode, nonempty partials, database authority or arithmetic by itself.
 
-Still pending are the independent unit/stock materialization/backfill and validated loaders, authoritative read/write/event/lifecycle services and all rollback/concurrency/overflow/search/location tests, HTTP dispatch/strict JSON/admission conformance, real runtime adapters, foreground review screens, QR/camera, physical holdings acceptance and complete sync. These are not marked passed by the schema/type tests above. Existing metadata/auth/browser coverage remains separate evidence. Physical NAS/phone/operator TLS/VPN/off-host recovery gates remain blocked until actually performed.
+Real SQLite persistence tests separately cover complete retained resources, source-versus-cache reads, actual owner/row authority, mode/measurement/Unicode/NUL bounds, zero balances, full-length canonical pairs and query plans. Fresh/reference/certified-root upgrades preserve source/counters/current/frozen bytes and roll back invalid rows, noncanonical authority and all pending DDL/ledger writes. Private publication fixtures replay exact deltas, coalesce final source and staged owner/location/search scopes, preserve source-only approved text and independent tombstones, and exercise every relevant source/projection/receipt/FTS failure plus late authorization/deferred COMMIT and exhausted counters/sequences. Those fixtures deliberately use test-only operations, not fictional public inventory services or invented physical-event acceptance.
+
+Still pending are authoritative read/write/event/lifecycle services and their complete original-proof/concurrency/physical-policy tests, HTTP dispatch/strict JSON/admission conformance, real runtime adapters, foreground review screens, QR/camera, physical holdings acceptance and complete sync. These are not marked passed by the persistence/schema/type checks above. Existing metadata/auth/browser coverage remains separate evidence. Physical NAS/phone/operator TLS/VPN/off-host recovery gates remain blocked until actually performed.

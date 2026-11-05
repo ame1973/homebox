@@ -446,8 +446,10 @@ func TestDomainCurrentProjectionBackfillPreservesLegacyRowsAndRevisions(t *testi
 		t.Fatal(err)
 	}
 	defer s.Close()
+	// Count this migration's location identities, not unrelated domains added by
+	// later backfills; their source/revision preservation has dedicated coverage.
 	if scalar[int](t, s.db, "SELECT entity_revision FROM current_projections WHERE entity_type='location'") != 7 ||
-		scalar[int](t, s.db, "SELECT COUNT(*) FROM current_projections") != 2 ||
+		scalar[int](t, s.db, "SELECT COUNT(*) FROM current_projections WHERE entity_type IN('location','location_event')") != 2 ||
 		scalar[int](t, s.db, "SELECT quantity_base FROM stock_balances") != 1500 ||
 		scalar[int](t, s.db, "SELECT COUNT(*) FROM sync_changes") != 0 {
 		t.Fatal("backfill rescaled inventory, lost revisions, or pretended to publish sync")

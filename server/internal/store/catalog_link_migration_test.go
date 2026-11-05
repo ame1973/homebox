@@ -3,7 +3,6 @@ package store
 import (
 	"encoding/json"
 	"errors"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -120,8 +119,15 @@ func TestCatalogLinkBackfillPreservesAlreadyMaterializedBytesAndRootEpoch(t *tes
 		t.Fatal(err)
 	}
 	defer s.Close()
-	if current := currentProjectionState(t, s); !reflect.DeepEqual(current, before) ||
-		scalar[string](t, s.db, "SELECT updated_at FROM current_projections WHERE entity_type='alias'") != "retained-time" ||
+	// Later additive backfills may add other domains; every previously frozen
+	// identity must still preserve its exact payload bytes and retained revision.
+	current := currentProjectionState(t, s)
+	for key, retained := range before {
+		if current[key] != retained {
+			t.Fatal("root upgrade rewrote an already materialized identity", key)
+		}
+	}
+	if scalar[string](t, s.db, "SELECT updated_at FROM current_projections WHERE entity_type='alias'") != "retained-time" ||
 		scalar[string](t, s.db, "SELECT dataset_epoch FROM sync_state") != epoch || scalar[string](t, s.db, "SELECT projection_json FROM sync_changes") != outbox ||
 		s.Report().From != 8 || s.Report().To < 9 || scalar[int](t, s.db, "SELECT MAX(version) FROM schema_migrations") != s.Report().To {
 		t.Fatal("root upgrade rewrote certified projection bytes, counter, frozen history or dataset epoch")
