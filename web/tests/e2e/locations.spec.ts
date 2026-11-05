@@ -266,3 +266,63 @@ test('keeps long real paths, native parent selection and review usable at 200 pe
   await expect(dialog).toHaveCount(0)
   await expect(input(page, text.name)).toHaveValue('新整理的文件箱')
 })
+
+test('hands browser Back between review and leave dialogs and aborts waiting without undoing a real commit', async ({ page, application }) => {
+  await provision(page, application)
+  const location = await seed(page, application.url, '等候中的文件箱', 'WAIT-01')
+  const writes = mutationRequests(page)
+  await page.goto(`/locations/${location.id}`)
+  await page.getByRole('link', { name: text.edit, exact: true }).click()
+  await input(page, text.description).fill('已送出並由伺服器提交的說明')
+  await page.getByRole('button', { name: text.review, exact: true }).click()
+  await page.evaluate(() => history.back())
+  let dialog = page.getByRole('alertdialog')
+  await expect(dialog).toHaveCount(1)
+  await expect(dialog.getByRole('button', { name: text.stay, exact: true })).toBeFocused()
+  await dialog.getByRole('button', { name: text.stay, exact: true }).click()
+  await expect(dialog.getByRole('heading', { name: text.reviewTitle, exact: true })).toBeFocused()
+  expect(writes).toHaveLength(0)
+
+  let committed: (() => void) | undefined
+  let release: (() => void) | undefined
+  let handled: (() => void) | undefined
+  const serverCommit = new Promise<void>((resolve) => { committed = resolve })
+  const held = new Promise<void>((resolve) => { release = resolve })
+  const routeHandled = new Promise<void>((resolve) => { handled = resolve })
+  await page.route(`**/api/v1/locations/${location.id}`, async (route) => {
+    if (route.request().method() !== 'PATCH') { await route.continue(); return }
+    const response = await route.fetch()
+    expect(response.status()).toBe(200)
+    committed?.()
+    await held
+    await route.abort('aborted')
+    handled?.()
+  })
+  try {
+    await dialog.getByRole('button', { name: text.confirmSave, exact: true }).click()
+    await serverCommit
+    await expect(dialog.getByRole('button', { name: text.pending, exact: true })).toBeDisabled()
+    await page.evaluate(() => history.back())
+    await expect(dialog).toHaveCount(1)
+    await expect(dialog.getByRole('button', { name: text.stay, exact: true })).toBeFocused()
+    await dialog.getByRole('button', { name: text.stay, exact: true }).click()
+    await expect(dialog.getByRole('button', { name: text.pending, exact: true })).toBeDisabled()
+    await expect(dialog.getByRole('heading', { name: text.reviewTitle, exact: true })).toBeFocused()
+    await page.keyboard.press('Escape')
+    await expect(dialog.getByRole('heading', { name: text.uncertain, exact: true })).toBeVisible()
+    release?.()
+    await routeHandled
+    expect(writes).toHaveLength(1)
+    await dialog.getByRole('button', { name: text.cancel, exact: true }).click()
+    await expect(dialog).toHaveCount(0)
+    await page.evaluate(() => history.back())
+    dialog = page.getByRole('alertdialog')
+    await dialog.getByRole('button', { name: text.leave, exact: true }).click()
+    await expect(page).toHaveURL(new RegExp(`/locations/${location.id}$`))
+    await expect(page.getByText('已送出並由伺服器提交的說明', { exact: true })).toBeVisible()
+    const latest = await page.request.get(`/api/v1/locations/${location.id}`)
+    expect(latest.status()).toBe(200)
+    expect(await latest.json()).toMatchObject({ revision: location.revision + 1, description: '已送出並由伺服器提交的說明' })
+    expect(writes).toHaveLength(1)
+  } finally { release?.() }
+})

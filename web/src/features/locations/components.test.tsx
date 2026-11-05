@@ -139,6 +139,8 @@ it('handles pending interruption, known rejection focus and uncertain explicit r
   const read = vi.fn().mockResolvedValue(undefined)
   const view = render(<LocationReviewDialog operation={work} tree={tree} online onReadCurrent={read} />)
   expect(screen.getByRole('button', { name: text.pending })).toBeDisabled()
+  fireEvent.keyDown(screen.getByRole('alertdialog'), { key: 'Tab' })
+  expect(work.abort).not.toHaveBeenCalled()
   fireEvent.keyDown(screen.getByRole('alertdialog'), { key: 'Escape' })
   expect(work.abort).toHaveBeenCalledTimes(1)
   await user.click(screen.getByRole('button', { name: text.stopWaiting }))

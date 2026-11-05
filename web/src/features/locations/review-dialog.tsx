@@ -44,8 +44,10 @@ export function LocationReviewDialog({ operation, tree, online, onReadCurrent }:
   const pending = operation.phase === 'pending'
   const uncertain = operation.phase === 'uncertain'
   const retryable = !operation.error || uncertain || ['CSRF_REJECTED', 'RATE_LIMITED', 'NETWORK_ERROR', 'REQUEST_ABORTED', 'REQUEST_TIMEOUT', 'SERVICE_UNAVAILABLE'].includes(operation.error.code)
+  // Capture locally: a freshly resumed modal can precede Radix's document listener.
   return <AlertDialog open={operation.open} onOpenChange={(open) => { if (!open) operation.dismiss() }}>
-    <AlertDialogContent onOpenAutoFocus={(event) => { event.preventDefault(); titleRef.current?.focus({ preventScroll: true }) }} onCloseAutoFocus={(event) => { event.preventDefault(); operation.restoreFocus() }} onEscapeKeyDown={(event) => { if (pending) { event.preventDefault(); operation.abort() } }}
+    <AlertDialogContent onOpenAutoFocus={(event) => { event.preventDefault(); titleRef.current?.focus({ preventScroll: true }) }} onCloseAutoFocus={(event) => { event.preventDefault(); operation.restoreFocus() }} onEscapeKeyDown={(event) => event.preventDefault()}
+      onKeyDownCapture={(event) => { if (event.key !== 'Escape') return; event.preventDefault(); event.stopPropagation(); if (pending) operation.abort(); else operation.dismiss() }}
       className="max-h-[calc(100dvh-2rem)] w-[calc(100%_-_2rem)] max-w-xl animate-none! overflow-y-auto p-6">
       <AlertDialogHeader className="place-items-start text-left"><AlertDialogTitle ref={titleRef} tabIndex={-1} className="rounded-sm text-xl [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-ring">{uncertain ? text.uncertain : text.reviewTitle}</AlertDialogTitle>
         <AlertDialogDescription className="text-base leading-relaxed">{uncertain ? text.uncertainHelp : command.kind === 'move' ? text.moveHelp : command.kind === 'archive' ? text.archiveHelp : command.kind === 'restore' ? text.restoreHelp : command.kind === 'delete' ? text.deleteHelp : text.reviewHelp}</AlertDialogDescription>

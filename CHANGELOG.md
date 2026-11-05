@@ -44,6 +44,8 @@
 
 ### Fixed
 
+- Handle the first location-review Escape synchronously after browser-Back modal handoff, before the UI library's effect-installed document listener is ready. Pending Escape interrupts local waiting without undoing a committed server write or generating a replacement request; add an actual commit/held-response/back/stay/leave browser regression.
+
 - Keep imported location IDs matching `new` distinct from the static create route through a safe detail escape without rewriting stored identity. Reject inconsistent live list/detail revisions before enabling writes. Preserve dialog layout at enlarged text sizes with shrinkable grid composition, start long reviews at visible static content, and avoid low-contrast enabled-opacity transitions without editing generated UI primitives.
 
 - Preserve optional request fields with server defaults in generated TypeScript using the official generator option, with minimal location/item create fixtures. Keep root location sort orders signed while constraining positive resource revisions independently of shared YAML anchors.
