@@ -58,6 +58,7 @@ const serverCodes = z.enum([
   'REVISION_CONFLICT', 'IDEMPOTENCY_EXPIRED', 'LOCATION_CODE_CONFLICT', 'LOCATION_CYCLE',
   'LOCATION_ARCHIVED', 'LOCATION_HAS_CHILDREN', 'LOCATION_IN_USE',
   'INVALID_TAXONOMY_URL', 'CATEGORY_CYCLE', 'CATEGORY_HAS_CHILDREN', 'TAG_NAME_CONFLICT',
+  'INVALID_CATALOG_URL', 'ITEM_HAS_HISTORY',
 ])
 const errorSchema = z.object({ error: z.object({
   code: serverCodes, request_id: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/).optional(),

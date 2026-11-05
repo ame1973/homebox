@@ -39,7 +39,7 @@ Usage:
 
 Database commands require exclusive access to a local, private data directory.
 Serve requires a real frontend build and an already migrated database.
-Authentication and public liveness are implemented; private domain APIs remain in development.
+Authentication, locations, taxonomy, and catalog APIs are implemented; remaining domains are in development.
 HTTP is restricted to direct loopback development; LAN/VPN requires trusted HTTPS.
 `
 

@@ -337,7 +337,7 @@ func TestHTTPWriteHeadersCannotBeMissingDuplicatedOrSubstituted(t *testing.T) {
 		t.Fatal("rejected requests mutated the session", err)
 	}
 	for _, version := range []string{supportedClientVersion, supportedClientVersion + "-dev"} {
-		r := writeRequest("/api/v1/items", "", cookie, csrf, "unsupported-route-key")
+		r := writeRequest("/api/v1/unimplemented-fixture-route", "", cookie, csrf, "unsupported-route-key")
 		r.Header.Set("X-HomeBox-Client-Version", version)
 		expectError(t, respond(authHandler(t, auth), r), http.StatusNotFound, "NOT_FOUND")
 	}

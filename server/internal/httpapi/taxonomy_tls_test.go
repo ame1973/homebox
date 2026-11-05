@@ -3,92 +3,16 @@ package httpapi
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"testing/fstest"
-	"time"
 
 	"homebox/internal/store"
 )
 
 func TestTaxonomyHTTPAllEightOperationsThroughVerifiedTLSAndCookieJar(t *testing.T) {
-	auth := newTestAuth(t)
-	setupAccount(t, auth, true)
-	server := httptest.NewUnstartedServer(nil)
-	origin := "https://" + server.Listener.Addr().String()
-	handler, err := New(Config{Auth: auth, PublicOrigin: origin, Assets: fstest.MapFS{"index.html": {Data: []byte("<main>App</main>")}}})
-	if err != nil {
-		server.Close()
-		t.Fatal(err)
-	}
-	server.Config.Handler = handler
-	server.StartTLS()
-	defer server.Close()
-	client := server.Client() // Trust only this server's generated test certificate.
-	client.Timeout = 5 * time.Second
-	client.Jar, err = cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	csrf := ""
-	call := func(method, path, body, key, revision string) *httptest.ResponseRecorder {
-		t.Helper()
-		r, err := http.NewRequestWithContext(t.Context(), method, server.URL+path, strings.NewReader(body))
-		if err != nil {
-			t.Fatal(err)
-		}
-		r.Header.Set("Origin", origin)
-		if body != "" {
-			r.Header.Set("Content-Type", "application/json")
-		}
-		if method != http.MethodGet && path != "/api/v1/auth/login" {
-			r.Header.Set("X-CSRF-Token", csrf)
-			r.Header.Set("Idempotency-Key", key)
-			r.Header.Set("X-HomeBox-Client-Version", supportedClientVersion)
-		}
-		if revision != "" {
-			r.Header.Set("If-Match", revision)
-		}
-		response, err := client.Do(r)
-		if err != nil {
-			t.Fatal(err)
-		}
-		data, err := io.ReadAll(response.Body)
-		_ = response.Body.Close()
-		if err != nil || response.TLS == nil || len(response.TLS.VerifiedChains) == 0 || response.Header.Get("Strict-Transport-Security") == "" || response.Header.Get("Cache-Control") != "no-store" || response.Header.Get("X-Request-ID") == "" {
-			t.Fatal("socket reply did not retain its verified TLS and private response boundary", err)
-		}
-		if (strings.HasPrefix(path, "/api/v1/categories") || strings.HasPrefix(path, "/api/v1/tags")) && response.Header.Get("Set-Cookie") != "" {
-			t.Fatal("taxonomy socket reply changed its session cookie")
-		}
-		// Retain the actual socket status/headers/bytes for shared reply assertions.
-		captured := httptest.NewRecorder()
-		captured.Code = response.StatusCode
-		for name, values := range response.Header {
-			captured.Header()[name] = values
-		}
-		_, _ = captured.Body.Write(data)
-		return captured
-	}
-	login := func() {
-		t.Helper()
-		response := call(http.MethodPost, "/api/v1/auth/login", fmt.Sprintf(`{"username":"管理員","password":%q}`, changedPassword), "", "")
-		cookies := response.Result().Cookies()
-		if response.Code != 200 || len(cookies) != 1 || !cookies[0].Secure || !cookies[0].HttpOnly || cookies[0].SameSite != http.SameSiteStrictMode {
-			t.Fatal("verified TLS login did not deliver a secure opaque session")
-		}
-		response = call(http.MethodGet, "/api/v1/auth/csrf", "", "", "")
-		var token struct{ Token string }
-		if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &token) != nil || token.Token == "" {
-			t.Fatal("actual session could not obtain its in-memory CSRF proof")
-		}
-		csrf = token.Token
-	}
-	login()
+	call, login := domainTLSFixture(t)
 	rootBody := `{"name":"  家用品 😀 é  ","parent_id":null}`
 	created := call(http.MethodPost, "/api/v1/categories", rootBody, "tls-root-create", "")
 	root := taxonomyReply[store.Category](t, created)
@@ -135,8 +59,7 @@ func TestTaxonomyHTTPAllEightOperationsThroughVerifiedTLSAndCookieJar(t *testing
 	}
 	expectError(t, call(http.MethodGet, "/api/v1/categories", "", "", ""), 401, "AUTHENTICATION_REQUIRED")
 	login()
-	// A fresh active session can reconcile deleted/changed resources by the
-	// original principal-scoped keys; it does not turn old replies into current data.
+	// Fresh login reconciles original keys, never turning old replies into current data.
 	replayed := call(http.MethodPost, "/api/v1/categories", rootBody, "tls-root-create", "")
 	if replayed.Code != 200 || replayed.Body.String() != created.Body.String() || replayed.Header().Get("ETag") != `"1"` {
 		t.Fatal("fresh TLS session could not retrieve the unchanged historical category acknowledgement")

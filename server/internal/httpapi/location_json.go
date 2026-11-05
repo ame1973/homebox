@@ -2,10 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
-	"math/big"
 	"net/http"
-	"strconv"
-	"strings"
 
 	"homebox/internal/store"
 )
@@ -57,42 +54,6 @@ func readLocationFields(w http.ResponseWriter, r *http.Request, requestID string
 		input.SortOrder = &value
 	}
 	return input, true
-}
-
-// JSON Schema integers include integral decimal/exponent forms. Parse exactly,
-// not through float64 (which could round a fractional or unsafe value to an int).
-// Lexical/exponent bounds keep hostile numeric representations cheap to reject.
-func exactSafeInteger(raw json.RawMessage) (int64, bool) {
-	if len(raw) == 0 || len(raw) > 128 || !json.Valid(raw) || raw[0] != '-' && (raw[0] < '0' || raw[0] > '9') {
-		return 0, false
-	}
-	text := string(raw)
-	coefficient := text
-	index := strings.IndexAny(text, "eE")
-	if index >= 0 {
-		coefficient = text[:index]
-	}
-	zero := true
-	for _, character := range coefficient {
-		if character >= '1' && character <= '9' {
-			zero = false
-		}
-	}
-	if zero {
-		return 0, true
-	}
-	if index >= 0 {
-		exponent, err := strconv.ParseInt(text[index+1:], 10, 64)
-		if err != nil || exponent < -256 || exponent > 256 {
-			return 0, false
-		}
-	}
-	value, ok := new(big.Rat).SetString(text)
-	if !ok || !value.IsInt() || !value.Num().IsInt64() {
-		return 0, false
-	}
-	number := value.Num().Int64()
-	return number, number >= -maxJSONInteger && number <= maxJSONInteger
 }
 
 func readLocationMove(w http.ResponseWriter, r *http.Request, requestID string) (*string, bool) {

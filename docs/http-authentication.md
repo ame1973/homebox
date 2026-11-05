@@ -1,6 +1,6 @@
 # HTTP Authentication and Transport
 
-**Development status:** all seven authentication API routes, their transport/security checks, the React account/location/taxonomy workflows, [seven location HTTP operations](locations.md), and [eight category/tag HTTP operations](taxonomy.md) are implemented. Privileged reauthentication consumers, other inventory/domain routes, offline PWA, and production deployment are not complete. These commands document working server capabilities, not QNAP or physical-device acceptance.
+**Development status:** all seven authentication API routes, their transport/security checks, the React account/location/taxonomy workflows, [seven location HTTP operations](locations.md), [eight category/tag HTTP operations](taxonomy.md), and [six catalog HTTP operations](catalog.md) are implemented. Catalog browser adapters/screens, privileged reauthentication consumers, other inventory/domain routes, offline PWA, and production deployment are not complete. These commands document working server capabilities, not QNAP or physical-device acceptance.
 
 ## Start locally
 
@@ -123,4 +123,4 @@ make check
 make test-go-pure
 ```
 
-Tests exercise actual TLS sockets with verified test certificates/cookie jars, all seven auth routes, CLI TLS/proxy wiring, same-origin/CSRF/client-version/rate limits, mandatory password change, strict parsing, safe acknowledgement retries, and graceful lock release. The real-server browser suite additionally drives setup/login/rotation/logout, dirty navigation/focus, no offline replay, 200% text, lazy-chunk recovery, and a committed mutation whose response is deliberately malformed. Each account test has its own private server/database/bootstrap/rate state; credential traces/videos/automatic failure images are disabled. These automated checks are not physical iPhone/Android/QNAP/TLS/VPN acceptance or complete domain HTTP conformance.
+Tests exercise actual TLS sockets with verified test certificates/cookie jars, all seven auth routes, six catalog operations, CLI TLS/proxy wiring, same-origin/CSRF/client-version/rate limits, mandatory password change, strict parsing, safe acknowledgement retries, and graceful lock release. The real-server browser suite additionally drives setup/login/rotation/logout, dirty navigation/focus, no offline replay, 200% text, lazy-chunk recovery, and a committed mutation whose response is deliberately malformed. Each account test has its own private server/database/bootstrap/rate state; credential traces/videos/automatic failure images are disabled. These automated checks are not physical iPhone/Android/QNAP/TLS/VPN acceptance or complete domain HTTP conformance.

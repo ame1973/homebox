@@ -432,6 +432,7 @@ class OpenAPIContractTests(unittest.TestCase):
 
     def test_item_date_and_text_filters_preserve_strict_civil_bounds_and_all_query_fields(self):
         operation = API["paths"]["/items"]["get"]
+        self.assertEqual(16384, operation["x-max-query-bytes"])
         params = {entry["name"]: entry["schema"] for entry in operation["parameters"]}
         for field in ["from", "to"]:
             check = Draft202012Validator(params[field], format_checker=FORMAT)
