@@ -1,6 +1,6 @@
 # Categories and Tags
 
-**Implementation status:** executable contracts, the authoritative Go/SQLite category/tag transaction services, and dependent item/link/approved-search publication are implemented and tested. HTTP handlers, signed taxonomy-list continuations, browser adapters, and settings screens remain pending; the serving router does not expose these taxonomy operations yet. Complete item/stock/media/search/worker workflows and 22-entity sync remain in progress.
+**Implementation status:** executable contracts, the authoritative Go/SQLite category/tag transaction services, signed live metadata pages, and dependent item/link/approved-search publication are implemented and tested. HTTP handlers, browser adapters, and settings screens remain pending; the serving router does not expose these taxonomy operations yet. Complete item/stock/media/search/worker workflows and 22-entity sync remain in progress.
 
 ## Identity and names
 
@@ -32,7 +32,9 @@ Deletion never implicitly deletes a category subtree. Remove or reparent childre
 
 ## Transaction service
 
-`store.NewTaxonomy(auth)` binds the module to the existing private authentication store. It offers authenticated category/tag detail and internal bounded stable-ID pages plus create/partial-edit/delete transaction methods. HTTP still owns Origin/CSRF/version/admission; unsigned `NextID` is internal state, not a public cursor. Category commands preserve omitted versus explicit-null parents through the internal presence wrapper, never a wire wrapper.
+`store.NewTaxonomy(auth)` binds the module to the existing private authentication store. It offers authenticated category/tag detail and internal bounded stable-ID pages plus create/partial-edit/delete transaction methods. `PageCategories` and `PageTags` return public `data`/`next_cursor` lists; unsigned `NextID` stays internal. HTTP still owns Origin/CSRF/version/admission. Category commands preserve omitted versus explicit-null parents through the internal presence wrapper, never a wire wrapper.
+
+Location, category, and tag pages share one private cursor codec with distinct MAC purposes. Each continuation binds the administrator, dataset epoch, entity/list kind, page size, last ID, and a 15-minute validity window. It contains no session credential, never authorizes itself, and can continue after a fresh completed login by the same principal. Revoked/expired sessions, mandatory password changes, restored epochs, cross-list tokens, altered page sizes, tampering, and noncanonical encodings fail closed. The read and session update commit before a page or continuation is released; a failed read/commit never returns partial metadata. These are live lists: concurrent edits/deletions may change later pages. They are not a substitute for the separate frozen-sync protocol.
 
 The shared mutation runner freezes principal/epoch-scoped replies and immutable events only after every source write, current/outbox projection, and derived FTS write succeeds. Each identity is staged once; final-state search materialization occurs during flush, not when an intermediate source field first changes. Failed statements, late authorization changes, exhausted counters/sequences, or deferred commit failure return no successful DTO/acknowledgement and roll back all dependent rows.
 

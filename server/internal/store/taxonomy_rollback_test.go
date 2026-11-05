@@ -60,6 +60,9 @@ func TestTaxonomyCorruptReadDoesNotReturnPartialPagesOrResources(t *testing.T) {
 				if page, err := taxonomy.ListCategories(t.Context(), token, "", 100); !errors.Is(err, ErrDomainState) || len(page.Data) != 0 {
 					t.Fatal("corrupt category read published a partial page", err)
 				}
+				if page, err := taxonomy.PageCategories(t.Context(), token, "", 100); !errors.Is(err, ErrDomainState) || page.Data != nil || page.NextCursor != nil {
+					t.Fatal("corrupt category read published signed continuation data", err)
+				}
 			} else {
 				execSQL(t, s.db, "UPDATE tags SET name='' WHERE id=?", tag.ID)
 				if value, err := taxonomy.GetTag(t.Context(), token, tag.ID); !errors.Is(err, ErrDomainState) || value.ID != "" {
@@ -67,6 +70,9 @@ func TestTaxonomyCorruptReadDoesNotReturnPartialPagesOrResources(t *testing.T) {
 				}
 				if page, err := taxonomy.ListTags(t.Context(), token, "", 100); !errors.Is(err, ErrDomainState) || len(page.Data) != 0 {
 					t.Fatal("corrupt tag read published a partial page", err)
+				}
+				if page, err := taxonomy.PageTags(t.Context(), token, "", 100); !errors.Is(err, ErrDomainState) || page.Data != nil || page.NextCursor != nil {
+					t.Fatal("corrupt tag read published signed continuation data", err)
 				}
 			}
 		})

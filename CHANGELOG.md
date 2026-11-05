@@ -4,6 +4,8 @@
 
 ### Added
 
+- Add signed category/tag live pages using the location cursor codec with independent entity purposes, principal/epoch/page-size binding, canonical encoding, 15-minute expiry, and transactional authorization. Verify cross-list rejection, fresh-login continuation, restored/revoked/mandatory/expired denial, live deletion visibility, and statement/commit/private-key failures without partial results. Preserve the existing location cursor wire format; HTTP and browser taxonomy integration remain separate.
+
 - Add authoritative category/tag transaction services with exact names, reviewed parent/target proofs, acyclic category moves, bounded authenticated internal pages, no-op receipts, principal/epoch replay, category-reference clearing and independent tag-link tombstones without deleting inventory. Publish final-state item/search dependencies atomically, rebuilding FTS from manual/realized fields and approved free OCR rather than raw, rejected, historical-overridden or cached text. Add exact delta-replay, deep/concurrent mutation, dependent-write/late-auth/deferred-commit/overflow and source-contamination tests; taxonomy HTTP/adapters/settings and full sync remain pending.
 
 - Add forward-only migration 0008 for indexed category-parent/tag-membership lookups and retained-counter category/tag/item-tag materialization. Seed dependent item/search counters without publishing unverified legacy cache text or fake changes. Verify canonical Unicode link keys, source/quantity preservation, index plans, and full DDL/ledger rollback on unsafe revisions; complete sync and taxonomy transaction/HTTP workflows remain separately gated.

@@ -101,7 +101,7 @@ func TestLocationCursorExpiryAndDatasetResetFailClosed(t *testing.T) {
 			want := ErrInvalidCursor
 			switch state {
 			case "expired":
-				*now = now.Add(locationCursorLifetime)
+				*now = now.Add(metadataCursorLifetime)
 			case "epoch":
 				execSQL(t, s.db, "UPDATE sync_state SET dataset_epoch='restored-epoch'")
 				if _, err = locations.Page(t.Context(), token, *first.NextCursor, 1); !errors.Is(err, ErrAuthentication) {
@@ -127,31 +127,31 @@ func TestLocationCursorPrivateKeyAndPayloadScopesAreIndependent(t *testing.T) {
 	}
 	now := a.now()
 	epoch := scalar[string](t, s.db, "SELECT dataset_epoch FROM sync_state")
-	valid := locationCursor{AdminID: session.Admin.ID, Epoch: epoch, AfterID: "location", Limit: 10, Issued: now.Unix(), Expires: now.Add(locationCursorLifetime).Unix()}
-	encoded, err := locations.encodeLocationCursor(valid)
+	valid := metadataCursor{AdminID: session.Admin.ID, Epoch: epoch, AfterID: "location", Limit: 10, Issued: now.Unix(), Expires: now.Add(metadataCursorLifetime).Unix()}
+	encoded, err := encodeMetadataCursor(locations.auth, locationCursorPurpose, valid)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if value, err := locations.decodeLocationCursor(encoded, session.Admin.ID, epoch, 10, now); err != nil || !reflect.DeepEqual(value, valid) {
+	if value, err := decodeMetadataCursor(locations.auth, locationCursorPurpose, encoded, session.Admin.ID, epoch, 10, now); err != nil || !reflect.DeepEqual(value, valid) {
 		t.Fatal("valid signed payload failed", err)
 	}
 	_, other, _, _ := locationFixture(t)
-	if _, err = other.decodeLocationCursor(encoded, session.Admin.ID, epoch, 10, now); !errors.Is(err, ErrInvalidCursor) {
+	if _, err = decodeMetadataCursor(other.auth, locationCursorPurpose, encoded, session.Admin.ID, epoch, 10, now); !errors.Is(err, ErrInvalidCursor) {
 		t.Fatal("a different server key accepted the cursor", err)
 	}
-	for _, change := range []func(*locationCursor){
-		func(v *locationCursor) { v.AdminID = "another-principal" }, func(v *locationCursor) { v.Epoch = "another-epoch" },
-		func(v *locationCursor) { v.AfterID = "" }, func(v *locationCursor) { v.Issued = now.Unix() + 1; v.Expires++ },
-		func(v *locationCursor) { v.Issued = -1 }, func(v *locationCursor) { v.Expires = v.Issued },
-		func(v *locationCursor) { v.Expires++ },
+	for _, change := range []func(*metadataCursor){
+		func(v *metadataCursor) { v.AdminID = "another-principal" }, func(v *metadataCursor) { v.Epoch = "another-epoch" },
+		func(v *metadataCursor) { v.AfterID = "" }, func(v *metadataCursor) { v.Issued = now.Unix() + 1; v.Expires++ },
+		func(v *metadataCursor) { v.Issued = -1 }, func(v *metadataCursor) { v.Expires = v.Issued },
+		func(v *metadataCursor) { v.Expires++ },
 	} {
 		value := valid
 		change(&value)
-		cursor, err := locations.encodeLocationCursor(value)
+		cursor, err := encodeMetadataCursor(locations.auth, locationCursorPurpose, value)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err = locations.decodeLocationCursor(cursor, session.Admin.ID, epoch, 10, now); !errors.Is(err, ErrInvalidCursor) {
+		if _, err = decodeMetadataCursor(locations.auth, locationCursorPurpose, cursor, session.Admin.ID, epoch, 10, now); !errors.Is(err, ErrInvalidCursor) {
 			t.Fatal("incorrectly scoped server-signed cursor was accepted", err)
 		}
 	}
@@ -159,21 +159,21 @@ func TestLocationCursorPrivateKeyAndPayloadScopesAreIndependent(t *testing.T) {
 	body, _ := json.Marshal(valid)
 	for _, purpose := range []string{"csrf-token-v1", "reauth-token-v2", "auth-request-v2"} {
 		wrong := base64.RawURLEncoding.EncodeToString(body) + "." + base64.RawURLEncoding.EncodeToString(a.authMAC("", purpose, body))
-		if _, err = locations.decodeLocationCursor(wrong, session.Admin.ID, epoch, 10, now); !errors.Is(err, ErrInvalidCursor) {
+		if _, err = decodeMetadataCursor(locations.auth, locationCursorPurpose, wrong, session.Admin.ID, epoch, 10, now); !errors.Is(err, ErrInvalidCursor) {
 			t.Fatal("credential MAC namespace collided with a list cursor", err)
 		}
 	}
 	for _, body := range []string{`[]`, `{"unknown":true}`, `not-json`, string(body) + `{}`} {
 		cursor := base64.RawURLEncoding.EncodeToString([]byte(body)) + "." + base64.RawURLEncoding.EncodeToString(a.authMAC("", "locations-tree-cursor-v1", []byte(body)))
-		if _, err = locations.decodeLocationCursor(cursor, session.Admin.ID, epoch, 10, now); !errors.Is(err, ErrInvalidCursor) {
+		if _, err = decodeMetadataCursor(locations.auth, locationCursorPurpose, cursor, session.Admin.ID, epoch, 10, now); !errors.Is(err, ErrInvalidCursor) {
 			t.Fatal("invalid server-signed payload was accepted", err)
 		}
 	}
 	a.serverSecret = nil
-	if _, err = locations.encodeLocationCursor(valid); !errors.Is(err, ErrDomainState) {
+	if _, err = encodeMetadataCursor(locations.auth, locationCursorPurpose, valid); !errors.Is(err, ErrDomainState) {
 		t.Fatal("missing private signer key did not fail closed", err)
 	}
-	if _, err = locations.decodeLocationCursor(encoded, session.Admin.ID, epoch, 10, now); !errors.Is(err, ErrDomainState) {
+	if _, err = decodeMetadataCursor(locations.auth, locationCursorPurpose, encoded, session.Admin.ID, epoch, 10, now); !errors.Is(err, ErrDomainState) {
 		t.Fatal("missing private verifier key did not fail closed", err)
 	}
 }

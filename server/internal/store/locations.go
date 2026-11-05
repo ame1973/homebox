@@ -60,10 +60,7 @@ type LocationPatch struct {
 	Description *string    `json:"description,omitempty"`
 }
 
-type LocationPage struct {
-	Data   []Location `json:"data"`
-	NextID string     `json:"-"`
-}
+type LocationPage = metadataPage[Location]
 
 // Locations keeps authorization, source writes, and projection publication behind
 // the store boundary. HTTP still owns Origin/CSRF/version/admission checks.

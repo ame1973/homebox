@@ -33,10 +33,7 @@ type CategoryPatch struct {
 	ParentID NullableID `json:"parent_id"`
 }
 
-type CategoryPage struct {
-	Data   []Category `json:"data"`
-	NextID string     `json:"-"`
-}
+type CategoryPage = metadataPage[Category]
 
 type TagData struct {
 	ID   string `json:"id"`
@@ -48,10 +45,7 @@ type Tag struct {
 	Revision int64 `json:"revision"`
 }
 
-type TagPage struct {
-	Data   []Tag  `json:"data"`
-	NextID string `json:"-"`
-}
+type TagPage = metadataPage[Tag]
 
 // Taxonomy owns classification mutations inside the existing private store.
 // HTTP must still enforce Origin/CSRF/version/admission before calling it.
@@ -91,28 +85,32 @@ func (taxonomy *Taxonomy) ListCategories(ctx context.Context, token, afterID str
 		return CategoryPage{}, ErrDomainInput
 	}
 	return readDomain(ctx, taxonomy.auth, token, func(tx *sql.Tx) (CategoryPage, error) {
-		rows, err := tx.QueryContext(ctx, categorySelect+" WHERE c.id>? ORDER BY c.id LIMIT ?", afterID, limit+1)
+		return listCategories(ctx, tx, afterID, limit)
+	})
+}
+
+func listCategories(ctx context.Context, tx *sql.Tx, afterID string, limit int) (CategoryPage, error) {
+	rows, err := tx.QueryContext(ctx, categorySelect+" WHERE c.id>? ORDER BY c.id LIMIT ?", afterID, limit+1)
+	if err != nil {
+		return CategoryPage{}, err
+	}
+	defer rows.Close()
+	page := CategoryPage{Data: make([]Category, 0)}
+	for rows.Next() {
+		value, err := scanCategory(rows)
 		if err != nil {
 			return CategoryPage{}, err
 		}
-		defer rows.Close()
-		page := CategoryPage{Data: make([]Category, 0)}
-		for rows.Next() {
-			value, err := scanCategory(rows)
-			if err != nil {
-				return CategoryPage{}, err
-			}
-			page.Data = append(page.Data, value)
-		}
-		if err := rows.Err(); err != nil {
-			return CategoryPage{}, err
-		}
-		if len(page.Data) > limit {
-			page.Data = page.Data[:limit]
-			page.NextID = page.Data[limit-1].ID
-		}
-		return page, nil
-	})
+		page.Data = append(page.Data, value)
+	}
+	if err := rows.Err(); err != nil {
+		return CategoryPage{}, err
+	}
+	if len(page.Data) > limit {
+		page.Data = page.Data[:limit]
+		page.NextID = page.Data[limit-1].ID
+	}
+	return page, nil
 }
 
 func (taxonomy *Taxonomy) ListTags(ctx context.Context, token, afterID string, limit int) (TagPage, error) {
@@ -120,28 +118,32 @@ func (taxonomy *Taxonomy) ListTags(ctx context.Context, token, afterID string, l
 		return TagPage{}, ErrDomainInput
 	}
 	return readDomain(ctx, taxonomy.auth, token, func(tx *sql.Tx) (TagPage, error) {
-		rows, err := tx.QueryContext(ctx, tagSelect+" WHERE t.id>? ORDER BY t.id LIMIT ?", afterID, limit+1)
+		return listTags(ctx, tx, afterID, limit)
+	})
+}
+
+func listTags(ctx context.Context, tx *sql.Tx, afterID string, limit int) (TagPage, error) {
+	rows, err := tx.QueryContext(ctx, tagSelect+" WHERE t.id>? ORDER BY t.id LIMIT ?", afterID, limit+1)
+	if err != nil {
+		return TagPage{}, err
+	}
+	defer rows.Close()
+	page := TagPage{Data: make([]Tag, 0)}
+	for rows.Next() {
+		value, err := scanTag(rows)
 		if err != nil {
 			return TagPage{}, err
 		}
-		defer rows.Close()
-		page := TagPage{Data: make([]Tag, 0)}
-		for rows.Next() {
-			value, err := scanTag(rows)
-			if err != nil {
-				return TagPage{}, err
-			}
-			page.Data = append(page.Data, value)
-		}
-		if err := rows.Err(); err != nil {
-			return TagPage{}, err
-		}
-		if len(page.Data) > limit {
-			page.Data = page.Data[:limit]
-			page.NextID = page.Data[limit-1].ID
-		}
-		return page, nil
-	})
+		page.Data = append(page.Data, value)
+	}
+	if err := rows.Err(); err != nil {
+		return TagPage{}, err
+	}
+	if len(page.Data) > limit {
+		page.Data = page.Data[:limit]
+		page.NextID = page.Data[limit-1].ID
+	}
+	return page, nil
 }
 
 func validTaxonomyPage(afterID string, limit int) bool {
