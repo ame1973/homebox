@@ -82,7 +82,24 @@ const missingCategoryOrigin: CategoryCreateHeaders = { 'X-CSRF-Token': 'csrf-fix
 // @ts-expect-error Tag names are not nullable.
 const nullTag: components['schemas']['TagWrite'] = { name: null }
 
-void [rootCategoryHeaders, childCategoryHeaders, categoryCreate, categoryMove, categoryRename, category, tag,
+declare const createCategory: typeof import('../src/lib/api/taxonomy').createCategory
+declare const createTag: typeof import('../src/lib/api/taxonomy').createTag
+declare const patchCategory: typeof import('../src/lib/api/taxonomy').patchCategory
+const rootCategory = createCategory({ name: 'Category' }, writeContext)
+const childCategory = createCategory({ name: 'Child', parent_id: 'parent' }, { ...writeContext, expectedRevision: 3 })
+const createNamedTag = createTag({ name: 'Tag' }, writeContext)
+const patchCategoryParent = patchCategory('category', { parent_id: null }, { ...writeContext, expectedRevision: 1 })
+// @ts-expect-error Child categories require the original reviewed parent proof.
+const unprovenCategoryChild = createCategory({ name: 'Child', parent_id: 'parent' }, writeContext)
+// @ts-expect-error Root categories cannot attach an unrelated aggregate proof.
+const unrelatedCategoryProof = createCategory({ name: 'Root' }, { ...writeContext, expectedRevision: 1 })
+// @ts-expect-error Tag creation has no parent/target aggregate precondition.
+const unrelatedTagProof = createTag({ name: 'Tag' }, { ...writeContext, expectedRevision: 1 })
+// @ts-expect-error Patches require an original target proof even for root moves.
+const unprovenCategoryMove = patchCategory('category', { parent_id: null }, writeContext)
+
+void [rootCategory, childCategory, createNamedTag, patchCategoryParent, unprovenCategoryChild, unrelatedCategoryProof, unrelatedTagProof, unprovenCategoryMove,
+  rootCategoryHeaders, childCategoryHeaders, categoryCreate, categoryMove, categoryRename, category, tag,
   missingCategoryName, missingCategoryParent, categoryParentWrapper, missingCategoryOrigin, nullTag,
   createRoot, createChild, unprovenChild, unrelatedRootProof,
   invalidDelete, missingRevision, invalidQuantity, authHeaders, noOrigin, noCSRF, rawCredentialAdmin, hashLogin,

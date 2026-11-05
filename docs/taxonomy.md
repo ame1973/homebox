@@ -1,6 +1,6 @@
 # Categories and Tags
 
-**Implementation status:** the eight category/tag HTTP operations below, signed live metadata pages, authoritative Go/SQLite transaction services, and dependent item/link/approved-search publication are implemented and tested. Browser adapters and settings screens remain pending. Complete item/stock/media/search/worker workflows and 22-entity sync remain in progress.
+**Implementation status:** the eight category/tag HTTP operations below, stateless typed browser adapters, signed live metadata pages, authoritative Go/SQLite transaction services, and dependent item/link/approved-search publication are implemented and tested. Settings screens remain pending. Complete item/stock/media/search/worker workflows and 22-entity sync remain in progress.
 
 ## Identity and names
 
@@ -35,6 +35,14 @@ For example, after authenticating and obtaining an in-memory CSRF token, send a 
 A category cannot point to itself or a descendant. Reparenting changes a stable parent link, not item identity or holdings. Category aggregate revisions cover changes in the branch and its classification membership. Tag revisions also cover item-tag membership, protecting a reviewed detach/delete scope. Touch affected ancestors once, not every unchanged descendant. New child creation verifies the original parent proof; rename, move, and delete verify the original target proof. Concurrent membership changes must not silently expand an old deletion/reclassification review.
 
 Deletion never implicitly deletes a category subtree. Remove or reparent children explicitly first. Deleting a category leaf clears category references on assigned items atomically. Deleting a tag removes only that tag's item links. Counters/tombstones retain old identities so a later same-name tag with a different ID does not acquire an earlier tag's meaning.
+
+## Browser adapter boundary
+
+`web/src/lib/api/taxonomy.ts` exposes explicit category/tag page, create, patch and delete functions backed by the generated contract. It deliberately provides no uncontracted single-resource GET. Schemas reject unknown/private fields, invalid Unicode, unsafe revisions, self-parent resources, duplicate page identities, invalid nullable-parent shapes and empty patches. Names preserve exact case, whitespace and Unicode normalization. Resource replies require the requested identity, matching strong ETag and original/no-op-or-next revision; new resources start at revision one and deletion acknowledgements advance the original target once.
+
+Category-create overloads require a reviewed parent proof for a child and exclude unrelated proofs for roots; tag creation likewise excludes unrelated proofs. Runtime validation also protects JavaScript callers. The caller supplies the original key, CSRF token, revision and AbortSignal. Each call makes one request, with eight-second reads and thirty-second writes, no implicit pagination, token refresh, rebase, retry, queue, or storage. Opaque cursors are encoded as query values, never interpreted as extra parameters. Safe errors retain only allowlisted metadata, not server messages/details. A frozen acknowledgement is not a current-state cache update.
+
+Location/category/tag adapters share the same Unicode, path, revision, acknowledgement, root/child-header and versioned-response primitives. Location's reserved `tree` read path remains location-specific; supported taxonomy IDs such as `new` and `tree` are not rewritten. Settings screens and persistent/offline drafts are still separate unfinished work.
 
 ## Transaction service
 
