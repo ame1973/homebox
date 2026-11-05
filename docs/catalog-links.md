@@ -1,6 +1,6 @@
 # Catalog Links and Tag Membership
 
-**Implementation status:** the root executable contracts, generated browser types and schema/type regression checks below are defined. The owned-link transaction services, checksum/normalization implementation, HTTP handlers, browser adapters and maintenance screens are not yet implemented. Passing these contracts does not make those routes available. The separate [catalog metadata workflows](catalog.md) are functional without an AI worker.
+**Implementation status:** the root executable contracts, generated browser types, schema/type regression checks and dependency-free Go barcode validator are implemented. The owned-link transaction services, authoritative HTTP integration, browser adapters and maintenance screens are not yet implemented. Passing these checks does not make those routes available. The separate [catalog metadata workflows](catalog.md) are functional without an AI worker.
 
 ## Independent identity and immutable ownership
 
@@ -29,7 +29,13 @@ The supported symbologies retain their existing names:
 - `CODE_128`: 1–512 ASCII characters, including decoder-provided ASCII controls; preserve the exact decoded string.
 - `QR_CODE` and `OTHER`: preserve valid exact Unicode text. A stored product QR is not a HomeBox location/unit QR or permission to navigate an external URL/execute an inventory action.
 
-JSON Schema enforces enum, type, width and ASCII shape. It does **not** perform GTIN arithmetic, compare derived strings, reject lone UTF-16 surrogate repair at the HTTP boundary, or certify authoritative normalization. The `x-runtime-validation` annotation records that required implementation gate; checksum tests must run against the real future normalizer before claiming support.
+JSON Schema enforces enum, type, width and ASCII shape. It does **not** perform GTIN arithmetic, compare derived strings, reject lone UTF-16 surrogate repair at the HTTP boundary, or certify authoritative normalization. The `x-runtime-validation` annotation records the required authoritative integration gate; the real Go validator is tested separately below, not certified by a schema vector.
+
+### Go validator
+
+`server/internal/barcode.Normalize(symbology, raw)` validates and returns the exact input string or the static `barcode.ErrInvalid` error with no retained value. It bounds raw bytes before UTF-8/rune scanning, supports the seven contracted symbologies, checks EAN/JAN/UPC-A arithmetic, and validates all UPC-E expansion cases plus number systems 0/1 without replacing the compressed string. Code128 ASCII controls and QR/OTHER Unicode remain exact. No database, network, UI navigation, unique-item lookup, stock mutation or AI worker is involved.
+
+Fixed independent GTIN/UPC-E vectors, every single-digit EAN/UPC-A substitution, every UPC-E check-digit error, all compression branches, Unicode/ASCII/width/unsafe-repair boundaries and fuzz invariants exercise the actual implementation. Checksum validity does not certify GS1 allocation, ownership, a unique item, or a unique physical unit. The future transaction service must call this validator rather than trusting a client/schema result; its per-owner uniqueness, rollback, publication and original-proof requirements remain separate.
 
 ## Proof scopes and acknowledgements
 
@@ -60,6 +66,8 @@ Source changes, owned/owner/tag/search counters, final current/frozen projection
 
 ```sh
 uv run --frozen python -m unittest tests.test_catalog_links_contracts -v
+go -C server test -race -count=1 -cover ./internal/barcode
+go -C server test ./internal/barcode -run '^$' -fuzz FuzzNormalize -fuzztime=3s -parallel=2
 uv run --frozen python -m unittest discover -s tests -v
 npm --prefix web run api:generate
 npm --prefix web run typecheck
@@ -68,4 +76,4 @@ make check-web
 
 These checks cover complete bounded DTOs/offline shape, immutable ownership, exact fields, atomic barcode-pair and partial-attribute shapes, barcode ASCII/width gates, required page continuations, body/query limits, explicit owner-versus-row proofs, tag-set membership bounds and the owning-Item response. Strict generated-type fixtures reject missing Origin, numeric/caller-normalized barcodes, owner reassignment, missing alias/value/continuation, null attribute values and a tag-page replacement acknowledgement. Numeric checksum arithmetic is deliberately **not** marked passed by a schema test.
 
-Next implementation gates are the actual normalizer, authoritative services/producers with concurrency/rollback/exact-replay tests, owner-scoped signed pages, HTTP conformance, typed no-replay adapters and reviewed maintenance screens. Public builds/tests do not depend on the local specification pack. Full sync, physical devices/NAS and off-host recovery remain separately uncompleted gates.
+Next implementation gates are authoritative owned services/producers that call the real validator, with concurrency/rollback/exact-replay tests, owner-scoped signed pages, HTTP conformance, typed no-replay adapters and reviewed maintenance screens. Public builds/tests do not depend on the local specification pack. Full sync, physical devices/NAS and off-host recovery remain separately uncompleted gates.
