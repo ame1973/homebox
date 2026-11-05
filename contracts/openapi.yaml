@@ -2004,12 +2004,6 @@ paths:
               schema:
                 const: no-store
               description: Protected API data is never cached by the service worker.
-            ETag:
-              schema:
-                type: string
-                minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -2053,8 +2047,9 @@ paths:
           type: string
           minLength: 1
           maxLength: 2048
-      description: Lists use stable ID ordering, or (occurred_at,id) for events, with
-        opaque scoped cursors.
+      description: Read one complete live stable-ID page. Signed continuations bind administrator, dataset epoch, owner item ID, collection kind and page size for 15 minutes; namespaces cannot be substituted. Only documented limit/cursor query fields, each once, are accepted; no body/encoding. Missing owners fail instead of fabricating an empty list. No list ETag or frozen-snapshot claim.
+      x-max-body-bytes: 0
+      x-max-query-bytes: 16384
     post:
       operationId: post_items_id_barcodes
       summary: Add product barcode
@@ -2076,8 +2071,9 @@ paths:
               schema:
                 type: string
                 minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+                maxLength: 18
+                pattern: ^"[1-9][0-9]*"$
+              description: Strong quoted independent row revision matching the returned resource; creation begins at one.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -2136,18 +2132,26 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]*"$
+        description: Original owning item aggregate revision.
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        description: Exact configured public origin; independent of the session and CSRF proof.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/BarcodeWrite'
-      description: Non-idempotent mutations must use Idempotency-Key and CSRF; domain
-        service validates invariants and commits projections in same SQLite transaction.
+      description: Require exact Origin, completed active session, CSRF/version/original key and the documented original revision scope. No query, duplicate/unknown fields or Unicode repair. Source, independent row/link counters, owner item/search/unit-search invalidation, immutable audit, frozen response and final current/outbox payloads commit together. Actual changes touch the owning item aggregate, so a stale item deletion cannot absorb new/edited links; tag membership changes also touch affected tag aggregates. Owner/row identity never changes. Value-equal writes keep revisions but retain immutable receipts. Explicit retries retain original body/key/proof across current deletion; never silently rebase/replay or install historical responses. Delete emits an independent stable-ID tombstone and preserves the owner, other rows, shared identifiers/media and retained counters.
+      x-revision-scope: item
+      x-max-body-bytes: 16384
   /units/{id}:
     get:
       operationId: get_units_id
@@ -3832,12 +3836,6 @@ paths:
               schema:
                 const: no-store
               description: Protected API data is never cached by the service worker.
-            ETag:
-              schema:
-                type: string
-                minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -3881,8 +3879,9 @@ paths:
           type: string
           minLength: 1
           maxLength: 2048
-      description: Lists use stable ID ordering, or (occurred_at,id) for events, with
-        opaque scoped cursors.
+      description: Read one complete live stable-ID page. Signed continuations bind administrator, dataset epoch, owner item ID, collection kind and page size for 15 minutes; namespaces cannot be substituted. Only documented limit/cursor query fields, each once, are accepted; no body/encoding. Missing owners fail instead of fabricating an empty list. No list ETag or frozen-snapshot claim.
+      x-max-body-bytes: 0
+      x-max-query-bytes: 16384
     post:
       operationId: post_items_id_aliases
       summary: Add alias
@@ -3904,8 +3903,9 @@ paths:
               schema:
                 type: string
                 minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+                maxLength: 18
+                pattern: ^"[1-9][0-9]*"$
+              description: Strong quoted independent row revision matching the returned resource; creation begins at one.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -3964,18 +3964,26 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]*"$
+        description: Original owning item aggregate revision.
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        description: Exact configured public origin; independent of the session and CSRF proof.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/AliasWrite'
-      description: Non-idempotent mutations must use Idempotency-Key and CSRF; domain
-        service validates invariants and commits projections in same SQLite transaction.
+      description: Require exact Origin, completed active session, CSRF/version/original key and the documented original revision scope. No query, duplicate/unknown fields or Unicode repair. Source, independent row/link counters, owner item/search/unit-search invalidation, immutable audit, frozen response and final current/outbox payloads commit together. Actual changes touch the owning item aggregate, so a stale item deletion cannot absorb new/edited links; tag membership changes also touch affected tag aggregates. Owner/row identity never changes. Value-equal writes keep revisions but retain immutable receipts. Explicit retries retain original body/key/proof across current deletion; never silently rebase/replay or install historical responses. Delete emits an independent stable-ID tombstone and preserves the owner, other rows, shared identifiers/media and retained counters.
+      x-revision-scope: item
+      x-max-body-bytes: 16384
   /media:
     post:
       operationId: post_media
@@ -8848,10 +8856,21 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]*"$
+        description: Original independent link-row revision, not the owning item revision.
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        description: Exact configured public origin; independent of the session and CSRF proof.
+      x-revision-scope: row
+      x-max-body-bytes: 0
+      description: Require exact Origin, completed active session, CSRF/version/original key and the documented original revision scope. No query, duplicate/unknown fields or Unicode repair. Source, independent row/link counters, owner item/search/unit-search invalidation, immutable audit, frozen response and final current/outbox payloads commit together. Actual changes touch the owning item aggregate, so a stale item deletion cannot absorb new/edited links; tag membership changes also touch affected tag aggregates. Owner/row identity never changes. Value-equal writes keep revisions but retain immutable receipts. Explicit retries retain original body/key/proof across current deletion; never silently rebase/replay or install historical responses. Delete emits an independent stable-ID tombstone and preserves the owner, other rows, shared identifiers/media and retained counters. ActionAck.revision is the independent deleted row revision plus one, not the separately touched owner revision. No
+        body/encoding.
     patch:
       operationId: patch_barcodes_id
       summary: PATCH /barcodes/{id}
@@ -8873,8 +8892,9 @@ paths:
               schema:
                 type: string
                 minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+                maxLength: 18
+                pattern: ^"[1-9][0-9]*"$
+              description: Strong quoted independent row revision matching the returned resource; creation begins at one.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -8939,10 +8959,20 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]*"$
+        description: Original independent link-row revision, not the owning item revision.
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        description: Exact configured public origin; independent of the session and CSRF proof.
+      x-revision-scope: row
+      x-max-body-bytes: 16384
+      description: Require exact Origin, completed active session, CSRF/version/original key and the documented original revision scope. No query, duplicate/unknown fields or Unicode repair. Source, independent row/link counters, owner item/search/unit-search invalidation, immutable audit, frozen response and final current/outbox payloads commit together. Actual changes touch the owning item aggregate, so a stale item deletion cannot absorb new/edited links; tag membership changes also touch affected tag aggregates. Owner/row identity never changes. Value-equal writes keep revisions but retain immutable receipts. Explicit retries retain original body/key/proof across current deletion; never silently rebase/replay or install historical responses. Delete emits an independent stable-ID tombstone and preserves the owner, other rows, shared identifiers/media and retained counters.
   /aliases/{id}:
     delete:
       operationId: delete_aliases_id
@@ -9019,10 +9049,21 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]*"$
+        description: Original independent link-row revision, not the owning item revision.
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        description: Exact configured public origin; independent of the session and CSRF proof.
+      x-revision-scope: row
+      x-max-body-bytes: 0
+      description: Require exact Origin, completed active session, CSRF/version/original key and the documented original revision scope. No query, duplicate/unknown fields or Unicode repair. Source, independent row/link counters, owner item/search/unit-search invalidation, immutable audit, frozen response and final current/outbox payloads commit together. Actual changes touch the owning item aggregate, so a stale item deletion cannot absorb new/edited links; tag membership changes also touch affected tag aggregates. Owner/row identity never changes. Value-equal writes keep revisions but retain immutable receipts. Explicit retries retain original body/key/proof across current deletion; never silently rebase/replay or install historical responses. Delete emits an independent stable-ID tombstone and preserves the owner, other rows, shared identifiers/media and retained counters. ActionAck.revision is the independent deleted row revision plus one, not the separately touched owner revision. No
+        body/encoding.
     patch:
       operationId: patch_aliases_id
       summary: PATCH /aliases/{id}
@@ -9044,8 +9085,9 @@ paths:
               schema:
                 type: string
                 minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+                maxLength: 18
+                pattern: ^"[1-9][0-9]*"$
+              description: Strong quoted independent row revision matching the returned resource; creation begins at one.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -9110,10 +9152,20 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]*"$
+        description: Original independent link-row revision, not the owning item revision.
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        description: Exact configured public origin; independent of the session and CSRF proof.
+      x-revision-scope: row
+      x-max-body-bytes: 16384
+      description: Require exact Origin, completed active session, CSRF/version/original key and the documented original revision scope. No query, duplicate/unknown fields or Unicode repair. Source, independent row/link counters, owner item/search/unit-search invalidation, immutable audit, frozen response and final current/outbox payloads commit together. Actual changes touch the owning item aggregate, so a stale item deletion cannot absorb new/edited links; tag membership changes also touch affected tag aggregates. Owner/row identity never changes. Value-equal writes keep revisions but retain immutable receipts. Explicit retries retain original body/key/proof across current deletion; never silently rebase/replay or install historical responses. Delete emits an independent stable-ID tombstone and preserves the owner, other rows, shared identifiers/media and retained counters.
   /attributes/{id}:
     delete:
       operationId: delete_attributes_id
@@ -9190,10 +9242,21 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]*"$
+        description: Original independent link-row revision, not the owning item revision.
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        description: Exact configured public origin; independent of the session and CSRF proof.
+      x-revision-scope: row
+      x-max-body-bytes: 0
+      description: Require exact Origin, completed active session, CSRF/version/original key and the documented original revision scope. No query, duplicate/unknown fields or Unicode repair. Source, independent row/link counters, owner item/search/unit-search invalidation, immutable audit, frozen response and final current/outbox payloads commit together. Actual changes touch the owning item aggregate, so a stale item deletion cannot absorb new/edited links; tag membership changes also touch affected tag aggregates. Owner/row identity never changes. Value-equal writes keep revisions but retain immutable receipts. Explicit retries retain original body/key/proof across current deletion; never silently rebase/replay or install historical responses. Delete emits an independent stable-ID tombstone and preserves the owner, other rows, shared identifiers/media and retained counters. ActionAck.revision is the independent deleted row revision plus one, not the separately touched owner revision. No
+        body/encoding.
     patch:
       operationId: patch_attributes_id
       summary: PATCH /attributes/{id}
@@ -9215,8 +9278,9 @@ paths:
               schema:
                 type: string
                 minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+                maxLength: 18
+                pattern: ^"[1-9][0-9]*"$
+              description: Strong quoted independent row revision matching the returned resource; creation begins at one.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -9244,7 +9308,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AttributeWrite'
+              $ref: '#/components/schemas/AttributePatch'
       parameters:
       - name: id
         in: path
@@ -9281,10 +9345,20 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]*"$
+        description: Original independent link-row revision, not the owning item revision.
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        description: Exact configured public origin; independent of the session and CSRF proof.
+      x-revision-scope: row
+      x-max-body-bytes: 131072
+      description: Require exact Origin, completed active session, CSRF/version/original key and the documented original revision scope. No query, duplicate/unknown fields or Unicode repair. Source, independent row/link counters, owner item/search/unit-search invalidation, immutable audit, frozen response and final current/outbox payloads commit together. Actual changes touch the owning item aggregate, so a stale item deletion cannot absorb new/edited links; tag membership changes also touch affected tag aggregates. Owner/row identity never changes. Value-equal writes keep revisions but retain immutable receipts. Explicit retries retain original body/key/proof across current deletion; never silently rebase/replay or install historical responses. Delete emits an independent stable-ID tombstone and preserves the owner, other rows, shared identifiers/media and retained counters.
   /items/{id}/attributes:
     get:
       operationId: get_items_id_attributes
@@ -9303,12 +9377,6 @@ paths:
               schema:
                 const: no-store
               description: Protected API data is never cached by the service worker.
-            ETag:
-              schema:
-                type: string
-                minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -9329,8 +9397,7 @@ paths:
           $ref: '#/components/responses/Error429'
         '503':
           $ref: '#/components/responses/Error503'
-      description: Lists use stable ID ordering, or (occurred_at,id) for events, with
-        opaque scoped cursors.
+      description: Read one complete live stable-ID page. Signed continuations bind administrator, dataset epoch, owner item ID, collection kind and page size for 15 minutes; namespaces cannot be substituted. Only documented limit/cursor query fields, each once, are accepted; no body/encoding. Missing owners fail instead of fabricating an empty list. No list ETag or frozen-snapshot claim.
       parameters:
       - name: id
         in: path
@@ -9354,6 +9421,8 @@ paths:
           type: string
           minLength: 1
           maxLength: 2048
+      x-max-body-bytes: 0
+      x-max-query-bytes: 16384
     post:
       operationId: post_items_id_attributes
       summary: POST /items/{id}/attributes
@@ -9375,8 +9444,9 @@ paths:
               schema:
                 type: string
                 minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+                maxLength: 18
+                pattern: ^"[1-9][0-9]*"$
+              description: Strong quoted independent row revision matching the returned resource; creation begins at one.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -9441,10 +9511,20 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]*"$
+        description: Original owning item aggregate revision.
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        description: Exact configured public origin; independent of the session and CSRF proof.
+      x-revision-scope: item
+      x-max-body-bytes: 131072
+      description: Require exact Origin, completed active session, CSRF/version/original key and the documented original revision scope. No query, duplicate/unknown fields or Unicode repair. Source, independent row/link counters, owner item/search/unit-search invalidation, immutable audit, frozen response and final current/outbox payloads commit together. Actual changes touch the owning item aggregate, so a stale item deletion cannot absorb new/edited links; tag membership changes also touch affected tag aggregates. Owner/row identity never changes. Value-equal writes keep revisions but retain immutable receipts. Explicit retries retain original body/key/proof across current deletion; never silently rebase/replay or install historical responses. Delete emits an independent stable-ID tombstone and preserves the owner, other rows, shared identifiers/media and retained counters.
   /items/{id}/tags:
     get:
       operationId: get_items_id_tags
@@ -9457,18 +9537,12 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TagList'
+                $ref: '#/components/schemas/ItemTagList'
           headers:
             Cache-Control:
               schema:
                 const: no-store
               description: Protected API data is never cached by the service worker.
-            ETag:
-              schema:
-                type: string
-                minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -9497,6 +9571,24 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+      x-max-body-bytes: 0
+      x-max-query-bytes: 16384
+      description: Read one complete live stable-ID page. Signed continuations bind administrator, dataset epoch, owner item ID, collection kind and page size for 15 minutes; namespaces cannot be substituted. Only documented limit/cursor query fields, each once, are accepted; no body/encoding. Missing owners fail instead of fabricating an empty list. No list ETag or frozen-snapshot claim.
     put:
       operationId: put_items_id_tags
       summary: PUT /items/{id}/tags
@@ -9508,7 +9600,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TagList'
+                $ref: '#/components/schemas/Item'
           headers:
             Cache-Control:
               schema:
@@ -9518,8 +9610,9 @@ paths:
               schema:
                 type: string
                 minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+                maxLength: 18
+                pattern: ^"[1-9][0-9]*"$
+              description: Strong quoted owning item revision matching the returned Item.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -9584,10 +9677,21 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]*"$
+        description: Original owning item aggregate revision.
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        description: Exact configured public origin; independent of the session and CSRF proof.
+      x-revision-scope: item
+      x-max-body-bytes: 131072
+      description: Require exact Origin, completed active session, CSRF/version/original key and the documented original revision scope. No query, duplicate/unknown fields or Unicode repair. Source, independent row/link counters, owner item/search/unit-search invalidation, immutable audit, frozen response and final current/outbox payloads commit together. Actual changes touch the owning item aggregate, so a stale item deletion cannot absorb new/edited links; tag membership changes also touch affected tag aggregates. Owner/row identity never changes. Value-equal writes keep revisions but retain immutable receipts. Explicit retries retain original body/key/proof across current deletion; never silently rebase/replay or install historical responses. Delete emits an independent stable-ID tombstone and preserves the owner, other rows, shared identifiers/media and retained counters. Return the frozen owning Item and its ETag, not a truncated TagList; current membership is read separately through
+        every signed page.
   /assets:
     get:
       operationId: get_assets
@@ -12597,12 +12701,36 @@ components:
       type: object
       additionalProperties: false
       properties:
-        id: *id005
-        revision: *id006
-        item_id: *id005
-        symbology: *id005
-        raw_value: *id005
-        normalized_value: *id005
+        id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        revision:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        item_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        symbology:
+          type: string
+          enum:
+          - EAN_13
+          - EAN_8
+          - UPC_A
+          - UPC_E
+          - CODE_128
+          - QR_CODE
+          - OTHER
+        raw_value:
+          type: string
+          minLength: 1
+          maxLength: 512
+        normalized_value:
+          type: string
+          minLength: 1
+          maxLength: 512
       required:
       - id
       - revision
@@ -12610,26 +12738,32 @@ components:
       - symbology
       - raw_value
       - normalized_value
+      description: Product barcode identity is independent from item identity and is not globally unique. The server preserves raw text and leading zeros, derives normalized_value, and validates UTF-8, symbology, ASCII numeric width and GTIN check digits (including expanded UPC-E validation). EAN_13 also covers JAN. Current normalization preserves the validated exact string within its symbology; never trim, case-fold, Unicode-normalize, convert to a number, silently expand, or reinterpret a product QR as a HomeBox location/unit command. QR_CODE/OTHER retain exact Unicode. Numeric check-digit arithmetic requires authoritative runtime validation beyond JSON Schema.
     BarcodeList:
       type: object
-      required:
-      - data
       additionalProperties: false
       properties:
         data:
           type: array
+          maxItems: 100
           items:
             $ref: '#/components/schemas/Barcode'
         next_cursor:
           type:
           - string
           - 'null'
+          minLength: 1
+          maxLength: 2048
+      required:
+      - data
+      - next_cursor
+      description: One complete live stable-ID page for the requested owner; required null terminates pagination. Not a frozen sync snapshot.
     BarcodeWrite:
       type: object
-      minProperties: 1
       additionalProperties: false
       properties:
         symbology:
+          type: string
           enum:
           - EAN_13
           - EAN_8
@@ -12645,6 +12779,59 @@ components:
       required:
       - symbology
       - raw_value
+      allOf:
+      - if:
+          properties:
+            symbology:
+              const: EAN_13
+          required:
+          - symbology
+        then:
+          properties:
+            raw_value:
+              pattern: ^[0-9]{13}(?![\s\S])
+      - if:
+          properties:
+            symbology:
+              const: EAN_8
+          required:
+          - symbology
+        then:
+          properties:
+            raw_value:
+              pattern: ^[0-9]{8}(?![\s\S])
+      - if:
+          properties:
+            symbology:
+              const: UPC_A
+          required:
+          - symbology
+        then:
+          properties:
+            raw_value:
+              pattern: ^[0-9]{12}(?![\s\S])
+      - if:
+          properties:
+            symbology:
+              const: UPC_E
+          required:
+          - symbology
+        then:
+          properties:
+            raw_value:
+              pattern: ^[01][0-9]{7}(?![\s\S])
+      - if:
+          properties:
+            symbology:
+              const: CODE_128
+          required:
+          - symbology
+        then:
+          properties:
+            raw_value:
+              pattern: ^[\x00-\x7F]{1,512}(?![\s\S])
+      description: Product barcode identity is independent from item identity and is not globally unique. The server preserves raw text and leading zeros, derives normalized_value, and validates UTF-8, symbology, ASCII numeric width and GTIN check digits (including expanded UPC-E validation). EAN_13 also covers JAN. Current normalization preserves the validated exact string within its symbology; never trim, case-fold, Unicode-normalize, convert to a number, silently expand, or reinterpret a product QR as a HomeBox location/unit command. QR_CODE/OTHER retain exact Unicode. Numeric check-digit arithmetic requires authoritative runtime validation beyond JSON Schema. Both fields are required for atomic pair replacement; owner/ID/normalized text are never writable.
+      x-runtime-validation: gtin-check-digit-and-exact-normalization-v1
     Category:
       type: object
       additionalProperties: false
@@ -12777,37 +12964,58 @@ components:
       type: object
       additionalProperties: false
       properties:
-        id: *id005
-        revision: *id006
-        item_id: *id005
-        alias: *id005
+        id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        revision:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        item_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        alias:
+          type: string
+          minLength: 1
+          maxLength: 300
       required:
       - id
       - revision
       - item_id
+      - alias
+      description: Independent exact-text alias. Owner identity is immutable; equality preserves whitespace, case and Unicode normalization.
     AliasList:
       type: object
-      required:
-      - data
       additionalProperties: false
       properties:
         data:
           type: array
+          maxItems: 100
           items:
             $ref: '#/components/schemas/Alias'
         next_cursor:
           type:
           - string
           - 'null'
+          minLength: 1
+          maxLength: 2048
+      required:
+      - data
+      - next_cursor
+      description: One complete live stable-ID page for the requested owner; required null terminates pagination. Not a frozen sync snapshot.
     AliasWrite:
       type: object
-      minProperties: 1
       additionalProperties: false
       properties:
-        item_id: *id005
-        alias: *id005
+        alias:
+          type: string
+          minLength: 1
+          maxLength: 300
       required:
       - alias
+      description: Exact replacement alias; the path/source row owns item_id. Reassignment, raw OCR and implicit inventory fields are forbidden.
     Stock:
       type: object
       additionalProperties: false
@@ -14908,27 +15116,56 @@ components:
       - admin
       - reauth_token
       - expires_at
+    ItemTagList:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/Tag'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+          minLength: 1
+          maxLength: 2048
+      required:
+      - data
+      - next_cursor
+      description: One live page of assigned tags for the requested item. Read all signed pages for full membership; never truncate legacy sets to a first page.
     ItemTagsInput:
       type: object
       additionalProperties: false
       properties:
         tag_ids:
           type: array
-          items: *id001
           maxItems: 100
           uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+            maxLength: 128
       required:
       - tag_ids
+      description: Replace the complete membership set against the original item aggregate revision. Empty clears all links. Every tag must exist; duplicates or invalid IDs reject the whole transaction.
     Attribute:
       type: object
       additionalProperties: false
       properties:
-        id: *id001
+        id:
+          type: string
+          minLength: 1
+          maxLength: 128
         revision:
           type: integer
           minimum: 1
           maximum: 9007199254740991
-        item_id: *id001
+        item_id:
+          type: string
+          minLength: 1
+          maxLength: 128
         attribute_key:
           type: string
           minLength: 1
@@ -14943,6 +15180,7 @@ components:
       - item_id
       - attribute_key
       - attribute_value
+      description: Independent item-owned key/value identity. Repeated keys are distinct rows, not implicit overwrites; owner identity is immutable.
     AttributeWrite:
       type: object
       additionalProperties: false
@@ -14958,24 +15196,41 @@ components:
       required:
       - attribute_key
       - attribute_value
+      description: Create a complete exact key/value row. Empty value is valid but must be explicit. Duplicate keys do not merge rows.
+    AttributePatch:
+      type: object
+      additionalProperties: false
+      properties:
+        attribute_key:
+          type: string
+          minLength: 1
+          maxLength: 100
+        attribute_value:
+          type: string
+          minLength: 0
+          maxLength: 10000
+      required: []
+      minProperties: 1
+      description: Change only specified fields. Empty value clears text; null, owner reassignment and internal wrappers are invalid.
     AttributeList:
       type: object
       additionalProperties: false
       properties:
         data:
           type: array
+          maxItems: 100
           items:
             $ref: '#/components/schemas/Attribute'
-          maxItems: 500
         next_cursor:
-          anyOf:
-          - type: string
-            minLength: 1
-            maxLength: 2048
-          - type: 'null'
+          type:
+          - string
+          - 'null'
+          minLength: 1
+          maxLength: 2048
       required:
       - data
       - next_cursor
+      description: One complete live stable-ID page for the requested owner; required null terminates pagination. Not a frozen sync snapshot.
     QuickPurchaseInput:
       type: object
       additionalProperties: false

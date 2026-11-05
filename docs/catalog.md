@@ -58,6 +58,8 @@ Loading, missing/invalid/partial data, offline coverage and session loss are exp
 
 Catalog photos/barcodes/aliases/attributes/tag assignment, units/stock, purchases, ranked/visual/AI search, bulk actions and import/export are still separate product work. No empty decorative tabs, fake totals, automatic receiving, or worker-dependent metadata CRUD is substituted for them.
 
+Related-link maintenance contracts and their item-versus-row proof scopes are defined in [Catalog Links and Tag Membership](catalog-links.md); their actual producers/services/HTTP/adapters/screens remain pending.
+
 ## Authoritative transaction service
 
 `store.NewCatalog(auth)` binds catalog operations to the existing private store; it cannot select another database or expose SQL to HTTP handlers. Current services are:

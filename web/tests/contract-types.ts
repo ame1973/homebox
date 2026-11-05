@@ -158,7 +158,38 @@ const implicitCatalogQuantity = createCatalogItem({ name: 'Item', quantity_base:
 // @ts-expect-error The catalog status filter has only contracted metadata states.
 const invalidCatalogStatus = fetchCatalogPage({ status: 'disposed' }, new AbortController().signal)
 
-void [createMinimalCatalog, createDefaultSubset, createMeasuredCatalog, createClassifiedCatalog, patchCatalogNull, archiveCatalog, deleteCatalog, readFilteredCatalog,
+type BarcodeCreateHeaders = operations['post_items_id_barcodes']['parameters']['header']
+const ownedCreateHeaders = { ...authHeaders, 'If-Match': '"3"' } satisfies BarcodeCreateHeaders
+const barcodeBody = { symbology: 'UPC_A', raw_value: '036000291452' } satisfies components['schemas']['BarcodeWrite']
+const aliasBody = { alias: '  Exact é  ' } satisfies components['schemas']['AliasWrite']
+const aliasResource = { id: 'alias', item_id: 'item', revision: 1, alias: '  Exact é  ' } satisfies components['schemas']['Alias']
+const attributeBody = { attribute_key: 'Specification', attribute_value: '' } satisfies components['schemas']['AttributeWrite']
+const attributePartial = { attribute_value: '' } satisfies components['schemas']['AttributePatch']
+const tagMembershipPage = { data: [], next_cursor: null } satisfies components['schemas']['ItemTagList']
+const clearMembership = { tag_ids: [] } satisfies components['schemas']['ItemTagsInput']
+const tagReplacementResult = currentItem satisfies operations['put_items_id_tags']['responses'][200]['content']['application/json']
+// @ts-expect-error Owned creation requires exact Origin independently of its reviewed owner proof.
+const missingOwnedOrigin: BarcodeCreateHeaders = { 'X-CSRF-Token': 'csrf', 'Idempotency-Key': 'owned-key', 'X-HomeBox-Client-Version': '0.1.0-dev', 'If-Match': '"3"' }
+// @ts-expect-error Product barcode digits remain strings, never numeric coercions that lose zeros.
+const numericBarcode: components['schemas']['BarcodeWrite'] = { symbology: 'UPC_A', raw_value: 36000291452 }
+// @ts-expect-error Authoritative normalization is not a writable field.
+const callerNormalizedBarcode: components['schemas']['BarcodeWrite'] = { ...barcodeBody, normalized_value: 'caller' }
+// @ts-expect-error Stable alias ownership cannot be reassigned through a write.
+const reassignedAlias: components['schemas']['AliasWrite'] = { alias: 'Alias', item_id: 'other' }
+// @ts-expect-error Every alias response includes the actual alias text.
+const incompleteAlias: components['schemas']['Alias'] = { id: 'alias', item_id: 'item', revision: 1 }
+// @ts-expect-error Attribute creation requires an explicit value even when it is empty.
+const incompleteAttribute: components['schemas']['AttributeWrite'] = { attribute_key: 'Key' }
+// @ts-expect-error Empty attribute text is represented by a string, not null.
+const nullAttribute: components['schemas']['AttributePatch'] = { attribute_value: null }
+// @ts-expect-error Every item-membership page explicitly terminates or continues.
+const incompleteMembershipPage: components['schemas']['ItemTagList'] = { data: [] }
+// @ts-expect-error Tag replacement returns the frozen owning Item, not a partial TagList.
+const partialMembershipResult: operations['put_items_id_tags']['responses'][200]['content']['application/json'] = { data: [], next_cursor: null }
+
+void [ownedCreateHeaders, barcodeBody, aliasBody, aliasResource, attributeBody, attributePartial, tagMembershipPage, clearMembership, tagReplacementResult,
+  missingOwnedOrigin, numericBarcode, callerNormalizedBarcode, reassignedAlias, incompleteAlias, incompleteAttribute, nullAttribute, incompleteMembershipPage, partialMembershipResult,
+  createMinimalCatalog, createDefaultSubset, createMeasuredCatalog, createClassifiedCatalog, patchCatalogNull, archiveCatalog, deleteCatalog, readFilteredCatalog,
   incompleteCatalogUnit, incompleteCatalogBase, incompleteCatalogScale, unrelatedCatalogProof, unprovenCatalogPatch, unprovenCatalogArchive, unprovenCatalogDelete,
   implicitCatalogQuantity, invalidCatalogStatus,
   itemHeaders, itemProof, measuredItem, clearItem, restoreItem, emptyItemPage, currentItem,

@@ -72,6 +72,8 @@
 
 ### Fixed
 
+- Refine the fourteen owned-catalog operation contracts and bounded barcode/alias/attribute/membership schemas without changing any operation identity or offline payload. Make owner identity immutable, distinguish item creation/tag-set proofs from independent row edit/delete proofs, require complete live continuations, add partial attribute patches, and return the owning Item from tag replacement rather than a truncated TagList. Preserve exact barcode strings/zeros with ASCII/width gates and an explicit pending runtime-checksum requirement. Add eight schema regressions, generated-type fixtures and English protocol guidance; runtime link services remain separate.
+
 - Keep localized catalog metadata error space stable during blur validation so clearing an error cannot move a native checkbox between pointer down/up. Reproduce the 24px shift with actual Chromium events, fix feature composition without editing generated primitives, and retain the original immediate checkbox assertion as a browser regression.
 
 - Refine catalog item contracts with independent Unicode/identity/safe-integer bounds, exact nullable response and partial-patch semantics, optional canonical defaults, explicit complete nondefault measurement tuples, metadata restoration, retained-history guards, Origin/body admission, original positive aggregate proofs, strong resource ETags and complete bounded live pages. Preserve every list filter, operation identity and version-one offline payload. Add negative schema/generated-type fixtures and English rules without claiming item handlers are implemented.

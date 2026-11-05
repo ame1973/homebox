@@ -8,6 +8,8 @@ These are executable interface specifications, not a claim that every HTTP handl
 - [Categories and Tags](../docs/taxonomy.md): explicit taxonomy creation/patch, hierarchy, membership, deletion, and projection rules; implementation availability is tracked separately.
 - [Catalog Item Rules](../docs/catalog.md): implemented private Go/SQLite catalog transactions, complete filter-scoped signed live pages, six item HTTP operations, typed adapters and responsive reviewed metadata screens, plus bounded fields, explicit measurement/defaults, nullable edits, archival/history guards and original proofs. Related holding/media/bulk/assisted-creation workflows remain unfinished.
 
+- [Catalog Links and Tag Membership](../docs/catalog-links.md): refined contracts/types for independent barcode/alias/attribute IDs, immutable ownership, explicit item-versus-row proofs, exact raw barcode/checksum policy, partial attributes and full tag-set replacement. Owned services/normalizer/handlers/screens remain pending; schema validation is not checksum/runtime evidence.
+
 ## Transport and authorization
 
 The application serves `/api/v1` on the same trusted HTTPS origin as the PWA. Only login, protected initial setup, and minimal liveness are anonymous. Setup requires a one-time bootstrap token and is disabled once an administrator exists. Login/setup also require an allowed same-origin request; anonymous does not mean unrestricted.

@@ -172,11 +172,17 @@ export interface paths {
         readonly get?: never;
         readonly put?: never;
         readonly post?: never;
-        /** DELETE /aliases/{id} */
+        /**
+         * DELETE /aliases/{id}
+         * @description Require exact Origin, completed active session, CSRF/version/original key and the documented original revision scope. No query, duplicate/unknown fields or Unicode repair. Source, independent row/link counters, owner item/search/unit-search invalidation, immutable audit, frozen response and final current/outbox payloads commit together. Actual changes touch the owning item aggregate, so a stale item deletion cannot absorb new/edited links; tag membership changes also touch affected tag aggregates. Owner/row identity never changes. Value-equal writes keep revisions but retain immutable receipts. Explicit retries retain original body/key/proof across current deletion; never silently rebase/replay or install historical responses. Delete emits an independent stable-ID tombstone and preserves the owner, other rows, shared identifiers/media and retained counters. ActionAck.revision is the independent deleted row revision plus one, not the separately touched owner revision. No body/encoding.
+         */
         readonly delete: operations["delete_aliases_id"];
         readonly options?: never;
         readonly head?: never;
-        /** PATCH /aliases/{id} */
+        /**
+         * PATCH /aliases/{id}
+         * @description Require exact Origin, completed active session, CSRF/version/original key and the documented original revision scope. No query, duplicate/unknown fields or Unicode repair. Source, independent row/link counters, owner item/search/unit-search invalidation, immutable audit, frozen response and final current/outbox payloads commit together. Actual changes touch the owning item aggregate, so a stale item deletion cannot absorb new/edited links; tag membership changes also touch affected tag aggregates. Owner/row identity never changes. Value-equal writes keep revisions but retain immutable receipts. Explicit retries retain original body/key/proof across current deletion; never silently rebase/replay or install historical responses. Delete emits an independent stable-ID tombstone and preserves the owner, other rows, shared identifiers/media and retained counters.
+         */
         readonly patch: operations["patch_aliases_id"];
         readonly trace?: never;
     };
@@ -312,11 +318,17 @@ export interface paths {
         readonly get?: never;
         readonly put?: never;
         readonly post?: never;
-        /** DELETE /attributes/{id} */
+        /**
+         * DELETE /attributes/{id}
+         * @description Require exact Origin, completed active session, CSRF/version/original key and the documented original revision scope. No query, duplicate/unknown fields or Unicode repair. Source, independent row/link counters, owner item/search/unit-search invalidation, immutable audit, frozen response and final current/outbox payloads commit together. Actual changes touch the owning item aggregate, so a stale item deletion cannot absorb new/edited links; tag membership changes also touch affected tag aggregates. Owner/row identity never changes. Value-equal writes keep revisions but retain immutable receipts. Explicit retries retain original body/key/proof across current deletion; never silently rebase/replay or install historical responses. Delete emits an independent stable-ID tombstone and preserves the owner, other rows, shared identifiers/media and retained counters. ActionAck.revision is the independent deleted row revision plus one, not the separately touched owner revision. No body/encoding.
+         */
         readonly delete: operations["delete_attributes_id"];
         readonly options?: never;
         readonly head?: never;
-        /** PATCH /attributes/{id} */
+        /**
+         * PATCH /attributes/{id}
+         * @description Require exact Origin, completed active session, CSRF/version/original key and the documented original revision scope. No query, duplicate/unknown fields or Unicode repair. Source, independent row/link counters, owner item/search/unit-search invalidation, immutable audit, frozen response and final current/outbox payloads commit together. Actual changes touch the owning item aggregate, so a stale item deletion cannot absorb new/edited links; tag membership changes also touch affected tag aggregates. Owner/row identity never changes. Value-equal writes keep revisions but retain immutable receipts. Explicit retries retain original body/key/proof across current deletion; never silently rebase/replay or install historical responses. Delete emits an independent stable-ID tombstone and preserves the owner, other rows, shared identifiers/media and retained counters.
+         */
         readonly patch: operations["patch_attributes_id"];
         readonly trace?: never;
     };
@@ -565,11 +577,17 @@ export interface paths {
         readonly get?: never;
         readonly put?: never;
         readonly post?: never;
-        /** DELETE /barcodes/{id} */
+        /**
+         * DELETE /barcodes/{id}
+         * @description Require exact Origin, completed active session, CSRF/version/original key and the documented original revision scope. No query, duplicate/unknown fields or Unicode repair. Source, independent row/link counters, owner item/search/unit-search invalidation, immutable audit, frozen response and final current/outbox payloads commit together. Actual changes touch the owning item aggregate, so a stale item deletion cannot absorb new/edited links; tag membership changes also touch affected tag aggregates. Owner/row identity never changes. Value-equal writes keep revisions but retain immutable receipts. Explicit retries retain original body/key/proof across current deletion; never silently rebase/replay or install historical responses. Delete emits an independent stable-ID tombstone and preserves the owner, other rows, shared identifiers/media and retained counters. ActionAck.revision is the independent deleted row revision plus one, not the separately touched owner revision. No body/encoding.
+         */
         readonly delete: operations["delete_barcodes_id"];
         readonly options?: never;
         readonly head?: never;
-        /** PATCH /barcodes/{id} */
+        /**
+         * PATCH /barcodes/{id}
+         * @description Require exact Origin, completed active session, CSRF/version/original key and the documented original revision scope. No query, duplicate/unknown fields or Unicode repair. Source, independent row/link counters, owner item/search/unit-search invalidation, immutable audit, frozen response and final current/outbox payloads commit together. Actual changes touch the owning item aggregate, so a stale item deletion cannot absorb new/edited links; tag membership changes also touch affected tag aggregates. Owner/row identity never changes. Value-equal writes keep revisions but retain immutable receipts. Explicit retries retain original body/key/proof across current deletion; never silently rebase/replay or install historical responses. Delete emits an independent stable-ID tombstone and preserves the owner, other rows, shared identifiers/media and retained counters.
+         */
         readonly patch: operations["patch_barcodes_id"];
         readonly trace?: never;
     };
@@ -850,13 +868,13 @@ export interface paths {
         };
         /**
          * Item aliases
-         * @description Lists use stable ID ordering, or (occurred_at,id) for events, with opaque scoped cursors.
+         * @description Read one complete live stable-ID page. Signed continuations bind administrator, dataset epoch, owner item ID, collection kind and page size for 15 minutes; namespaces cannot be substituted. Only documented limit/cursor query fields, each once, are accepted; no body/encoding. Missing owners fail instead of fabricating an empty list. No list ETag or frozen-snapshot claim.
          */
         readonly get: operations["get_items_id_aliases"];
         readonly put?: never;
         /**
          * Add alias
-         * @description Non-idempotent mutations must use Idempotency-Key and CSRF; domain service validates invariants and commits projections in same SQLite transaction.
+         * @description Require exact Origin, completed active session, CSRF/version/original key and the documented original revision scope. No query, duplicate/unknown fields or Unicode repair. Source, independent row/link counters, owner item/search/unit-search invalidation, immutable audit, frozen response and final current/outbox payloads commit together. Actual changes touch the owning item aggregate, so a stale item deletion cannot absorb new/edited links; tag membership changes also touch affected tag aggregates. Owner/row identity never changes. Value-equal writes keep revisions but retain immutable receipts. Explicit retries retain original body/key/proof across current deletion; never silently rebase/replay or install historical responses. Delete emits an independent stable-ID tombstone and preserves the owner, other rows, shared identifiers/media and retained counters.
          */
         readonly post: operations["post_items_id_aliases"];
         readonly delete?: never;
@@ -894,11 +912,14 @@ export interface paths {
         };
         /**
          * GET /items/{id}/attributes
-         * @description Lists use stable ID ordering, or (occurred_at,id) for events, with opaque scoped cursors.
+         * @description Read one complete live stable-ID page. Signed continuations bind administrator, dataset epoch, owner item ID, collection kind and page size for 15 minutes; namespaces cannot be substituted. Only documented limit/cursor query fields, each once, are accepted; no body/encoding. Missing owners fail instead of fabricating an empty list. No list ETag or frozen-snapshot claim.
          */
         readonly get: operations["get_items_id_attributes"];
         readonly put?: never;
-        /** POST /items/{id}/attributes */
+        /**
+         * POST /items/{id}/attributes
+         * @description Require exact Origin, completed active session, CSRF/version/original key and the documented original revision scope. No query, duplicate/unknown fields or Unicode repair. Source, independent row/link counters, owner item/search/unit-search invalidation, immutable audit, frozen response and final current/outbox payloads commit together. Actual changes touch the owning item aggregate, so a stale item deletion cannot absorb new/edited links; tag membership changes also touch affected tag aggregates. Owner/row identity never changes. Value-equal writes keep revisions but retain immutable receipts. Explicit retries retain original body/key/proof across current deletion; never silently rebase/replay or install historical responses. Delete emits an independent stable-ID tombstone and preserves the owner, other rows, shared identifiers/media and retained counters.
+         */
         readonly post: operations["post_items_id_attributes"];
         readonly delete?: never;
         readonly options?: never;
@@ -915,13 +936,13 @@ export interface paths {
         };
         /**
          * List product barcodes
-         * @description Lists use stable ID ordering, or (occurred_at,id) for events, with opaque scoped cursors.
+         * @description Read one complete live stable-ID page. Signed continuations bind administrator, dataset epoch, owner item ID, collection kind and page size for 15 minutes; namespaces cannot be substituted. Only documented limit/cursor query fields, each once, are accepted; no body/encoding. Missing owners fail instead of fabricating an empty list. No list ETag or frozen-snapshot claim.
          */
         readonly get: operations["get_items_id_barcodes"];
         readonly put?: never;
         /**
          * Add product barcode
-         * @description Non-idempotent mutations must use Idempotency-Key and CSRF; domain service validates invariants and commits projections in same SQLite transaction.
+         * @description Require exact Origin, completed active session, CSRF/version/original key and the documented original revision scope. No query, duplicate/unknown fields or Unicode repair. Source, independent row/link counters, owner item/search/unit-search invalidation, immutable audit, frozen response and final current/outbox payloads commit together. Actual changes touch the owning item aggregate, so a stale item deletion cannot absorb new/edited links; tag membership changes also touch affected tag aggregates. Owner/row identity never changes. Value-equal writes keep revisions but retain immutable receipts. Explicit retries retain original body/key/proof across current deletion; never silently rebase/replay or install historical responses. Delete emits an independent stable-ID tombstone and preserves the owner, other rows, shared identifiers/media and retained counters.
          */
         readonly post: operations["post_items_id_barcodes"];
         readonly delete?: never;
@@ -957,9 +978,15 @@ export interface paths {
             readonly path?: never;
             readonly cookie?: never;
         };
-        /** GET /items/{id}/tags */
+        /**
+         * GET /items/{id}/tags
+         * @description Read one complete live stable-ID page. Signed continuations bind administrator, dataset epoch, owner item ID, collection kind and page size for 15 minutes; namespaces cannot be substituted. Only documented limit/cursor query fields, each once, are accepted; no body/encoding. Missing owners fail instead of fabricating an empty list. No list ETag or frozen-snapshot claim.
+         */
         readonly get: operations["get_items_id_tags"];
-        /** PUT /items/{id}/tags */
+        /**
+         * PUT /items/{id}/tags
+         * @description Require exact Origin, completed active session, CSRF/version/original key and the documented original revision scope. No query, duplicate/unknown fields or Unicode repair. Source, independent row/link counters, owner item/search/unit-search invalidation, immutable audit, frozen response and final current/outbox payloads commit together. Actual changes touch the owning item aggregate, so a stale item deletion cannot absorb new/edited links; tag membership changes also touch affected tag aggregates. Owner/row identity never changes. Value-equal writes keep revisions but retain immutable receipts. Explicit retries retain original body/key/proof across current deletion; never silently rebase/replay or install historical responses. Delete emits an independent stable-ID tombstone and preserves the owner, other rows, shared identifiers/media and retained counters. Return the frozen owning Item and its ETag, not a truncated TagList; current membership is read separately through every signed page.
+         */
         readonly put: operations["put_items_id_tags"];
         readonly post?: never;
         readonly delete?: never;
@@ -2155,19 +2182,21 @@ export interface components {
             readonly data: readonly components["schemas"]["AIReview"][];
             readonly next_cursor?: string | null;
         };
+        /** @description Independent exact-text alias. Owner identity is immutable; equality preserves whitespace, case and Unicode normalization. */
         readonly Alias: {
-            readonly alias?: string;
+            readonly alias: string;
             readonly id: string;
             readonly item_id: string;
             readonly revision: number;
         };
+        /** @description One complete live stable-ID page for the requested owner; required null terminates pagination. Not a frozen sync snapshot. */
         readonly AliasList: {
             readonly data: readonly components["schemas"]["Alias"][];
-            readonly next_cursor?: string | null;
+            readonly next_cursor: string | null;
         };
+        /** @description Exact replacement alias; the path/source row owns item_id. Reassignment, raw OCR and implicit inventory fields are forbidden. */
         readonly AliasWrite: {
             readonly alias: string;
-            readonly item_id?: string;
         };
         readonly AnalyticsFilters: {
             readonly category_id: string | null;
@@ -2273,6 +2302,7 @@ export interface components {
             /** @enum {unknown} */
             readonly usage_unit: "times" | "minutes" | "cycles";
         } & (unknown & unknown);
+        /** @description Independent item-owned key/value identity. Repeated keys are distinct rows, not implicit overwrites; owner identity is immutable. */
         readonly Attribute: {
             readonly attribute_key: string;
             readonly attribute_value: string;
@@ -2280,10 +2310,17 @@ export interface components {
             readonly item_id: string;
             readonly revision: number;
         };
+        /** @description One complete live stable-ID page for the requested owner; required null terminates pagination. Not a frozen sync snapshot. */
         readonly AttributeList: {
             readonly data: readonly components["schemas"]["Attribute"][];
             readonly next_cursor: string | null;
         };
+        /** @description Change only specified fields. Empty value clears text; null, owner reassignment and internal wrappers are invalid. */
+        readonly AttributePatch: {
+            readonly attribute_key?: string;
+            readonly attribute_value?: string;
+        };
+        /** @description Create a complete exact key/value row. Empty value is valid but must be explicit. Duplicate keys do not merge rows. */
         readonly AttributeWrite: {
             readonly attribute_key: string;
             readonly attribute_value: string;
@@ -2328,17 +2365,20 @@ export interface components {
             readonly kind: "full" | "database";
             readonly note?: string;
         };
+        /** @description Product barcode identity is independent from item identity and is not globally unique. The server preserves raw text and leading zeros, derives normalized_value, and validates UTF-8, symbology, ASCII numeric width and GTIN check digits (including expanded UPC-E validation). EAN_13 also covers JAN. Current normalization preserves the validated exact string within its symbology; never trim, case-fold, Unicode-normalize, convert to a number, silently expand, or reinterpret a product QR as a HomeBox location/unit command. QR_CODE/OTHER retain exact Unicode. Numeric check-digit arithmetic requires authoritative runtime validation beyond JSON Schema. */
         readonly Barcode: {
             readonly id: string;
             readonly item_id: string;
             readonly normalized_value: string;
             readonly raw_value: string;
             readonly revision: number;
-            readonly symbology: string;
+            /** @enum {string} */
+            readonly symbology: "EAN_13" | "EAN_8" | "UPC_A" | "UPC_E" | "CODE_128" | "QR_CODE" | "OTHER";
         };
+        /** @description One complete live stable-ID page for the requested owner; required null terminates pagination. Not a frozen sync snapshot. */
         readonly BarcodeList: {
             readonly data: readonly components["schemas"]["Barcode"][];
-            readonly next_cursor?: string | null;
+            readonly next_cursor: string | null;
         };
         readonly BarcodeMatch: {
             readonly barcode_id: string;
@@ -2349,11 +2389,12 @@ export interface components {
         readonly BarcodeMatches: {
             readonly matches: readonly components["schemas"]["BarcodeMatch"][];
         };
+        /** @description Product barcode identity is independent from item identity and is not globally unique. The server preserves raw text and leading zeros, derives normalized_value, and validates UTF-8, symbology, ASCII numeric width and GTIN check digits (including expanded UPC-E validation). EAN_13 also covers JAN. Current normalization preserves the validated exact string within its symbology; never trim, case-fold, Unicode-normalize, convert to a number, silently expand, or reinterpret a product QR as a HomeBox location/unit command. QR_CODE/OTHER retain exact Unicode. Numeric check-digit arithmetic requires authoritative runtime validation beyond JSON Schema. Both fields are required for atomic pair replacement; owner/ID/normalized text are never writable. */
         readonly BarcodeWrite: {
             readonly raw_value: string;
-            /** @enum {unknown} */
+            /** @enum {string} */
             readonly symbology: "EAN_13" | "EAN_8" | "UPC_A" | "UPC_E" | "CODE_128" | "QR_CODE" | "OTHER";
-        };
+        } & (unknown & unknown & unknown & unknown & unknown);
         readonly BootstrapPage: {
             readonly complete: boolean;
             readonly dataset_epoch: string;
@@ -2633,6 +2674,12 @@ export interface components {
             readonly data: readonly components["schemas"]["Item"][];
             readonly next_cursor: string | null;
         };
+        /** @description One live page of assigned tags for the requested item. Read all signed pages for full membership; never truncate legacy sets to a first page. */
+        readonly ItemTagList: {
+            readonly data: readonly components["schemas"]["Tag"][];
+            readonly next_cursor: string | null;
+        };
+        /** @description Replace the complete membership set against the original item aggregate revision. Empty clears all links. Every tag must exist; duplicates or invalid IDs reject the whole transaction. */
         readonly ItemTagsInput: {
             readonly tag_ids: readonly string[];
         };
@@ -4195,8 +4242,10 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Original independent link-row revision, not the owning item revision. */
                 readonly "If-Match": string;
+                /** @description Exact configured public origin; independent of the session and CSRF proof. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -4237,8 +4286,10 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Original independent link-row revision, not the owning item revision. */
                 readonly "If-Match": string;
+                /** @description Exact configured public origin; independent of the session and CSRF proof. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -4259,7 +4310,7 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Strong quoted independent row revision matching the returned resource; creation begins at one. */
                     readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
@@ -4607,8 +4658,10 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Original independent link-row revision, not the owning item revision. */
                 readonly "If-Match": string;
+                /** @description Exact configured public origin; independent of the session and CSRF proof. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -4649,8 +4702,10 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Original independent link-row revision, not the owning item revision. */
                 readonly "If-Match": string;
+                /** @description Exact configured public origin; independent of the session and CSRF proof. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -4662,7 +4717,7 @@ export interface operations {
         };
         readonly requestBody: {
             readonly content: {
-                readonly "application/json": components["schemas"]["AttributeWrite"];
+                readonly "application/json": components["schemas"]["AttributePatch"];
             };
         };
         readonly responses: {
@@ -4671,7 +4726,7 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Strong quoted independent row revision matching the returned resource; creation begins at one. */
                     readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
@@ -5244,8 +5299,10 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Original independent link-row revision, not the owning item revision. */
                 readonly "If-Match": string;
+                /** @description Exact configured public origin; independent of the session and CSRF proof. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -5286,8 +5343,10 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Original independent link-row revision, not the owning item revision. */
                 readonly "If-Match": string;
+                /** @description Exact configured public origin; independent of the session and CSRF proof. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -5308,7 +5367,7 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Strong quoted independent row revision matching the returned resource; creation begins at one. */
                     readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
@@ -6106,8 +6165,6 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
-                    readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
                 content: {
@@ -6131,8 +6188,10 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Original owning item aggregate revision. */
                 readonly "If-Match": string;
+                /** @description Exact configured public origin; independent of the session and CSRF proof. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -6153,7 +6212,7 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Strong quoted independent row revision matching the returned resource; creation begins at one. */
                     readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
@@ -6243,8 +6302,6 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
-                    readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
                 content: {
@@ -6268,8 +6325,10 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Original owning item aggregate revision. */
                 readonly "If-Match": string;
+                /** @description Exact configured public origin; independent of the session and CSRF proof. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -6290,7 +6349,7 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Strong quoted independent row revision matching the returned resource; creation begins at one. */
                     readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
@@ -6330,8 +6389,6 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
-                    readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
                 content: {
@@ -6355,8 +6412,10 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Original owning item aggregate revision. */
                 readonly "If-Match": string;
+                /** @description Exact configured public origin; independent of the session and CSRF proof. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -6377,7 +6436,7 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Strong quoted independent row revision matching the returned resource; creation begins at one. */
                     readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
@@ -6439,7 +6498,10 @@ export interface operations {
     };
     readonly get_items_id_tags: {
         readonly parameters: {
-            readonly query?: never;
+            readonly query?: {
+                readonly cursor?: string;
+                readonly limit?: number;
+            };
             readonly header?: never;
             readonly path: {
                 readonly id: string;
@@ -6453,12 +6515,10 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
-                    readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
                 content: {
-                    readonly "application/json": components["schemas"]["TagList"];
+                    readonly "application/json": components["schemas"]["ItemTagList"];
                 };
             };
             readonly 400: components["responses"]["Error400"];
@@ -6478,8 +6538,10 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Original owning item aggregate revision. */
                 readonly "If-Match": string;
+                /** @description Exact configured public origin; independent of the session and CSRF proof. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -6500,12 +6562,12 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Strong quoted owning item revision matching the returned Item. */
                     readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
                 content: {
-                    readonly "application/json": components["schemas"]["TagList"];
+                    readonly "application/json": components["schemas"]["Item"];
                 };
             };
             readonly 400: components["responses"]["Error400"];
