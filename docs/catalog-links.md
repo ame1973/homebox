@@ -1,6 +1,6 @@
 # Catalog Links and Tag Membership
 
-**Implementation status:** the root executable contracts, generated browser types, schema/type checks, real Go barcode validator, independent persistence/materialization and all nine authoritative barcode/alias/attribute create/edit/delete service methods are implemented. Full tag-set replacement, signed collection pages, HTTP integration, browser adapters and maintenance screens are not yet implemented. Service tests do not make those routes available. The separate [catalog metadata workflows](catalog.md) are functional without an AI worker.
+**Implementation status:** all fourteen owned-catalog Go service operations are implemented and tested: nine barcode/alias/attribute create/edit/delete methods, complete tag-set replacement and four owner-scoped signed collection reads. Executable contracts, generated types, real barcode validation and independent persistence/materialization are also implemented. The owned HTTP integration, browser adapters and maintenance screens remain unavailable; service tests do not make those routes available. The separate [catalog metadata workflows](catalog.md) are functional without an AI worker.
 
 ## Independent identity and immutable ownership
 
@@ -72,11 +72,17 @@ Barcode writes replace the complete symbology/raw pair atomically. Alias writes 
 
 Tag replacement is one atomic complete-set operation: at most 100 unique bounded tag IDs, each of which must exist. An empty array clears membership. Reject duplicate/missing IDs without partial changes or implicit tag creation. Touch each affected tag membership aggregate, the item's aggregate/search dependencies, and each independent canonical item-tag upsert/tombstone together. Existing tag deletion proofs must become stale when new members are linked. Read current membership separately; a historical response never replaces a newer cache.
 
+`Catalog.ReplaceTags` enforces this against the original Item proof and returns the complete frozen Item, not a bounded tag page. It copies the caller's array and fingerprints its original order; a different order with the same key is a changed request, while a new key/current proof for an equal set is a no-op. A nil slice/null input is not an explicit empty array. Existing larger legacy sets are read completely before replacement, so clearing 205 members removes all 205 independent links without deleting Tag identities. Explicit relinking advances the retained composite counter rather than resetting it. Only affected Tag/link counters advance; unchanged membership and other owners remain unchanged.
+
 ## Live pages and request boundary
 
-`GET /items/{id}/barcodes`, `/aliases`, `/attributes`, and `/tags` expose stable-ID live pages. Limit is 1–100, default 50. Every page contains `data` and required nullable `next_cursor`; null terminates the result. Read all pages when reviewing complete membership, including larger legacy tag sets. Do not silently return only 100 legacy links or label a first page as complete.
+The contracted `GET /items/{id}/barcodes`, `/aliases`, `/attributes`, and `/tags` operations define stable-ID live pages. Limit is 1–100, default 50. Every page contains `data` and required nullable `next_cursor`; null terminates the result. Read all pages when reviewing complete membership, including larger legacy tag sets. Do not silently return only 100 legacy links or label a first page as complete.
 
 Signed continuations bind principal, dataset epoch, owning item, collection purpose and page size for 15 minutes. A barcode continuation cannot become an alias/tag continuation or change owner. These are live reads, not frozen offline snapshots. An absent owner is an error rather than an invented empty collection. Lists do not claim a resource ETag.
+
+The implemented Go entrypoints are `Catalog.PageBarcodes`, `PageAliases`, `PageAttributes` and `PageTags`. They reuse the existing authorized metadata cursor codec with an independent canonical collection/owner MAC purpose, without changing location/category/global-Tag cursor spelling. They read source and actual retained counters, validate the owner even for an empty page, check the lookahead row before returning a prefix, and release no data or cursor before read/session COMMIT. A fresh same-principal session may continue; expired/restored/differently scoped cursors cannot authorize a read. Edits and deletion of the last-seen row do not turn these live pages into snapshots. The future HTTP lists above will expose these services with the documented admission/defaults and no list ETag.
+
+Existing item-tag membership also requires its canonical independent counter. Reads/replacements reject missing, unsafe or noncanonical link authority rather than silently inventing revision one, including on removal. Canonical Go pairs and SQLite `json_array` remain equivalent for full-length Unicode IDs and separator characters. The current assigned-tag page validates the owner's complete legacy link authority in O(members) before paging; bounded counter joins are a measured-latency optimization for unusually large legacy sets, not permission to truncate membership.
 
 All writes require exact Origin, an active completed administrator session, CSRF, supported client version, original key and the documented proof scope. Barcode/alias JSON is bounded to 16 KiB; attributes/tag replacement to 128 KiB. Lists accept only one documented limit/cursor within a 16 KiB raw query; writes accept no query. GET/DELETE accept no body or encoding. Exact field names, duplicate checks, valid UTF-8 and safe nonrounding revisions remain server-authoritative. Resource responses and errors never expose submitted credentials or private SQL/path diagnostics.
 
@@ -89,6 +95,7 @@ uv run --frozen python -m unittest tests.test_catalog_links_contracts -v
 go -C server test -race -count=1 -cover ./internal/barcode
 go -C server test -race -count=1 ./internal/store -run '^TestCatalogLink'
 go -C server test -race -count=1 ./internal/store -run '^TestCatalogOwned'
+go -C server test -race -count=1 ./internal/store -run '^TestCatalogTags'
 go -C server test ./internal/barcode -run '^$' -fuzz FuzzNormalize -fuzztime=3s -parallel=2
 uv run --frozen python -m unittest discover -s tests -v
 npm --prefix web run api:generate
@@ -100,4 +107,6 @@ These checks cover complete bounded DTOs/offline shape, immutable ownership, exa
 
 Real Go/SQLite write tests additionally cover all nine service methods, actual checksum/normalization integration, original Item-versus-row proofs, independent UUID/counter retention, owner/symbology duplicates, exact Unicode/NUL text, partial-field fingerprints, no-op receipts, concurrent original/conflicting/independent reviews, new-session/deleted-source/expired reconciliation, and source/current/FTS/outbox/audit/reply/session/overflow/late-auth/deferred-commit rollback. Retained invalid historical values stay readable/deletable; only explicit valid replacements adopt current normalization.
 
-Next implementation gates are full tag-set replacement, owner-scoped signed pages, HTTP conformance, typed no-replay adapters and reviewed maintenance screens. Public builds/tests do not depend on the local specification pack. Full sync, physical devices/NAS and off-host recovery remain separately uncompleted gates.
+Tag-set/page tests additionally exercise original-array fingerprints and copy isolation, no-op/equal-set order, same-principal/deleted-owner/expired reconciliation, single-winner concurrency, 205-member complete legacy reads/clears, retained relinks, full Unicode pair equivalence, all changed/unchanged Tag/Item/unit-search scopes and current link authority. Four-way read tests cover exact public fields, terminal/null cursors, cross-owner/collection/global-purpose rejection, tampering, live edits/deletion, lookahead corruption, active/fresh/expired/restored sessions, private-key/cancel/SQL/COMMIT failure and no read-side publication.
+
+Next implementation gates are owned HTTP conformance, typed no-replay adapters and reviewed maintenance screens. Public builds/tests do not depend on the local specification pack. Full sync, physical devices/NAS and off-host recovery remain separately uncompleted gates.

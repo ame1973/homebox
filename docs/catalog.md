@@ -58,7 +58,7 @@ Loading, missing/invalid/partial data, offline coverage and session loss are exp
 
 Catalog photos/barcodes/aliases/attributes/tag assignment, units/stock, purchases, ranked/visual/AI search, bulk actions and import/export are still separate product work. No empty decorative tabs, fake totals, automatic receiving, or worker-dependent metadata CRUD is substituted for them.
 
-Related-link rules and Item-versus-row proof scopes are documented in [Catalog Links and Tag Membership](catalog-links.md). Independent persistence and all nine Go barcode/alias/attribute write services are implemented; tag-set replacement, owned pages, HTTP/adapters and maintenance screens remain pending.
+Related-link rules and Item-versus-row proof scopes are documented in [Catalog Links and Tag Membership](catalog-links.md). Independent persistence, all nine row writes, complete tag-set replacement and four owner-scoped signed collection reads are implemented in Go; owned HTTP/adapters and maintenance screens remain pending.
 
 ## Authoritative transaction service
 
@@ -74,7 +74,7 @@ Related-link rules and Item-versus-row proof scopes are documented in [Catalog L
 
 Nullable command presence is an internal `NullableString`/`NullableID` representation, never a wire wrapper. Source, final item/unit approved FTS, current/frozen projections, counters, immutable mutation events and principal/epoch-scoped original responses share one transaction. The active completed session is checked again before COMMIT, including on replay. Statement, later dependent write, exhausted revision/sequence, late authorization, or deferred commit failure returns no successful DTO/acknowledgement and preserves the entire original state.
 
-Deleting catalog metadata is not secure erasure. Immutable audit, retained counters, frozen replies/outbox rows, and shared media remain subject to their own retention rules. OCR tied to retained media stays private; deleting an owned job nulls its OCR job reference instead of copying raw text into publication. Complete history APIs and exact event-to-target/outbox associations are separate unfinished work. Owned barcode/alias/attribute writes are implemented internally; their read pages/HTTP/browser integration, tag-set replacement, unit/stock CRUD and the remaining multi-domain workflows are pending. The HTTP module binds catalog metadata services to the six routes below.
+Deleting catalog metadata is not secure erasure. Immutable audit, retained counters, frozen replies/outbox rows, and shared media remain subject to their own retention rules. OCR tied to retained media stays private; deleting an owned job nulls its OCR job reference instead of copying raw text into publication. Complete history APIs and exact event-to-target/outbox associations are separate unfinished work. Owned barcode/alias/attribute writes, tag-set replacement and signed collection reads are implemented internally; their HTTP/browser integration, unit/stock CRUD and the remaining multi-domain workflows are pending. The HTTP module binds catalog metadata services to the six routes below.
 
 ## Required HTTP boundary
 
