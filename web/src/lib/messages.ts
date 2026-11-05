@@ -111,6 +111,13 @@ export const messages = {
     leaveTitle: '要離開尚未完成的分類或標籤操作嗎？', leaveHelp: '未送出的輸入不會保留。若請求已送出，中止等候不代表取消；離開後仍需核對伺服器資料。', stay: '留在此頁', leave: '放棄此畫面並離開',
     future: '目前可管理分類與標籤；物品的分類與標籤指派介面仍在開發，不會顯示模擬物品或影響數量。',
   },
+  catalog: {
+    ...mutationMessages,
+    nameError: '請輸入 1–300 個有效字元。', brandError: '品牌需為有效字元，且不可超過 300 個字元。', modelError: '型號需為有效字元，且不可超過 300 個字元。',
+    categoryError: '請選擇可用的分類。', textError: '內容需為有效字元，且不可超過 10,000 個字元。',
+    unitError: '請輸入 1–32 個有效字元的顯示單位。', baseUnitError: '基礎單位需以英文字母開頭，最多 32 個字元，只可包含字母、數字、底線、斜線或連字號。',
+    scaleError: '請輸入 1 至 9007199254740991 的整數，不含空白、前導零、小數或指數。',
+  },
   theme: { label: '外觀', system: '跟隨系統', light: '淺色', dark: '深色' },
   connection: {
     title: '連上家中的 HomeBox',

@@ -24,11 +24,13 @@ function fixture() {
   return { ...hook, client, onConfirmed, onSessionLost, dispose: () => { hook.unmount(); client.clear() } }
 }
 
-it('reviews without writing and confirms only once, invalidating taxonomy reads rather than installing old replies', async () => {
+it('reviews without writing and confirms only once, invalidating dependent taxonomy/catalog reads rather than installing old replies', async () => {
   const work = fixture()
   const current = { revision: 8, name: 'Current' }
   work.client.setQueryData(['taxonomy', 'categories'], current)
   work.client.setQueryData(['taxonomy', 'tags'], current)
+  work.client.setQueryData(['catalog', 'item', 'item'], current)
+  work.client.setQueryData(['catalog', 'items', { q: 'Original' }], current)
   work.client.setQueryData(['locations', 'tree'], current)
   act(() => { work.result.current.review(proposal) })
   expect(fetchCSRF).not.toHaveBeenCalled()
@@ -46,17 +48,24 @@ it('reviews without writing and confirms only once, invalidating taxonomy reads 
   expect(work.client.getQueryData(['taxonomy', 'categories'])).toBe(current)
   expect(work.client.getQueryState(['taxonomy', 'categories'])?.isInvalidated).toBe(true)
   expect(work.client.getQueryState(['taxonomy', 'tags'])?.isInvalidated).toBe(true)
+  expect(work.client.getQueryState(['catalog', 'item', 'item'])?.isInvalidated).toBe(true)
+  expect(work.client.getQueryData(['catalog', 'item', 'item'])).toBe(current)
+  expect(work.client.getQueryState(['catalog', 'items', { q: 'Original' }])?.isInvalidated).toBe(true)
   expect(work.client.getQueryState(['locations', 'tree'])?.isInvalidated).toBe(false)
   work.dispose()
 })
 
 it('retains an uncertain taxonomy request through dismissal and explicit same-key retry without reconnect replay', async () => {
   const work = fixture()
+  work.client.setQueryData(['taxonomy', 'categories'], 'current')
+  work.client.setQueryData(['catalog', 'items'], 'current')
   vi.mocked(sendTaxonomyCommand).mockRejectedValueOnce(new ApiError('NETWORK_ERROR'))
   act(() => { work.result.current.review(proposal) })
   const original = work.result.current.command
   await act(async () => { await work.result.current.confirm() })
   expect(work.result.current.phase).toBe('uncertain')
+  expect(work.client.getQueryState(['taxonomy', 'categories'])?.isInvalidated).toBe(true)
+  expect(work.client.getQueryState(['catalog', 'items'])?.isInvalidated).toBe(true)
   act(() => { work.result.current.dismiss(); work.result.current.review({ kind: 'create-tag', body: { name: 'Must not replace' } }) })
   expect(work.result.current.command).toBe(original)
   expect(work.result.current.open).toBe(false)
