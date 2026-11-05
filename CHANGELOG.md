@@ -4,6 +4,8 @@
 
 ### Added
 
+- Share complete signed-metadata reads, iterative hierarchy/path/search preparation, volatile reviewed-command snapshots and the foreground mutation controller between location and taxonomy workflows. Add category/tag graph/name consistency and command/parent-proof/controller tests while preserving existing location behavior. Taxonomy settings composition remains separate; these models do not enable new screens by themselves.
+
 - Add typed stateless browser adapters for all eight taxonomy operations, with reviewed child/target proofs, root/tag proof exclusion, strict exact-text/nullable-parent/page/resource/ETag/acknowledgement validation, caller-owned keys/signals, safe errors and no automatic refresh/retry/rebase/persistence. Share domain primitives with locations without changing its reserved route policy. Add 80 adapter cases and strict proof fixtures; verify the actual module in Chromium through isolated Vite/Go processes. Taxonomy settings screens remain separate.
 
 - Connect all eight category/tag HTTP operations through the existing Origin/Host/transport, completed-session, CSRF/version/key and general admission boundary. Share strict Unicode/nullable-parent/revision/list-query primitives with locations, preserve original proofs and frozen replies, expose strong resource ETags and safe taxonomy error codes, and reject unsupported single-resource reads. Add verified TLS/cookie-jar workflows, late revocation/proof races, bounded JSON/fuzz and negative method/URL/header/body tests, plus browser-safe error allowlisting. Taxonomy settings screens/adapters remain separate.

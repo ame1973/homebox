@@ -1,6 +1,9 @@
 import { ApiError, type WriteContext } from '@/lib/api/client'
+import { freezeReviewedCommand } from '@/lib/reviewed-command'
 import * as api from '@/lib/api/locations'
 import type { components } from '@/lib/api/schema'
+
+export { uncertainMutationFailure as uncertainLocationFailure } from '@/lib/reviewed-command'
 
 type Schemas = components['schemas']
 type Subject = Readonly<{ subject: api.Location }>
@@ -16,7 +19,7 @@ export type LocationResult = api.Location | Schemas['ActionAck']
 // A review is an immutable volatile proposal, not a persisted/offline write.
 // New keys are created only when a person starts a new explicit review.
 export function freezeLocationCommand(input: LocationCommandInput): LocationCommand {
-  return Object.freeze({ ...structuredClone(input), key: crypto.randomUUID() })
+  return freezeReviewedCommand(input)
 }
 
 export function commandName(command: LocationCommand): string {
@@ -40,8 +43,4 @@ export function sendLocationCommand(command: LocationCommand, csrfToken: string,
     case 'restore': return api.patchLocation(command.subject.id, { status: 'active' }, proof)
     case 'delete': return api.deleteLocation(command.subject.id, proof)
   }
-}
-
-export function uncertainLocationFailure(error: ApiError): boolean {
-  return ['NETWORK_ERROR', 'REQUEST_TIMEOUT', 'REQUEST_ABORTED', 'INVALID_RESPONSE', 'UNKNOWN_ERROR', 'IDEMPOTENCY_CONFLICT', 'IDEMPOTENCY_EXPIRED'].includes(error.code) || (error.status !== undefined && error.status >= 500)
 }
