@@ -214,7 +214,7 @@ func readDomain[T any](ctx context.Context, a *Auth, token string, read func(*sq
 }
 
 func (m *mutationTx) touch(kind, id string, deleted bool) (int64, error) {
-	if !validDomainID(id) || (kind != "location" && kind != "location_event" && kind != "media_link") {
+	if !validProjectionIdentity(kind, id) {
 		return 0, ErrDomainInput
 	}
 	key := projectionKey{kind, id}

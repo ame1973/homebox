@@ -15,6 +15,8 @@ Every record contains `entity_type`, `entity_id`, `entity_revision`, `operation`
 | search_doc | Canonical JSON pair `[entity_type, entity_id]` |
 | asset, disposal | `item_unit_id` |
 
+Composite keys use the canonical JSON string-array spelling produced by `JSON.stringify`: no insignificant whitespace, ordinary non-ASCII/HTML/slash/U+2028/U+2029 characters stay literal, quotes/backslashes and control characters are JSON-escaped, and hexadecimal control escapes use lowercase. Bound and validate each original ID independently; do not apply a single 128-code-point ID limit to the encoded pair, normalize Unicode, repair invalid UTF, or accept alternative escaped spellings as another identity.
+
 A barcode's normalized value is a nonunique lookup index, not its primary key. Media has no owner; independent media-link rows provide many-to-many ownership. Removing one link must not delete another owner's image. Quantity projections use integer `quantity_base`, not `quantity_minor`.
 
 ## Transactional publishing

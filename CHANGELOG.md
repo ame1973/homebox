@@ -44,6 +44,8 @@
 
 ### Fixed
 
+- Admit composite item-tag/search projection identities by validating their original components, not a single-row ID length. Use canonical Unicode JSON pairs consistent with browser JSON.stringify and SQLite json_array, reject alternate spellings/invalid UTF and delimiter collisions, and verify a full-length link deletion commits its independent tombstone atomically.
+
 - Refine taxonomy contracts with distinct category creation/partial-patch schemas, required nullable response parents, Unicode/identity/positive-safe-revision bounds, reviewed child/target proofs, Origin/body admission, and bounded signed live pages. Preserve all operation identities and version-one offline payloads; add negative schema/generated-type fixtures before transaction and HTTP integration.
 
 - Handle the first location-review Escape synchronously after browser-Back modal handoff, before the UI library's effect-installed document listener is ready. Pending Escape interrupts local waiting without undoing a committed server write or generating a replacement request; add an actual commit/held-response/back/stay/leave browser regression.
