@@ -306,6 +306,140 @@ class OpenAPIContractTests(unittest.TestCase):
             with self.subTest(payload=payload), self.assertRaises(ValidationError):
                 validator(name).validate(payload)
 
+    def test_item_create_defaults_and_explicit_nondefault_measurement(self):
+        props = SCHEMAS["ItemCreate"]["properties"]
+        for field, default in {"tracking_mode": "individual", "status": "active",
+                               "unit_code": "pcs", "base_unit": "pcs", "scale_factor": 1,
+                               "description": "", "notes": ""}.items():
+            with self.subTest(field=field):
+                self.assertEqual(default, props[field]["default"])
+        for measurement in [{}, {"unit_code": "pcs"}, {"base_unit": "pcs"}, {"scale_factor": 1},
+                            {"unit_code": "kg", "base_unit": "g", "scale_factor": 1000},
+                            {"unit_code": "L", "base_unit": "ml", "scale_factor": 1000.0},
+                            {"unit_code": "custom", "base_unit": "custom/32", "scale_factor": 9007199254740991}]:
+            validator("ItemCreate").validate({"name": "Stock", **measurement})
+        for measurement in [{"unit_code": "kg"}, {"base_unit": "g"}, {"scale_factor": 1000},
+                            {"unit_code": "kg", "base_unit": "g"},
+                            {"unit_code": "kg", "scale_factor": 1000},
+                            {"base_unit": "g", "scale_factor": 1000}]:
+            with self.subTest(measurement=measurement), self.assertRaises(ValidationError):
+                validator("ItemCreate").validate({"name": "Stock", **measurement})
+
+    def test_item_nullable_partial_fields_and_status_restore(self):
+        for patch in [{"name": "  unchanged whitespace  "}, {"brand": None}, {"brand": ""},
+                      {"model": None}, {"model": ""}, {"category_id": None}, {"category_id": "category"},
+                      {"description": ""}, {"notes": ""}, {"tracking_mode": "quantity"},
+                      {"unit_code": "kg"}, {"base_unit": "g"}, {"scale_factor": 1000},
+                      {"status": "active"}, {"status": "archived"}]:
+            with self.subTest(patch=patch):
+                validator("ItemWrite").validate(patch)
+        for patch in [{}, {"name": None}, {"description": None}, {"notes": None},
+                      {"tracking_mode": None}, {"unit_code": None}, {"base_unit": None},
+                      {"scale_factor": None}, {"status": None},
+                      {"brand": {"set": True, "value": None}},
+                      {"category_id": {"set": True, "value": None}}, {"quantity_base": 1}]:
+            with self.subTest(patch=patch), self.assertRaises(ValidationError):
+                validator("ItemWrite").validate(patch)
+
+    def test_item_fields_have_independent_safe_bounds_without_changing_generic_aliases(self):
+        value = {"id": "📦" * 128, "revision": 9007199254740991, "name": "📦" * 300,
+                 "brand": "📦" * 300, "model": "📦" * 300, "category_id": "📦" * 128,
+                 "description": "📦" * 10000, "notes": "📦" * 10000, "tracking_mode": "quantity",
+                 "unit_code": "📦" * 32, "base_unit": "g" + "_" * 31,
+                 "scale_factor": 9007199254740991, "status": "archived"}
+        validator("Item").validate(value)
+        invalid = [{"name": ""}, {"name": "x" * 301}, {"brand": "x" * 301}, {"model": "x" * 301},
+                   {"category_id": ""}, {"category_id": "x" * 129}, {"description": "x" * 10001},
+                   {"notes": "x" * 10001}, {"unit_code": ""}, {"unit_code": "x" * 33},
+                   {"base_unit": "1g"}, {"base_unit": " g"}, {"base_unit": "g "},
+                   {"base_unit": "g" + "\n"}, {"base_unit": "克"}, {"base_unit": "x" * 33},
+                   {"scale_factor": 0}, {"scale_factor": -1}, {"scale_factor": 0.5},
+                   {"scale_factor": 9007199254740992}, {"tracking_mode": "mixed"}, {"status": "deleted"},
+                   {"raw_ocr": "not public"}]
+        for schema in ["Item", "ItemCreate", "ItemWrite"]:
+            base = value if schema == "Item" else {key: entry for key, entry in value.items()
+                                                    if key not in {"id", "revision"}}
+            for patch in invalid:
+                with self.subTest(schema=schema, patch=patch), self.assertRaises(ValidationError):
+                    validator(schema).validate({**base, **patch})
+        for patch in [{"id": ""}, {"id": "x" * 129}, {"revision": 0}, {"revision": -1},
+                      {"revision": 0.5}, {"revision": 9007199254740992}]:
+            with self.subTest(patch=patch), self.assertRaises(ValidationError):
+                validator("Item").validate({**value, **patch})
+        self.assertEqual({"type": "string"}, SCHEMAS["Unit"]["properties"]["asset_code"])
+        self.assertEqual({"type": "integer"}, SCHEMAS["Unit"]["properties"]["revision"])
+
+    def test_item_response_nullable_presence_and_offline_shape(self):
+        payload = {"id": "item", "name": "Item", "tracking_mode": "individual", "unit_code": "pcs",
+                   "category_id": None, "brand": None, "model": None, "description": "", "notes": "",
+                   "base_unit": "pcs", "scale_factor": 1, "status": "active"}
+        validator("Item").validate({**payload, "revision": 1})
+        Draft202012Validator(PROJECTION).validate(record("item", payload, identity="item"))
+        for field in payload:
+            with self.subTest(field=field), self.assertRaises(ValidationError):
+                validator("Item").validate({**{key: value for key, value in payload.items() if key != field},
+                                            "revision": 1})
+        self.assertEqual(set(payload), set(SCHEMAS["Item"]["properties"]) - {"revision"})
+        for reason in [{}, {"reason": ""}, {"reason": "📦" * 10000}]:
+            validator("ItemArchiveInput").validate(reason)
+        for reason in [{"reason": None}, {"reason": "x" * 10001}, {"dispose_units": True}]:
+            with self.subTest(reason=reason), self.assertRaises(ValidationError):
+                validator("ItemArchiveInput").validate(reason)
+
+    def test_item_writes_bind_origin_original_positive_proof_and_bounded_body(self):
+        for path, method, limit in [("/items", "post", 131072), ("/items/{id}", "patch", 131072),
+                                    ("/items/{id}", "delete", 0), ("/items/{id}/archive", "post", 131072)]:
+            operation = API["paths"][path][method]
+            headers = {entry["name"]: entry for entry in operation["parameters"] if entry["in"] == "header"}
+            with self.subTest(path=path, method=method):
+                self.assertTrue(headers["Origin"]["required"])
+                self.assertEqual(2048, headers["Origin"]["schema"]["maxLength"])
+                self.assertEqual(limit, operation["x-max-body-bytes"])
+                self.assertNotIn("Set-Cookie", operation["responses"]["200"]["headers"])
+                if path == "/items":
+                    self.assertNotIn("If-Match", headers)
+                else:
+                    self.assertTrue(headers["If-Match"]["required"])
+                    proof = Draft202012Validator(headers["If-Match"]["schema"])
+                    for valid in ['"1"', '"9007199254740991"']:
+                        proof.validate(valid)
+                    for invalid in ['1', '"0"', '"01"', 'W/"1"', '*', '"1", "2"', '"10000000000000000"']:
+                        with self.subTest(proof=invalid), self.assertRaises(ValidationError):
+                            proof.validate(invalid)
+                if method == "delete":
+                    self.assertNotIn("requestBody", operation)
+                else:
+                    self.assertEqual({"application/json"}, set(operation["requestBody"]["content"]))
+
+    def test_item_lists_preserve_all_filters_and_require_complete_bounded_pages(self):
+        operation = API["paths"]["/items"]["get"]
+        params = {entry["name"]: entry["schema"] for entry in operation["parameters"]}
+        self.assertEqual({"from", "to", "currency", "category_id", "location_id", "limit", "cursor",
+                          "scope", "status", "merchant", "q"}, set(params))
+        self.assertEqual({"type": "integer", "minimum": 1, "maximum": 100, "default": 50}, params["limit"])
+        self.assertEqual(["active", "archived"], params["status"]["enum"])
+        self.assertEqual(2048, params["cursor"]["maxLength"])
+        validator("ItemList").validate({"data": [], "next_cursor": None})
+        validator("ItemList").validate({"data": [], "next_cursor": "x" * 2048})
+        for page in [{"data": []}, {"data": [], "next_cursor": ""}, {"data": [], "next_cursor": "x" * 2049},
+                     {"data": None, "next_cursor": None}]:
+            with self.subTest(page=page), self.assertRaises(ValidationError):
+                validator("ItemList").validate(page)
+        self.assertEqual(100, SCHEMAS["ItemList"]["properties"]["data"]["maxItems"])
+        self.assertNotIn("ETag", operation["responses"]["200"]["headers"])
+        for path in ["/items", "/items/{id}"]:
+            self.assertEqual(0, API["paths"][path]["get"]["x-max-body-bytes"])
+
+    def test_item_resources_return_only_strong_revision_etags(self):
+        for path, method in [("/items", "post"), ("/items/{id}", "get"),
+                             ("/items/{id}", "patch"), ("/items/{id}/archive", "post")]:
+            schema = API["paths"][path][method]["responses"]["200"]["headers"]["ETag"]["schema"]
+            check = Draft202012Validator(schema)
+            check.validate('"9007199254740991"')
+            for value in ['1', 'W/"1"', '"0"', '"01"', '*', '"1", "2"']:
+                with self.subTest(path=path, method=method, etag=value), self.assertRaises(ValidationError):
+                    check.validate(value)
+
     def test_media_owner_xor_is_machine_validated(self):
         validator("MediaLinkCreate").validate({"item_id": "item-1"})
         for payload in [{"is_cover": True}, {"item_id": "item-1", "location_id": "location-1"}, {}]:

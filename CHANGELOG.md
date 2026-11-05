@@ -58,6 +58,8 @@
 
 ### Fixed
 
+- Refine catalog item contracts with independent Unicode/identity/safe-integer bounds, exact nullable response and partial-patch semantics, optional canonical defaults, explicit complete nondefault measurement tuples, metadata restoration, retained-history guards, Origin/body admission, original positive aggregate proofs, strong resource ETags and complete bounded live pages. Preserve every list filter, operation identity and version-one offline payload. Add negative schema/generated-type fixtures and English rules without claiming item handlers are implemented.
+
 - Keep long read-only review fields in the keyboard-accessible outer dialog scroller instead of creating unfocusable nested scroll regions, including location reviews. Verify enlarged long category paths with axe rather than suppressing its keyboard rules.
 
 - Admit composite item-tag/search projection identities by validating their original components, not a single-row ID length. Use canonical Unicode JSON pairs consistent with browser JSON.stringify and SQLite json_array, reject alternate spellings/invalid UTF and delimiter collisions, and verify a full-length link deletion commits its independent tombstone atomically.

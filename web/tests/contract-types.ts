@@ -98,7 +98,36 @@ const unrelatedTagProof = createTag({ name: 'Tag' }, { ...writeContext, expected
 // @ts-expect-error Patches require an original target proof even for root moves.
 const unprovenCategoryMove = patchCategory('category', { parent_id: null }, writeContext)
 
-void [rootCategory, childCategory, createNamedTag, patchCategoryParent, unprovenCategoryChild, unrelatedCategoryProof, unrelatedTagProof, unprovenCategoryMove,
+type ItemCreateHeaders = operations['post_items']['parameters']['header']
+type ItemPatchHeaders = operations['patch_items_id']['parameters']['header']
+const itemHeaders = { ...authHeaders } satisfies ItemCreateHeaders
+const itemProof = { ...authHeaders, 'If-Match': '"3"' } satisfies ItemPatchHeaders
+const measuredItem = { name: 'Stock', tracking_mode: 'quantity', unit_code: 'kg', base_unit: 'g', scale_factor: 1000 } satisfies components['schemas']['ItemCreate']
+const clearItem = { brand: null, model: null, category_id: null } satisfies components['schemas']['ItemWrite']
+const restoreItem = { status: 'active' } satisfies components['schemas']['ItemWrite']
+const emptyItemPage = { data: [], next_cursor: null } satisfies components['schemas']['ItemList']
+const currentItem = {
+  id: 'item', revision: 1, name: 'Item', brand: null, model: null, category_id: null,
+  description: '', notes: '', tracking_mode: 'individual', unit_code: 'pcs', base_unit: 'pcs', scale_factor: 1, status: 'active',
+} satisfies components['schemas']['Item']
+// @ts-expect-error Catalog creation requires Origin independently of CSRF.
+const itemWithoutOrigin: ItemCreateHeaders = { 'X-CSRF-Token': 'csrf-fixture', 'Idempotency-Key': 'item-fixture-key', 'X-HomeBox-Client-Version': '0.1.0-dev' }
+// @ts-expect-error Catalog editing requires the original aggregate proof.
+const itemWithoutProof: ItemPatchHeaders = { ...authHeaders }
+// @ts-expect-error Nullable brand/model/category are scalar wire fields, not internal wrappers.
+const wrappedItem: components['schemas']['ItemWrite'] = { brand: { set: true, value: null } }
+// @ts-expect-error Only brand/model/category are nullable; measurement cannot become null.
+const nullItemScale: components['schemas']['ItemWrite'] = { scale_factor: null }
+// @ts-expect-error Archived catalog metadata is restored explicitly, not with an invented deleted state.
+const deletedItem: components['schemas']['ItemWrite'] = { status: 'deleted' }
+// @ts-expect-error Catalog metadata cannot create or mutate holdings implicitly.
+const implicitItemStock: components['schemas']['ItemCreate'] = { name: 'Item', quantity_base: 1 }
+// @ts-expect-error Every live item page explicitly indicates whether another page exists.
+const incompleteItemPage: components['schemas']['ItemList'] = { data: [] }
+
+void [itemHeaders, itemProof, measuredItem, clearItem, restoreItem, emptyItemPage, currentItem,
+  itemWithoutOrigin, itemWithoutProof, wrappedItem, nullItemScale, deletedItem, implicitItemStock, incompleteItemPage,
+  rootCategory, childCategory, createNamedTag, patchCategoryParent, unprovenCategoryChild, unrelatedCategoryProof, unrelatedTagProof, unprovenCategoryMove,
   rootCategoryHeaders, childCategoryHeaders, categoryCreate, categoryMove, categoryRename, category, tag,
   missingCategoryName, missingCategoryParent, categoryParentWrapper, missingCategoryOrigin, nullTag,
   createRoot, createChild, unprovenChild, unrelatedRootProof,

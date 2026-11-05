@@ -1207,12 +1207,6 @@ paths:
               schema:
                 const: no-store
               description: Protected API data is never cached by the service worker.
-            ETag:
-              schema:
-                type: string
-                minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -1302,6 +1296,9 @@ paths:
           type: string
           minLength: 1
           maxLength: 32
+          enum:
+          - active
+          - archived
       - name: merchant
         in: query
         required: false
@@ -1316,8 +1313,8 @@ paths:
           type: string
           minLength: 0
           maxLength: 500
-      description: Lists use stable ID ordering, or (occurred_at,id) for events, with
-        opaque scoped cursors.
+      x-max-body-bytes: 0
+      description: Live stable-ID catalog pages with all supplied filters applied together. Include archived items unless status restricts them. Scope selects direct or subtree category/location matching. Location matching uses current positive balances or nondisposed units; purchase date/currency/merchant filters must match one associated purchase, with inclusive civil dates in the configured home timezone. q filters approved published text only, never raw or unreviewed OCR. Continuations bind principal, dataset epoch, page size and every filter for 15 minutes; they never authorize themselves or form a frozen snapshot. No body; missing resources are not fabricated.
     post:
       operationId: post_items
       summary: Create item
@@ -1339,8 +1336,9 @@ paths:
               schema:
                 type: string
                 minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+                maxLength: 18
+                pattern: ^"[1-9][0-9]*"$
+              description: Strong quoted item aggregate revision, from 1 through 9007199254740991.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -1386,18 +1384,28 @@ paths:
           minLength: 1
           maxLength: 32
         description: Semantic application version. Incompatible writes return 426.
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        description: Exact configured public origin; independent of the session and CSRF proof.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/ItemCreate'
-      description: Non-idempotent mutations must use Idempotency-Key and CSRF; domain
-        service validates invariants and commits projections in same SQLite transaction.
+      x-max-body-bytes: 131072
+      description: Create catalog metadata without holdings. Requires exact Origin, an active completed session, CSRF, client version, and an original idempotency key; omit unrelated If-Match. Validate a referenced category transactionally and invalidate its ancestor aggregates. Source, dependent projections/search, audit and frozen response commit together. Do not automatically retry or rebase an uncertain request.
   /items/{id}:
     get:
       operationId: get_items_id
       summary: Item detail
+      x-max-body-bytes: 0
+      description: Read current catalog metadata, including archived items, using an active completed session. No body or query parameters. The strong ETag matches the returned item aggregate revision; a historical mutation acknowledgement is not a substitute for this read.
       tags:
       - items
       responses:
@@ -1416,8 +1424,9 @@ paths:
               schema:
                 type: string
                 minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+                maxLength: 18
+                pattern: ^"[1-9][0-9]*"$
+              description: Strong quoted item aggregate revision, from 1 through 9007199254740991.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -1467,8 +1476,9 @@ paths:
               schema:
                 type: string
                 minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+                maxLength: 18
+                pattern: ^"[1-9][0-9]*"$
+              description: Strong quoted item aggregate revision, from 1 through 9007199254740991.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -1519,10 +1529,9 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]*"$
+        description: Original quoted item aggregate revision, from 1 through 9007199254740991. No weak tags, leading zeros, lists, wildcard, or silent rebasing.
       - name: X-HomeBox-Client-Version
         in: header
         required: true
@@ -1531,14 +1540,22 @@ paths:
           minLength: 1
           maxLength: 32
         description: Semantic application version. Incompatible writes return 426.
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        description: Exact configured public origin; independent of the session and CSRF proof.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/ItemWrite'
-      description: Non-idempotent mutations must use Idempotency-Key and CSRF; domain
-        service validates invariants and commits projections in same SQLite transaction.
+      x-max-body-bytes: 131072
+      description: Apply only explicitly supplied fields using the original item aggregate proof. Omitted nullable fields are unchanged; explicit null clears them. Type/measurement changes require no unit, balance, purchase-line, or movement history, even disposed units or zero balances. Restore with status=active; archival never disposes holdings. Classification changes invalidate old/new category ancestor aggregates. Preserve the original key/body/proof for explicit uncertain-outcome reconciliation, never silent rebase or automatic replay.
     delete:
       operationId: delete_items_id
       summary: DELETE /items/{id}
@@ -1614,10 +1631,19 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]*"$
+        description: Original quoted item aggregate revision, from 1 through 9007199254740991. No weak tags, leading zeros, lists, wildcard, or silent rebasing.
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        description: Exact configured public origin; independent of the session and CSRF proof.
+      x-max-body-bytes: 0
+      description: Delete only an item without unit, balance, purchase-line, or movement history; disposed units and zero balances still retain history. Archive instead when any such reference exists. Remove only owned catalog links and their independent tombstones, preserve shared media, and commit source/search/projections/audit/frozen acknowledgement atomically. No body or query parameters; the original item aggregate proof protects the reviewed deletion scope.
   /items/{id}/archive:
     post:
       operationId: post_items_id_archive
@@ -1640,8 +1666,9 @@ paths:
               schema:
                 type: string
                 minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+                maxLength: 18
+                pattern: ^"[1-9][0-9]*"$
+              description: Strong quoted item aggregate revision, from 1 through 9007199254740991.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -1700,18 +1727,25 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]*"$
+        description: Original quoted item aggregate revision, from 1 through 9007199254740991. No weak tags, leading zeros, lists, wildcard, or silent rebasing.
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        description: Exact configured public origin; independent of the session and CSRF proof.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/ItemArchiveInput'
-      description: Non-idempotent mutations must use Idempotency-Key and CSRF; domain
-        service validates invariants and commits projections in same SQLite transaction.
+      x-max-body-bytes: 131072
+      description: Archive catalog metadata with the original item aggregate proof and optional audited reason. Never dispose units, consume stock, erase history, or delete shared media. Existing holdings remain readable; restore metadata with PATCH status=active. Identical no-op requests retain their resource revision while freezing the acknowledgement. Source, search/projections, immutable audit and original response commit together.
   /quick-create:
     post:
       operationId: post_quick_create
@@ -12395,17 +12429,26 @@ components:
           minLength: 0
           maxLength: 10000
     Item:
+      description: Catalog metadata with an aggregate revision covering its owned metadata, links, and inventory mutations. Nullable brand, model, and category fields are always present. The version-one offline payload has the same fields except revision, which belongs to its envelope.
       type: object
       additionalProperties: false
       properties:
-        id: *id005
-        revision: *id006
+        id: *id001
+        revision:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
         name:
           type: string
           minLength: 1
           maxLength: 300
-        brand: *id007
-        model: *id007
+        brand: &catalogNullableText
+          type:
+          - string
+          - 'null'
+          minLength: 0
+          maxLength: 300
+        model: *catalogNullableText
         description:
           type: string
           minLength: 0
@@ -12418,13 +12461,26 @@ components:
           enum:
           - individual
           - quantity
-        category_id: *id007
-        unit_code: *id005
-        base_unit: *id005
+        category_id: &catalogNullableID
+          type:
+          - string
+          - 'null'
+          minLength: 1
+          maxLength: 128
+        unit_code: &catalogUnitCode
+          type: string
+          minLength: 1
+          maxLength: 32
+        base_unit: &catalogBaseUnit
+          type: string
+          minLength: 1
+          maxLength: 32
+          pattern: ^[A-Za-z][A-Za-z0-9_/-]{0,31}(?![\s\S])
         scale_factor: &id010
           type: integer
           minimum: 1
-        status:
+          maximum: 9007199254740991
+        status: &catalogStatus
           enum:
           - active
           - archived
@@ -12443,20 +12499,26 @@ components:
       - scale_factor
       - status
     ItemList:
+      description: A live stable-ID page, not a frozen sync snapshot. Complete every page before assuming collection completeness; a terminal page has next_cursor=null.
       type: object
       required:
       - data
+      - next_cursor
       additionalProperties: false
       properties:
         data:
           type: array
+          maxItems: 100
           items:
             $ref: '#/components/schemas/Item'
         next_cursor:
           type:
           - string
           - 'null'
+          minLength: 1
+          maxLength: 2048
     ItemWrite:
+      description: Nonempty partial metadata patch. Omitted nullable fields are unchanged; explicit null clears brand, model, or category. status=active restores an archived catalog item without changing holdings. Changing tracking_mode or any measurement field is rejected once unit, stock, purchase-line, or movement history exists, including disposed units and zero balances; never reinterpret or rescale historical quantity_base.
       type: object
       minProperties: 1
       additionalProperties: false
@@ -12465,8 +12527,8 @@ components:
           type: string
           minLength: 1
           maxLength: 300
-        brand: *id007
-        model: *id007
+        brand: *catalogNullableText
+        model: *catalogNullableText
         description:
           type: string
           minLength: 0
@@ -12476,10 +12538,11 @@ components:
           minLength: 0
           maxLength: 10000
         tracking_mode: *id009
-        category_id: *id007
-        unit_code: *id005
-        base_unit: *id005
+        category_id: *catalogNullableID
+        unit_code: *catalogUnitCode
+        base_unit: *catalogBaseUnit
         scale_factor: *id010
+        status: *catalogStatus
     Unit:
       type: object
       additionalProperties: false
@@ -14628,6 +14691,7 @@ components:
       - name
       - code
     ItemCreate:
+      description: Create catalog metadata only, not a unit, stock balance, or purchase. Omitted fields default to individual tracking, active status, null brand/model/category, empty description/notes, and pcs/pcs/1 measurement. Any nondefault measurement value requires an explicit complete unit_code/base_unit/scale_factor tuple; never infer conversion from a label or rescale quantities.
       type: object
       additionalProperties: false
       properties:
@@ -14635,37 +14699,73 @@ components:
           type: string
           minLength: 1
           maxLength: 300
-        brand: &id021
-          type:
-          - string
-          - 'null'
-        model: *id021
+        brand: *catalogNullableText
+        model: *catalogNullableText
         description:
           type: string
           minLength: 0
           maxLength: 10000
+          default: ''
         notes:
           type: string
           minLength: 0
           maxLength: 10000
+          default: ''
         tracking_mode:
           enum:
           - individual
           - quantity
           default: individual
-        category_id: *id021
-        unit_code: &id022
+        category_id: *catalogNullableID
+        unit_code:
           type: string
-        base_unit: *id022
+          minLength: 1
+          maxLength: 32
+          default: pcs
+        base_unit:
+          type: string
+          minLength: 1
+          maxLength: 32
+          pattern: ^[A-Za-z][A-Za-z0-9_/-]{0,31}(?![\s\S])
+          default: pcs
         scale_factor:
           type: integer
           minimum: 1
+          maximum: 9007199254740991
+          default: 1
         status:
           enum:
           - active
           - archived
+          default: active
       required:
       - name
+      allOf:
+      - if:
+          anyOf:
+          - required:
+            - unit_code
+            properties:
+              unit_code:
+                not:
+                  const: pcs
+          - required:
+            - base_unit
+            properties:
+              base_unit:
+                not:
+                  const: pcs
+          - required:
+            - scale_factor
+            properties:
+              scale_factor:
+                not:
+                  const: 1
+        then:
+          required:
+          - unit_code
+          - base_unit
+          - scale_factor
     UnitCreate:
       type: object
       additionalProperties: false

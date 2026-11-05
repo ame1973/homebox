@@ -798,13 +798,13 @@ export interface paths {
         };
         /**
          * List items
-         * @description Lists use stable ID ordering, or (occurred_at,id) for events, with opaque scoped cursors.
+         * @description Live stable-ID catalog pages with all supplied filters applied together. Include archived items unless status restricts them. Scope selects direct or subtree category/location matching. Location matching uses current positive balances or nondisposed units; purchase date/currency/merchant filters must match one associated purchase, with inclusive civil dates in the configured home timezone. q filters approved published text only, never raw or unreviewed OCR. Continuations bind principal, dataset epoch, page size and every filter for 15 minutes; they never authorize themselves or form a frozen snapshot. No body; missing resources are not fabricated.
          */
         readonly get: operations["get_items"];
         readonly put?: never;
         /**
          * Create item
-         * @description Non-idempotent mutations must use Idempotency-Key and CSRF; domain service validates invariants and commits projections in same SQLite transaction.
+         * @description Create catalog metadata without holdings. Requires exact Origin, an active completed session, CSRF, client version, and an original idempotency key; omit unrelated If-Match. Validate a referenced category transactionally and invalidate its ancestor aggregates. Source, dependent projections/search, audit and frozen response commit together. Do not automatically retry or rebase an uncertain request.
          */
         readonly post: operations["post_items"];
         readonly delete?: never;
@@ -820,17 +820,23 @@ export interface paths {
             readonly path?: never;
             readonly cookie?: never;
         };
-        /** Item detail */
+        /**
+         * Item detail
+         * @description Read current catalog metadata, including archived items, using an active completed session. No body or query parameters. The strong ETag matches the returned item aggregate revision; a historical mutation acknowledgement is not a substitute for this read.
+         */
         readonly get: operations["get_items_id"];
         readonly put?: never;
         readonly post?: never;
-        /** DELETE /items/{id} */
+        /**
+         * DELETE /items/{id}
+         * @description Delete only an item without unit, balance, purchase-line, or movement history; disposed units and zero balances still retain history. Archive instead when any such reference exists. Remove only owned catalog links and their independent tombstones, preserve shared media, and commit source/search/projections/audit/frozen acknowledgement atomically. No body or query parameters; the original item aggregate proof protects the reviewed deletion scope.
+         */
         readonly delete: operations["delete_items_id"];
         readonly options?: never;
         readonly head?: never;
         /**
          * Update item
-         * @description Non-idempotent mutations must use Idempotency-Key and CSRF; domain service validates invariants and commits projections in same SQLite transaction.
+         * @description Apply only explicitly supplied fields using the original item aggregate proof. Omitted nullable fields are unchanged; explicit null clears them. Type/measurement changes require no unit, balance, purchase-line, or movement history, even disposed units or zero balances. Restore with status=active; archival never disposes holdings. Classification changes invalidate old/new category ancestor aggregates. Preserve the original key/body/proof for explicit uncertain-outcome reconciliation, never silent rebase or automatic replay.
          */
         readonly patch: operations["patch_items_id"];
         readonly trace?: never;
@@ -870,7 +876,7 @@ export interface paths {
         readonly put?: never;
         /**
          * Archive item
-         * @description Non-idempotent mutations must use Idempotency-Key and CSRF; domain service validates invariants and commits projections in same SQLite transaction.
+         * @description Archive catalog metadata with the original item aggregate proof and optional audited reason. Never dispose units, consume stock, erase history, or delete shared media. Existing holdings remain readable; restore metadata with PATCH status=active. Identical no-op requests retain their resource revision while freezing the acknowledgement. Source, search/projections, immutable audit and original response commit together.
          */
         readonly post: operations["post_items_id_archive"];
         readonly delete?: never;
@@ -2574,6 +2580,7 @@ export interface components {
             readonly sha256: string;
             readonly upload_token: string;
         };
+        /** @description Catalog metadata with an aggregate revision covering its owned metadata, links, and inventory mutations. Nullable brand, model, and category fields are always present. The version-one offline payload has the same fields except revision, which belongs to its envelope. */
         readonly Item: {
             readonly base_unit: string;
             readonly brand: string | null;
@@ -2594,31 +2601,42 @@ export interface components {
         readonly ItemArchiveInput: {
             readonly reason?: string;
         };
+        /** @description Create catalog metadata only, not a unit, stock balance, or purchase. Omitted fields default to individual tracking, active status, null brand/model/category, empty description/notes, and pcs/pcs/1 measurement. Any nondefault measurement value requires an explicit complete unit_code/base_unit/scale_factor tuple; never infer conversion from a label or rescale quantities. */
         readonly ItemCreate: {
+            /** @default pcs */
             readonly base_unit?: string;
             readonly brand?: string | null;
             readonly category_id?: string | null;
+            /** @default  */
             readonly description?: string;
             readonly model?: string | null;
             readonly name: string;
+            /** @default  */
             readonly notes?: string;
+            /** @default 1 */
             readonly scale_factor?: number;
-            /** @enum {unknown} */
+            /**
+             * @default active
+             * @enum {unknown}
+             */
             readonly status?: "active" | "archived";
             /**
              * @default individual
              * @enum {unknown}
              */
             readonly tracking_mode?: "individual" | "quantity";
+            /** @default pcs */
             readonly unit_code?: string;
-        };
+        } & unknown;
+        /** @description A live stable-ID page, not a frozen sync snapshot. Complete every page before assuming collection completeness; a terminal page has next_cursor=null. */
         readonly ItemList: {
             readonly data: readonly components["schemas"]["Item"][];
-            readonly next_cursor?: string | null;
+            readonly next_cursor: string | null;
         };
         readonly ItemTagsInput: {
             readonly tag_ids: readonly string[];
         };
+        /** @description Nonempty partial metadata patch. Omitted nullable fields are unchanged; explicit null clears brand, model, or category. status=active restores an archived catalog item without changing holdings. Changing tracking_mode or any measurement field is rejected once unit, stock, purchase-line, or movement history exists, including disposed units and zero balances; never reinterpret or rescale historical quantity_base. */
         readonly ItemWrite: {
             readonly base_unit?: string;
             readonly brand?: string | null;
@@ -2628,6 +2646,8 @@ export interface components {
             readonly name?: string;
             readonly notes?: string;
             readonly scale_factor?: number;
+            /** @enum {unknown} */
+            readonly status?: "active" | "archived";
             /** @enum {unknown} */
             readonly tracking_mode?: "individual" | "quantity";
             readonly unit_code?: string;
@@ -5859,7 +5879,7 @@ export interface operations {
                 readonly merchant?: string;
                 readonly q?: string;
                 readonly scope?: "direct" | "subtree";
-                readonly status?: string;
+                readonly status?: "active" | "archived";
                 readonly to?: string;
             };
             readonly header?: never;
@@ -5873,8 +5893,6 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
-                    readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
                 content: {
@@ -5898,6 +5916,8 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
+                /** @description Exact configured public origin; independent of the session and CSRF proof. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -5916,7 +5936,7 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Strong quoted item aggregate revision, from 1 through 9007199254740991. */
                     readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
@@ -5953,7 +5973,7 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Strong quoted item aggregate revision, from 1 through 9007199254740991. */
                     readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
@@ -5978,8 +5998,10 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Original quoted item aggregate revision, from 1 through 9007199254740991. No weak tags, leading zeros, lists, wildcard, or silent rebasing. */
                 readonly "If-Match": string;
+                /** @description Exact configured public origin; independent of the session and CSRF proof. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -6020,8 +6042,10 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Original quoted item aggregate revision, from 1 through 9007199254740991. No weak tags, leading zeros, lists, wildcard, or silent rebasing. */
                 readonly "If-Match": string;
+                /** @description Exact configured public origin; independent of the session and CSRF proof. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -6042,7 +6066,7 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Strong quoted item aggregate revision, from 1 through 9007199254740991. */
                     readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
@@ -6155,8 +6179,10 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Original quoted item aggregate revision, from 1 through 9007199254740991. No weak tags, leading zeros, lists, wildcard, or silent rebasing. */
                 readonly "If-Match": string;
+                /** @description Exact configured public origin; independent of the session and CSRF proof. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -6177,7 +6203,7 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Strong quoted item aggregate revision, from 1 through 9007199254740991. */
                     readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
