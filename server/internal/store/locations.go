@@ -43,12 +43,14 @@ type LocationCreate struct {
 	Description string  `json:"description"`
 }
 
-// NullableID is a command field, not a wire object. Set distinguishes an omitted
-// parent from an explicit move to the root. HTTP adapters must preserve presence.
-type NullableID struct {
+// NullableString is a command presence field, never a wire object. Set keeps an
+// omitted field distinct from an explicit null. NullableID retains ID intent.
+type NullableString struct {
 	Set   bool    `json:"set"`
 	Value *string `json:"value"`
 }
+
+type NullableID = NullableString
 
 type LocationPatch struct {
 	ParentID    NullableID `json:"parent_id"`

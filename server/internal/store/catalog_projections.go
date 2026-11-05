@@ -9,61 +9,10 @@ import (
 	"unicode/utf8"
 )
 
-// itemData is the exact version-one offline payload, without envelope revision.
-// Related tag/link/search records remain independently identified projections.
-type itemData struct {
-	ID           string  `json:"id"`
-	Name         string  `json:"name"`
-	TrackingMode string  `json:"tracking_mode"`
-	UnitCode     string  `json:"unit_code"`
-	CategoryID   *string `json:"category_id"`
-	Brand        *string `json:"brand"`
-	Model        *string `json:"model"`
-	Description  string  `json:"description"`
-	Notes        string  `json:"notes"`
-	BaseUnit     string  `json:"base_unit"`
-	ScaleFactor  int64   `json:"scale_factor"`
-	Status       string  `json:"status"`
-}
-
 type searchData struct {
 	EntityType   string `json:"entity_type"`
 	EntityID     string `json:"entity_id"`
 	ApprovedText string `json:"approved_text"`
-}
-
-func loadItemData(ctx context.Context, query queryer, id string) (itemData, error) {
-	var value itemData
-	var category, brand, model sql.NullString
-	err := query.QueryRowContext(ctx, `SELECT id,name,tracking_mode,unit_code,category_id,brand,model,
- description,notes,base_unit,scale_factor,status FROM items WHERE id=?`, id).
-		Scan(&value.ID, &value.Name, &value.TrackingMode, &value.UnitCode, &category, &brand, &model,
-			&value.Description, &value.Notes, &value.BaseUnit, &value.ScaleFactor, &value.Status)
-	if errors.Is(err, sql.ErrNoRows) {
-		return itemData{}, ErrNotFound
-	}
-	if err != nil {
-		return itemData{}, err
-	}
-	if category.Valid {
-		value.CategoryID = &category.String
-	}
-	if brand.Valid {
-		value.Brand = &brand.String
-	}
-	if model.Valid {
-		value.Model = &model.String
-	}
-	if !validDomainID(value.ID) || !authString(value.Name, 1, 300) ||
-		(value.TrackingMode != "individual" && value.TrackingMode != "quantity") || !authString(value.UnitCode, 1, 32) ||
-		!baseUnitPattern.MatchString(value.BaseUnit) || value.ScaleFactor < 1 || value.ScaleFactor > maxSafeInteger ||
-		value.CategoryID != nil && !validDomainID(*value.CategoryID) ||
-		!authString(value.Description, 0, 10000) || !authString(value.Notes, 0, 10000) ||
-		(value.Brand != nil && !utf8.ValidString(*value.Brand)) || (value.Model != nil && !utf8.ValidString(*value.Model)) ||
-		(value.Status != "active" && value.Status != "archived") {
-		return itemData{}, ErrDomainState
-	}
-	return value, nil
 }
 
 func sourceText(values ...string) string {
@@ -178,7 +127,7 @@ type searchText struct {
 // accepted labels must not resurrect a later user override. Only approved free
 // OCR text contributes separately; raw jobs/results and old caches never do.
 // Unit searches include only purchase evidence attached to that exact unit.
-func (m *mutationTx) loadSearchText(item itemData, unitID string) (searchText, error) {
+func (m *mutationTx) loadSearchText(item ItemData, unitID string) (searchText, error) {
 	category, err := categoryPathText(m.ctx, m.tx, item.CategoryID)
 	if err != nil {
 		return searchText{}, err
@@ -254,14 +203,14 @@ func (m *mutationTx) materializeSearch(identity string) (searchData, error) {
 			return searchData{}, ErrDomainState
 		}
 	}
-	item, err := loadItemData(m.ctx, m.tx, itemID)
+	item, err := loadItem(m.ctx, m.tx, itemID)
 	if err != nil {
 		return searchData{}, err
 	}
 	if kind == "unit" && item.TrackingMode != "individual" {
 		return searchData{}, ErrDomainState
 	}
-	text, err := m.loadSearchText(item, unitID)
+	text, err := m.loadSearchText(item.ItemData, unitID)
 	if err != nil {
 		return searchData{}, err
 	}

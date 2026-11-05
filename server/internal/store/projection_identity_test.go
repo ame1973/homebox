@@ -43,7 +43,7 @@ func TestProjectionIdentityBoundsApplyToComponentsNotTheEncodedPair(t *testing.T
 			t.Fatal("valid maximum-length component was rejected by a single-row ID limit")
 		}
 	}
-	for _, kind := range []string{"location", "location_event", "media_link", "category", "tag", "item"} {
+	for _, kind := range []string{"location", "location_event", "media_link", "category", "tag", "item", "barcode", "alias", "attribute", "ai_review"} {
 		if !validProjectionIdentity(kind, strings.Repeat("😀", 128)) || validProjectionIdentity(kind, strings.Repeat("x", 129)) {
 			t.Fatal("single-row identity bounds changed", kind)
 		}

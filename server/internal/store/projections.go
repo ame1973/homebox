@@ -43,11 +43,11 @@ func (m *mutationTx) projectionPayload(key projectionKey) ([]byte, error) {
 		}
 		return json.Marshal(value.TagData)
 	case "item":
-		value, err := loadItemData(m.ctx, m.tx, key.id)
+		value, err := loadItem(m.ctx, m.tx, key.id)
 		if err != nil {
 			return nil, err
 		}
-		return json.Marshal(value)
+		return json.Marshal(value.ItemData)
 	case "item_tag":
 		parts, valid := projectionPairParts(key.id)
 		if !valid {

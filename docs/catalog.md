@@ -1,6 +1,6 @@
 # Catalog Item Rules
 
-**Implementation status:** the executable item contracts, generated TypeScript fixtures, and final-state item/unit approved-search publication foundation are implemented and tested. Item transaction services, HTTP handlers, catalog screens, related-link maintenance, holdings, and complete search/sync workflows are still in development. This document specifies their required behavior; it does not advertise unimplemented routes as available.
+**Implementation status:** authoritative Go/SQLite catalog creation, current reads, partial edits, archival/restoration, guarded deletion, internal stable-ID pages, and final-state item/unit approved-search publication are implemented and tested. Public filtered/signed pages, item HTTP handlers, catalog screens, related-link maintenance, holdings, and complete search/sync workflows are still in development. Internal services do not make the HTTP routes below available by themselves.
 
 ## Catalog metadata and holdings
 
@@ -44,6 +44,21 @@ Archival changes catalog status, not physical inventory. It never disposes units
 
 Hard deletion is restricted to an item without any unit, stock-balance, purchase-line or inventory-movement references, including disposed units and zero balances. Archive referenced items instead. Deletion must remove only the item's owned catalog/link records, emit their independent tombstones, invalidate affected category/tag aggregates, and preserve shared media and other owners. Retained counters and immutable audit identities cannot be reused as a different item.
 
+## Authoritative transaction service
+
+`store.NewCatalog(auth)` binds catalog operations to the existing private store; it cannot select another database or expose SQL to HTTP handlers. Current services are:
+
+- `Get`: return validated current metadata and the actual retained aggregate revision. Missing/unsafe counters are corruption, not permission to fabricate revision one.
+- `List`: internal, unfiltered stable-ID pages of 1–100 records using an internal `NextID`. Includes archived metadata, rejects corrupt rows/lookahead without a partial prefix, and releases no page/continuation before read/session COMMIT. It is **not** the public filtered/signed item list below.
+- `Create`: validate optional defaults and explicit measurement, verify a referenced category, allocate an independent UUIDv4, invalidate its classification ancestors, and publish source-derived item/search data. A new identity must begin at revision one; a retained/tombstoned identity cannot be reused under a new meaning.
+- `Patch`: preserve omitted fields and explicit nullable presence, validate the reviewed target revision, reject history-bearing type/measurement changes, and invalidate old/new classification ancestors once. Equal nullable values are no-ops even when supplied through a new pointer; they still receive immutable frozen acknowledgements.
+- `Archive`: audited catalog-status change with an optional exact reason. Repeated archival is a value-equal no-op; restoration is an explicit partial status patch.
+- `Delete`: verify the original proof and all physical/financial/history guards, collect owned stable IDs, and emit independent item/search/barcode/alias/attribute/media-link/review/item-tag tombstones with category/tag aggregate invalidation. FK cascades remove only owned source rows and associated jobs/derived item FTS, not shared media or another owner's links.
+
+Nullable command presence is an internal `NullableString`/`NullableID` representation, never a wire wrapper. Source, final item/unit approved FTS, current/frozen projections, counters, immutable mutation events and principal/epoch-scoped original responses share one transaction. The active completed session is checked again before COMMIT, including on replay. Statement, later dependent write, exhausted revision/sequence, late authorization, or deferred commit failure returns no successful DTO/acknowledgement and preserves the entire original state.
+
+Deleting catalog metadata is not secure erasure. Immutable audit, retained counters, frozen replies/outbox rows, and shared media remain subject to their own retention rules. OCR tied to retained media stays private; deleting an owned job nulls its OCR job reference instead of copying raw text into publication. Complete history APIs and exact event-to-target/outbox associations are separate unfinished work. Related-link upsert services, unit/stock CRUD, public signed/filter pages and item HTTP/screens are not enabled by this module.
+
 ## Required HTTP boundary
 
 All paths below are relative to `/api/v1`. Their contract definitions are not evidence of implemented handlers.
@@ -78,8 +93,9 @@ Signed continuations bind the administrator, dataset epoch, page size, every fil
 
 ```sh
 uv run --frozen python -m unittest discover -s tests -v
+go -C server test -race -count=1 ./internal/store -run '^TestCatalog'
 npm --prefix web run api:generate
 npm --prefix web run typecheck
 ```
 
-Contract checks exercise optional defaults, explicit nondefault measurement tuples, safe numeric/Unicode bounds, strict ASCII base units, nullable presence/partial edits, restoration, response/offline shape, original positive proofs, Origin/body limits, strong ETags, and complete bounded pages without removing filters. Generated-type fixtures separately reject missing Origin/proofs, null measurement, internal wrappers, implicit holdings and missing continuations. Runtime transaction, HTTP, browser, sync and physical-device acceptance must be reported separately when actually implemented and executed.
+Contract checks exercise optional defaults, explicit nondefault measurement tuples, safe numeric/Unicode bounds, strict ASCII base units, nullable presence/partial edits, restoration, response/offline shape, original positive proofs, Origin/body limits, strong ETags, and complete bounded pages without removing filters. Generated-type fixtures separately reject missing Origin/proofs, null measurement, internal wrappers, implicit holdings and missing continuations. Store tests additionally drive actual SQLite creation/partial edits/classification/archive/restore/deletion, all mutation/no-op frozen-change replay, original/fresh-login/expired acknowledgements, concurrent duplicate/conflicting requests, retained/imported identities, full Unicode boundaries, disposed/zero/financial/history guards, shared media/product identifiers, owned-link cascades, and source/current/FTS/outbox/audit/reply/session rollback. Read and write COMMIT failures withhold all resources/continuations, while late authorization changes and safe counter/sequence exhaustion never acquire a new acknowledged mutation. Actual item HTTP/UI, full sync and physical-device acceptance remain separate unfinished gates.
