@@ -1,6 +1,6 @@
 # Catalog Links and Tag Membership
 
-**Implementation status:** all fourteen owned-catalog Go services and HTTP operations are implemented and tested: nine barcode/alias/attribute create/edit/delete actions, complete tag-set replacement and four owner-scoped signed collection reads. Executable contracts, generated types, real barcode validation and independent persistence/materialization are also implemented. The typed owned browser adapters and maintenance screens remain pending; these APIs do not add a browser maintenance interface by themselves. The separate [catalog metadata workflows](catalog.md) are functional without an AI worker.
+**Implementation status:** all fourteen owned-catalog Go services and HTTP operations are implemented and tested: nine barcode/alias/attribute create/edit/delete actions, complete tag-set replacement and four owner-scoped signed collection reads. Executable contracts, generated types, real barcode validation and independent persistence/materialization are also implemented. The typed stateless owned browser adapters are implemented and exercised against the real Go server; reviewed maintenance screens remain pending. APIs/adapters alone do not add a browser maintenance interface. The separate [catalog metadata workflows](catalog.md) are functional without an AI worker.
 
 ## Independent identity and immutable ownership
 
@@ -108,6 +108,18 @@ Barcode/alias bodies are capped at 16 KiB; attribute/tag-set bodies at 128 KiB. 
 
 `BARCODE_CONFLICT` and `ALIAS_CONFLICT` are static `409` business codes for the documented owner-local duplicates, not permission to rebase or transfer a row. Invalid GTIN arithmetic/alphabet or invalid supplied fields return `422 VALIDATION_ERROR`; stale proofs/keys retain their existing conflict codes. Browser transport allowlists these codes but discards arbitrary server messages/details. Resource replies have the matching independent strong ETag (owning Item for tag replacement); list/deletion replies have none.
 
+## Typed stateless browser adapters
+
+`web/src/lib/api/catalog-links.ts` exposes all fourteen operations: `fetchItemBarcodesPage`, `fetchItemAliasesPage`, `fetchItemAttributesPage`, `fetchItemTagsPage`; `createBarcode`/`patchBarcode`/`deleteBarcode`; `createAlias`/`patchAlias`/`deleteAlias`; `createAttribute`/`patchAttribute`/`deleteAttribute`; and `replaceItemTags`. These functions are transport adapters, not a local authoritative store or a maintenance screen.
+
+Creation and tag replacement accept the original Item `expectedRevision`. Independent row edits/deletions require `OwnedRowWriteContext` with the original row `expectedRevision` and retained `itemID`; the owner is used for local identity/response validation, never an invented second revision header. Every write also requires caller-held CSRF, the original key and AbortSignal. Header authority remains server-owned: the shared transport passes the caller's original credentials/key without refresh or substitution. Responses bind exact resource/owner identity, strong matching ETag and creation-one/original-no-op-or-next revisions; deletion acknowledgements require the exact independent next revision and no ETag. Tag replacement reuses the exact Item validator, never a Tag page masquerading as a current proof.
+
+Input schemas preserve exact text/leading zeros/Unicode form and complete barcode pairs, require explicit attribute creation values, enforce nonempty partial attributes at compile time and runtime, and preserve ordered unique tag arrays. They mirror the executable barcode enum/ASCII/width conditions without pretending to certify GTIN arithmetic; the server performs actual checksum validation. Retained barcode responses use bounded persisted representation, not today's new-input shape, so old differing raw/normalized strings remain inspectable without repair.
+
+All four collection replies require nullable `next_cursor`, unique bounded row IDs, the requested owner where present, maximum requested/default-50 page size, full nonterminal pages, a different next cursor and no list ETag. Each call returns only one explicit live page. Read all pages to review a complete set; never silently paginate or treat a live continuation as a frozen snapshot.
+
+Read deadlines are eight seconds and writes thirty seconds. Pre-canceled requests are not sent; aborted/timed-out/late replies do not become success or imply rollback. No cookie access, token refresh, newer-proof lookup, automatic retry/rebase/reconnect submission, persistent credential/draft storage or mutation queue is added. Reconcile an uncertain committed reply explicitly with its original body/key/proof; invalidate current reads rather than installing historical responses. Real-browser SDK tests use private temporary composed entries and web roots only, never a production test route.
+
 ## Verification and remaining work
 
 ```sh
@@ -122,6 +134,8 @@ go -C server test ./internal/barcode -run '^$' -fuzz FuzzNormalize -fuzztime=3s 
 uv run --frozen python -m unittest discover -s tests -v
 npm --prefix web run api:generate
 npm --prefix web run typecheck
+npm --prefix web test -- --coverage.enabled=false src/lib/api/catalog-links.test.ts
+npm --prefix web run test:e2e -- tests/e2e/catalog-links-api.spec.ts --project=desktop
 make check-web
 ```
 
@@ -133,4 +147,6 @@ Tag-set/page tests additionally exercise original-array fingerprints and copy is
 
 HTTP tests drive all fourteen operations through real services and independently verified TLS/cookie jars, including strong row-versus-Item ETags, signed pages, exact nullable/empty field presence, true checksum rejection, original/fresh-session frozen replies and no current-state overwrite. All ten writes have credential/CSRF/version/key/proof/header checks; method/URL/query/media/chunked-body/Unicode/field/limit negatives and after-body session/proof races are covered. Bounded JSON fuzzing exercises the actual readers. A disposable run of the compiled CLI/server additionally performs genuine setup/login/password rotation, drives all fourteen operations and validates 40 real replies against executable schemas before graceful shutdown/integrity checking. Existing real-browser screens are regression-tested separately; that is not evidence of a new owned maintenance interface.
 
-Next implementation gates are typed no-replay owned adapters and reviewed maintenance screens. Public builds/tests do not depend on the local specification pack. Full sync, physical devices/NAS and off-host recovery remain separately uncompleted gates.
+Owned SDK checks additionally exercise all fourteen exact requests, caller-owned proof/owner/key/body snapshots, retained legacy response boundaries, input alphabets/null/partial-field bounds, complete page/resource/ETag/deletion invariants, safe errors and distinct abort/deadline behavior without storage or replay. Strict fixtures cover every call plus missing Item proofs, ownerless row contexts, empty/incomplete attributes, caller normalization/owner changes, null membership and uncontracted filters. Actual Chromium drives the real adapters/Go server and a genuinely committed malformed wrong-owner reply followed only by an explicit identical original-key retry.
+
+Next implementation gates are reviewed owned maintenance screens and the remaining complete product workflows. Public builds/tests do not depend on the local specification pack. Full sync, physical devices/NAS and off-host recovery remain separately uncompleted gates.

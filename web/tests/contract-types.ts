@@ -187,6 +187,52 @@ const incompleteMembershipPage: components['schemas']['ItemTagList'] = { data: [
 // @ts-expect-error Tag replacement returns the frozen owning Item, not a partial TagList.
 const partialMembershipResult: operations['put_items_id_tags']['responses'][200]['content']['application/json'] = { data: [], next_cursor: null }
 
+declare const ownedCatalogAPI: typeof import('../src/lib/api/catalog-links')
+const owningItemProof = { ...writeContext, expectedRevision: 7 }
+const independentRowProof = { ...writeContext, expectedRevision: 2, itemID: 'item' }
+const ownedSDKCalls = [
+  ownedCatalogAPI.fetchItemBarcodesPage('item', { limit: 50 }, new AbortController().signal),
+  ownedCatalogAPI.fetchItemAliasesPage('item', {}, new AbortController().signal),
+  ownedCatalogAPI.fetchItemAttributesPage('item', {}, new AbortController().signal),
+  ownedCatalogAPI.fetchItemTagsPage('item', {}, new AbortController().signal),
+  ownedCatalogAPI.createBarcode('item', barcodeBody, owningItemProof),
+  ownedCatalogAPI.createAlias('item', aliasBody, owningItemProof),
+  ownedCatalogAPI.createAttribute('item', attributeBody, owningItemProof),
+  ownedCatalogAPI.patchBarcode('barcode', barcodeBody, independentRowProof),
+  ownedCatalogAPI.patchAlias('alias', aliasBody, independentRowProof),
+  ownedCatalogAPI.patchAttribute('attribute', attributePartial, independentRowProof),
+  ownedCatalogAPI.deleteBarcode('barcode', independentRowProof),
+  ownedCatalogAPI.deleteAlias('alias', independentRowProof),
+  ownedCatalogAPI.deleteAttribute('attribute', independentRowProof),
+  ownedCatalogAPI.replaceItemTags('item', clearMembership, owningItemProof),
+]
+// @ts-expect-error Owned creation requires the reviewed original Item revision.
+const unprovenOwnedBarcode = ownedCatalogAPI.createBarcode('item', barcodeBody, writeContext)
+// @ts-expect-error Alias creation also requires the Item proof, unlike global Tag creation.
+const unprovenOwnedAlias = ownedCatalogAPI.createAlias('item', aliasBody, writeContext)
+// @ts-expect-error Attribute creation cannot silently adopt a current Item revision.
+const unprovenOwnedAttribute = ownedCatalogAPI.createAttribute('item', attributeBody, writeContext)
+// @ts-expect-error Independent row replies must validate the retained original owner too.
+const ownerlessBarcodePatch = ownedCatalogAPI.patchBarcode('barcode', barcodeBody, owningItemProof)
+// @ts-expect-error A row deletion context is not an unscoped Item-proof context.
+const ownerlessAliasDelete = ownedCatalogAPI.deleteAlias('alias', owningItemProof)
+// @ts-expect-error Empty attribute patches are rejected at compile time and runtime.
+const emptyOwnedAttributePatch = ownedCatalogAPI.patchAttribute('attribute', {}, independentRowProof)
+// @ts-expect-error Attribute creation requires a possibly-empty explicit value.
+const missingOwnedAttributeValue = ownedCatalogAPI.createAttribute('item', { attribute_key: 'Key' }, owningItemProof)
+// @ts-expect-error Authoritative normalization is never a submitted SDK field.
+const normalizedOwnedInput = ownedCatalogAPI.createBarcode('item', { ...barcodeBody, normalized_value: 'caller' }, owningItemProof)
+// @ts-expect-error Stable owner identity cannot be reassigned through an alias patch.
+const reassignedOwnedInput = ownedCatalogAPI.patchAlias('alias', { ...aliasBody, item_id: 'other' }, independentRowProof)
+// @ts-expect-error Complete tag replacement needs the original owning Item proof.
+const unprovenTagSet = ownedCatalogAPI.replaceItemTags('item', clearMembership, writeContext)
+// @ts-expect-error Null is not the explicit empty membership array.
+const nullTagSet = ownedCatalogAPI.replaceItemTags('item', { tag_ids: null }, owningItemProof)
+// @ts-expect-error Assigned reads accept only their documented paging fields.
+const filteredOwnedRead = ownedCatalogAPI.fetchItemTagsPage('item', { q: 'uncontracted' }, new AbortController().signal)
+void [ownedSDKCalls, unprovenOwnedBarcode, unprovenOwnedAlias, unprovenOwnedAttribute, ownerlessBarcodePatch, ownerlessAliasDelete, emptyOwnedAttributePatch,
+  missingOwnedAttributeValue, normalizedOwnedInput, reassignedOwnedInput, unprovenTagSet, nullTagSet, filteredOwnedRead]
+
 void [ownedCreateHeaders, barcodeBody, aliasBody, aliasResource, attributeBody, attributePartial, tagMembershipPage, clearMembership, tagReplacementResult,
   missingOwnedOrigin, numericBarcode, callerNormalizedBarcode, reassignedAlias, incompleteAlias, incompleteAttribute, nullAttribute, incompleteMembershipPage, partialMembershipResult,
   createMinimalCatalog, createDefaultSubset, createMeasuredCatalog, createClassifiedCatalog, patchCatalogNull, archiveCatalog, deleteCatalog, readFilteredCatalog,

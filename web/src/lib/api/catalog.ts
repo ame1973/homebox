@@ -19,7 +19,7 @@ const fields = {
   unit_code: text(1, 32), base_unit: text(1, 32).regex(/^[A-Za-z][A-Za-z0-9_/-]{0,31}(?![\s\S])/),
   scale_factor: revisionSchema, status: z.enum(['active', 'archived']),
 }
-const itemSchema: z.ZodType<Item> = z.strictObject({ id: idSchema, revision: revisionSchema, ...fields })
+export const itemSchema: z.ZodType<Item> = z.strictObject({ id: idSchema, revision: revisionSchema, ...fields })
 const optionalFields = z.strictObject(fields).partial()
 
 // Preserve optional server defaults; a custom tuple must be explicit, never

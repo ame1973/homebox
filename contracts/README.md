@@ -8,7 +8,7 @@ These are executable interface specifications, not a claim that every HTTP handl
 - [Categories and Tags](../docs/taxonomy.md): explicit taxonomy creation/patch, hierarchy, membership, deletion, and projection rules; implementation availability is tracked separately.
 - [Catalog Item Rules](../docs/catalog.md): implemented private Go/SQLite catalog transactions, complete filter-scoped signed live pages, six item HTTP operations, typed adapters and responsive reviewed metadata screens, plus bounded fields, explicit measurement/defaults, nullable edits, archival/history guards and original proofs. Related holding/media/bulk/assisted-creation workflows remain unfinished.
 
-- [Catalog Links and Tag Membership](../docs/catalog-links.md): independent barcode/alias/attribute IDs, immutable owners, explicit Item-versus-row proofs, exact checksum normalization, partial attributes and complete tag sets. All fourteen Go/HTTP operations, independent persistence/materialization and owner-scoped signed pages are implemented and tested; typed owned adapters/screens remain pending. Schema validation alone is not runtime or HTTP evidence.
+- [Catalog Links and Tag Membership](../docs/catalog-links.md): independent barcode/alias/attribute IDs, immutable owners, explicit Item-versus-row proofs, exact checksum normalization, partial attributes and complete tag sets. All fourteen Go/HTTP operations and typed stateless owned adapters are implemented and tested, with independent persistence/materialization and owner-scoped signed pages; reviewed maintenance screens remain pending. Schema validation alone is not runtime or HTTP evidence.
 
 ## Transport and authorization
 
