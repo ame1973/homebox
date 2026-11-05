@@ -152,27 +152,36 @@ func (m *mutationTx) touchItemSearch(id string, touchItem bool) error {
 			return err
 		}
 	}
-	_, err := m.touch("search_doc", projectionPair("item", id), false)
-	return err
+	if _, err := m.touch("search_doc", projectionPair("item", id), false); err != nil {
+		return err
+	}
+	units, err := queryIDs(m.ctx, m.tx, "SELECT id FROM item_units WHERE item_id=? ORDER BY id", id)
+	if err != nil {
+		return err
+	}
+	for _, unitID := range units {
+		if !validDomainID(unitID) {
+			return ErrDomainState
+		}
+		if _, err = m.touch("search_doc", projectionPair("unit", unitID), false); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type searchText struct {
+	title, identifiers, details, reviewed string
 }
 
 // Realized fields own title/brand/model/category/tag values after review. Old
 // accepted labels must not resurrect a later user override. Only approved free
-// OCR text contributes separately; raw jobs/results and the old cache never do.
-func (m *mutationTx) materializeItemSearch(identity string) (searchData, error) {
-	parts, valid := projectionPairParts(identity)
-	pending, staged := m.pending[projectionKey{"search_doc", identity}]
-	if !valid || parts[0] != "item" || !staged || pending.deleted || pending.revision < 1 {
-		return searchData{}, ErrDomainState
-	}
-	id := parts[1]
-	item, err := loadItemData(m.ctx, m.tx, id)
-	if err != nil {
-		return searchData{}, err
-	}
+// OCR text contributes separately; raw jobs/results and old caches never do.
+// Unit searches include only purchase evidence attached to that exact unit.
+func (m *mutationTx) loadSearchText(item itemData, unitID string) (searchText, error) {
 	category, err := categoryPathText(m.ctx, m.tx, item.CategoryID)
 	if err != nil {
-		return searchData{}, err
+		return searchText{}, err
 	}
 	var brand, model string
 	if item.Brand != nil {
@@ -181,37 +190,93 @@ func (m *mutationTx) materializeItemSearch(identity string) (searchData, error) 
 	if item.Model != nil {
 		model = *item.Model
 	}
-	barcodes, err := sourceTextRows(m.ctx, m.tx, "SELECT raw_value||char(10)||normalized_value FROM item_barcodes WHERE item_id=? ORDER BY id", id)
+	barcodes, err := sourceTextRows(m.ctx, m.tx, "SELECT raw_value||char(10)||normalized_value FROM item_barcodes WHERE item_id=? ORDER BY id", item.ID)
 	if err != nil {
-		return searchData{}, err
+		return searchText{}, err
 	}
-	identifiers := sourceText(brand, model, barcodes)
-	details := sourceText(item.Description, item.Notes, category)
+	value := searchText{title: item.Name, identifiers: sourceText(brand, model, barcodes), details: sourceText(item.Description, item.Notes, category)}
 	for _, statement := range []string{
 		"SELECT t.name FROM tags t JOIN item_tags l ON l.tag_id=t.id WHERE l.item_id=? ORDER BY t.id",
 		"SELECT alias FROM item_aliases WHERE item_id=? ORDER BY id",
 		"SELECT attribute_key||char(10)||attribute_value FROM item_attributes WHERE item_id=? ORDER BY id",
-		"SELECT p.merchant_name||char(10)||p.receipt_note FROM purchases p WHERE EXISTS(SELECT 1 FROM purchase_lines l WHERE l.purchase_id=p.id AND l.item_id=?) ORDER BY p.id",
-		"SELECT note FROM purchase_lines WHERE item_id=? ORDER BY id",
 	} {
-		value, err := sourceTextRows(m.ctx, m.tx, statement, id)
+		text, err := sourceTextRows(m.ctx, m.tx, statement, item.ID)
+		if err != nil {
+			return searchText{}, err
+		}
+		value.details = sourceText(value.details, text)
+	}
+	condition, args := "l.item_id=?", []any{item.ID}
+	if unitID != "" {
+		condition += " AND l.item_unit_id=?"
+		args = append(args, unitID)
+	}
+	for _, statement := range []string{
+		"SELECT p.merchant_name||char(10)||p.receipt_note FROM purchases p WHERE EXISTS(SELECT 1 FROM purchase_lines l WHERE l.purchase_id=p.id AND " + condition + ") ORDER BY p.id",
+		"SELECT l.note FROM purchase_lines l WHERE " + condition + " ORDER BY l.id",
+	} {
+		text, err := sourceTextRows(m.ctx, m.tx, statement, args...)
+		if err != nil {
+			return searchText{}, err
+		}
+		value.details = sourceText(value.details, text)
+	}
+	value.reviewed, err = sourceTextRows(m.ctx, m.tx, `SELECT CASE WHEN state='corrected' THEN corrected_value ELSE raw_value END
+ FROM ai_review_entries WHERE item_id=? AND field_key IN('specification','keyword')
+ AND state IN('accepted','corrected') AND reviewed_at IS NOT NULL ORDER BY id`, item.ID)
+	if err != nil {
+		return searchText{}, err
+	}
+	return value, nil
+}
+
+func (m *mutationTx) materializeSearch(identity string) (searchData, error) {
+	parts, valid := projectionPairParts(identity)
+	pending, staged := m.pending[projectionKey{"search_doc", identity}]
+	if !valid || (parts[0] != "item" && parts[0] != "unit") || !staged || pending.deleted || pending.revision < 1 {
+		return searchData{}, ErrDomainState
+	}
+	kind, id := parts[0], parts[1]
+	itemID, unitID := id, ""
+	var assetCode, notes string
+	var serial sql.NullString
+	if kind == "unit" {
+		unitID = id
+		err := m.tx.QueryRowContext(m.ctx, "SELECT item_id,asset_code,serial_number,notes FROM item_units WHERE id=?", id).
+			Scan(&itemID, &assetCode, &serial, &notes)
+		if errors.Is(err, sql.ErrNoRows) {
+			return searchData{}, ErrNotFound
+		}
 		if err != nil {
 			return searchData{}, err
 		}
-		details = sourceText(details, value)
+		if !validDomainID(itemID) || !authString(assetCode, 1, 128) || !utf8.ValidString(serial.String) || !utf8.ValidString(notes) {
+			return searchData{}, ErrDomainState
+		}
 	}
-	reviewed, err := sourceTextRows(m.ctx, m.tx, `SELECT CASE WHEN state='corrected' THEN corrected_value ELSE raw_value END
- FROM ai_review_entries WHERE item_id=? AND field_key IN('specification','keyword')
- AND state IN('accepted','corrected') AND reviewed_at IS NOT NULL ORDER BY id`, id)
+	item, err := loadItemData(m.ctx, m.tx, itemID)
 	if err != nil {
 		return searchData{}, err
 	}
-	_, err = m.tx.ExecContext(m.ctx, `INSERT INTO search_documents(item_id,title,identifiers,details,reviewed_ai,revision,updated_at)
+	if kind == "unit" && item.TrackingMode != "individual" {
+		return searchData{}, ErrDomainState
+	}
+	text, err := m.loadSearchText(item, unitID)
+	if err != nil {
+		return searchData{}, err
+	}
+	statement := `INSERT INTO search_documents(item_id,title,identifiers,details,reviewed_ai,revision,updated_at)
  VALUES(?,?,?,?,?,?,?) ON CONFLICT(item_id) DO UPDATE SET title=excluded.title,identifiers=excluded.identifiers,
- details=excluded.details,reviewed_ai=excluded.reviewed_ai,revision=excluded.revision,updated_at=excluded.updated_at`,
-		id, item.Name, identifiers, details, reviewed, pending.revision, stamp(m.now))
-	if err != nil {
+ details=excluded.details,reviewed_ai=excluded.reviewed_ai,revision=excluded.revision,updated_at=excluded.updated_at`
+	if kind == "unit" {
+		text.identifiers = sourceText(text.identifiers, assetCode, serial.String)
+		text.details = sourceText(text.details, notes)
+		statement = `INSERT INTO unit_search_documents(unit_id,title,identifiers,details,reviewed_ai,revision,updated_at)
+ VALUES(?,?,?,?,?,?,?) ON CONFLICT(unit_id) DO UPDATE SET title=excluded.title,identifiers=excluded.identifiers,
+ details=excluded.details,reviewed_ai=excluded.reviewed_ai,revision=excluded.revision,updated_at=excluded.updated_at`
+	}
+	if _, err = m.tx.ExecContext(m.ctx, statement, id, text.title, text.identifiers, text.details, text.reviewed, pending.revision, stamp(m.now)); err != nil {
 		return searchData{}, err
 	}
-	return searchData{EntityType: "item", EntityID: id, ApprovedText: sourceText(item.Name, identifiers, details, reviewed)}, nil
+	return searchData{EntityType: kind, EntityID: id, ApprovedText: sourceText(text.title, text.identifiers, text.details, text.reviewed)}, nil
 }

@@ -1,6 +1,6 @@
 # Catalog Item Rules
 
-**Implementation status:** the executable item contracts and generated TypeScript fixtures are defined and tested. Item transaction services, HTTP handlers, catalog screens, related-link maintenance, holdings, and complete search/sync workflows are still in development. This document specifies their required behavior; it does not advertise unimplemented routes as available.
+**Implementation status:** the executable item contracts, generated TypeScript fixtures, and final-state item/unit approved-search publication foundation are implemented and tested. Item transaction services, HTTP handlers, catalog screens, related-link maintenance, holdings, and complete search/sync workflows are still in development. This document specifies their required behavior; it does not advertise unimplemented routes as available.
 
 ## Catalog metadata and holdings
 

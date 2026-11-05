@@ -4,6 +4,8 @@
 
 ### Added
 
+- Publish independently keyed unit search text whenever catalog/classification/tag dependencies change. Rebuild both FTS scopes from final manual/approved source, keep serial/asset/notes and associated purchase evidence in the correct unit, ignore poisoned cached text/revisions, preserve authoritative counters and old frozen rows, and coalesce repeated staging. Add exact replay, full-length Unicode identity, scoped purchase, source-contamination and statement/late-auth/deferred-commit/overflow rollback checks. Unit CRUD, query APIs and full sync remain separate work.
+
 - Add responsive authenticated settings/category/tag lists and create/edit/delete screens with full signed-page validation, native acyclic parent selection, exact text, original aggregate proofs, explicit deletion effects, dirty-navigation protection, safe login returns, and manual changed-field adoption. Retain uncertain original commands even after a genuinely committed deletion disappears from current reads; never replay on reconnect or overwrite query state with historical acknowledgements. Share review/leave composition with locations without editing generated primitives. Add real-server taxonomy workflows, malformed-deletion reconciliation, light/dark accessibility and 200% long-path checks across five layouts.
 
 - Share complete signed-metadata reads, iterative hierarchy/path/search preparation, volatile reviewed-command snapshots and the foreground mutation controller between location and taxonomy workflows. Add category/tag graph/name consistency and command/parent-proof/controller tests while preserving existing location behavior. Taxonomy settings composition remains separate; these models do not enable new screens by themselves.

@@ -121,9 +121,14 @@ func requireProjectionReplay(t *testing.T, s *Store, mutation func()) map[projec
 
 func approvedText(t *testing.T, s *Store, itemID string) string {
 	t.Helper()
+	return projectedSearchText(t, s, "item", itemID)
+}
+
+func projectedSearchText(t *testing.T, s *Store, kind, id string) string {
+	t.Helper()
 	var data searchData
-	encoded := scalar[string](t, s.db, "SELECT payload_json FROM current_projections WHERE entity_type='search_doc' AND entity_id=?", projectionPair("item", itemID))
-	if json.Unmarshal([]byte(encoded), &data) != nil || data.EntityType != "item" || data.EntityID != itemID {
+	encoded := scalar[string](t, s.db, "SELECT payload_json FROM current_projections WHERE entity_type='search_doc' AND entity_id=?", projectionPair(kind, id))
+	if json.Unmarshal([]byte(encoded), &data) != nil || data.EntityType != kind || data.EntityID != id {
 		t.Fatal("published search identity/payload mismatch")
 	}
 	return data.ApprovedText
@@ -162,6 +167,8 @@ func TestTaxonomyCategoryRenameRebuildsOnlyRealizedManualAndApprovedFinalSource(
 		execSQL(t, s.db, "INSERT INTO ai_review_entries(id,item_id,field_key,state,raw_value,corrected_value,reviewed_at,created_at,updated_at) VALUES(?,'item-1',?,?,?,?,?,'2026','2026')", review.id, review.field, review.state, review.raw, review.corrected, review.reviewed)
 	}
 	execSQL(t, s.db, "UPDATE search_documents SET reviewed_ai='PoisonedOldCache' WHERE item_id='item-1'")
+	execSQL(t, s.db, "INSERT INTO unit_search_documents(unit_id,title,reviewed_ai,revision,updated_at) VALUES('unit','PoisonedUnitTitle','PoisonedUnitCache',9,'2026')")
+	execSQL(t, s.db, "INSERT INTO projection_revisions VALUES('search_doc',?,11)", projectionPair("unit", "unit"))
 	root = getCategory(t, taxonomy, token, root.ID)
 	before := domainState(t, s)
 	changed := requireProjectionReplay(t, s, func() {
@@ -169,7 +176,7 @@ func TestTaxonomyCategoryRenameRebuildsOnlyRealizedManualAndApprovedFinalSource(
 			t.Fatal(err)
 		}
 	})
-	for _, key := range []projectionKey{{"category", root.ID}, {"item", "item-1"}, {"search_doc", projectionPair("item", "item-1")}} {
+	for _, key := range []projectionKey{{"category", root.ID}, {"item", "item-1"}, {"search_doc", projectionPair("item", "item-1")}, {"search_doc", projectionPair("unit", "unit")}} {
 		if !changed[key] {
 			t.Fatal("taxonomy mutation omitted a dependent projection", key.kind)
 		}
@@ -178,8 +185,11 @@ func TestTaxonomyCategoryRenameRebuildsOnlyRealizedManualAndApprovedFinalSource(
 		t.Fatal("ancestor rename republished unchanged descendants")
 	}
 	published := approvedText(t, s, "item-1")
+	unitPublished := projectedSearchText(t, s, "unit", "unit")
 	for _, text := range []string{"ManualTitle", "ManualBrand", "ManualModel", "ManualDescription", "ManualNote", "NewParentLabel", "LeafLabel", "OldTagLabel", "00001234", "ManualAlias", "ManualAttribute", "ManualValue", "ManualMerchant", "ManualReceipt", "ManualLineNote", "AcceptedKeyword", "CorrectSpec"} {
-		if !strings.Contains(published, text) || scalar[int](t, s.db, "SELECT COUNT(*) FROM search_fts WHERE search_fts MATCH ?", text) != 1 {
+		if !strings.Contains(published, text) || !strings.Contains(unitPublished, text) ||
+			scalar[int](t, s.db, "SELECT COUNT(*) FROM search_fts WHERE search_fts MATCH ?", text) != 1 ||
+			scalar[int](t, s.db, "SELECT COUNT(*) FROM unit_search_fts WHERE unit_search_fts MATCH ?", text) != 1 {
 			t.Fatal("approved source contribution was lost", text)
 		}
 	}
@@ -187,6 +197,20 @@ func TestTaxonomyCategoryRenameRebuildsOnlyRealizedManualAndApprovedFinalSource(
 		if strings.Contains(published, text) || scalar[int](t, s.db, "SELECT COUNT(*) FROM search_fts WHERE search_fts MATCH ?", `"`+text+`"`) != 0 {
 			t.Fatal("unapproved, stale, private or wrongly scoped text contaminated publication", text)
 		}
+	}
+	for _, text := range []string{"UnitSerialOnly", "UnitNotesOnly", "UNIT-001"} {
+		if !strings.Contains(unitPublished, text) || scalar[int](t, s.db, "SELECT COUNT(*) FROM unit_search_fts WHERE unit_search_fts MATCH ?", `"`+text+`"`) != 1 {
+			t.Fatal("unit-specific identifiers were not published in their own scope", text)
+		}
+	}
+	for _, text := range []string{"OldParentLabel", "PendingCandidate", "RejectedCandidate", "UnreviewedRawOCR", "OldWrongSpec", "HistoricalTag", "HistoricalCategory", "HistoricalTitle", "HistoricalBrand", "HistoricalModel", "UnreviewedTimestampCandidate", "PoisonedOldCache", "UnpublishedJobError", "PoisonedUnitTitle", "PoisonedUnitCache"} {
+		if strings.Contains(unitPublished, text) || scalar[int](t, s.db, "SELECT COUNT(*) FROM unit_search_fts WHERE unit_search_fts MATCH ?", `"`+text+`"`) != 0 {
+			t.Fatal("unapproved or stale text contaminated unit publication", text)
+		}
+	}
+	if scalar[int](t, s.db, "SELECT revision FROM unit_search_documents WHERE unit_id='unit'") != 12 ||
+		scalar[int](t, s.db, "SELECT entity_revision FROM current_projections WHERE entity_type='search_doc' AND entity_id=?", projectionPair("unit", "unit")) != 12 {
+		t.Fatal("unit search ignored its retained authoritative counter")
 	}
 	after := domainState(t, s)
 	for _, table := range []string{"item_units", "stock_balances", "purchases", "purchase_lines", "media", "ai_jobs", "ai_review_entries", "ocr_results"} {
@@ -205,6 +229,7 @@ func TestTaxonomyTagRenameAndDeleteDoNotResurrectHistoricalAcceptedLabels(t *tes
 	tag := createTag(t, taxonomy, token, "OldTag")
 	retained := createTag(t, taxonomy, token, "RetainedTag")
 	seedCatalogItem(t, taxonomy, token, "item-1", nil, tag.ID, retained.ID)
+	seedSearchUnit(t, s, "unit", "item-1", "ASSET", nil, "UnitNote")
 	execSQL(t, s.db, "INSERT INTO ai_review_entries(id,item_id,field_key,state,raw_value,reviewed_at,created_at,updated_at) VALUES('old-tag','item-1','tag','accepted','OldTag','2026-01-01T00:00:00Z','2026','2026')")
 	var renamed Tag
 	requireProjectionReplay(t, s, func() {
@@ -215,6 +240,7 @@ func TestTaxonomyTagRenameAndDeleteDoNotResurrectHistoricalAcceptedLabels(t *tes
 		}
 	})
 	if renamed.Revision != 3 || !strings.Contains(approvedText(t, s, "item-1"), "NewTag") || strings.Contains(approvedText(t, s, "item-1"), "OldTag") ||
+		!strings.Contains(projectedSearchText(t, s, "unit", "unit"), "NewTag") || strings.Contains(projectedSearchText(t, s, "unit", "unit"), "OldTag") ||
 		scalar[int](t, s.db, "SELECT revision FROM projection_revisions WHERE entity_type='item' AND entity_id='item-1'") != 1 {
 		t.Fatal("tag rename lost current text or unnecessarily changed item membership")
 	}
@@ -225,7 +251,8 @@ func TestTaxonomyTagRenameAndDeleteDoNotResurrectHistoricalAcceptedLabels(t *tes
 	})
 	if !changed[projectionKey{"tag", tag.ID}] || !changed[projectionKey{"item_tag", projectionPair("item-1", tag.ID)}] || !changed[projectionKey{"item", "item-1"}] ||
 		scalar[int](t, s.db, "SELECT COUNT(*) FROM item_tags WHERE tag_id=?", retained.ID) != 1 || scalar[int](t, s.db, "SELECT COUNT(*) FROM items") != 1 ||
-		strings.Contains(approvedText(t, s, "item-1"), "NewTag") || strings.Contains(approvedText(t, s, "item-1"), "OldTag") || !strings.Contains(approvedText(t, s, "item-1"), "RetainedTag") {
+		strings.Contains(approvedText(t, s, "item-1"), "NewTag") || strings.Contains(approvedText(t, s, "item-1"), "OldTag") || !strings.Contains(approvedText(t, s, "item-1"), "RetainedTag") ||
+		strings.Contains(projectedSearchText(t, s, "unit", "unit"), "NewTag") || strings.Contains(projectedSearchText(t, s, "unit", "unit"), "OldTag") || !strings.Contains(projectedSearchText(t, s, "unit", "unit"), "RetainedTag") {
 		t.Fatal("tag delete erased unrelated inventory/links or resurrected a historical label")
 	}
 }
@@ -259,6 +286,9 @@ func TestTaxonomyCategoryDeletionClearsClassificationWithoutDeletingHoldings(t *
 		if strings.Contains(approvedText(t, s, id), "DeletedClass") || !changed[projectionKey{"item", id}] || !changed[projectionKey{"search_doc", projectionPair("item", id)}] {
 			t.Fatal("classification deletion omitted item/search invalidation")
 		}
+	}
+	if !changed[projectionKey{"search_doc", projectionPair("unit", "unit")}] || strings.Contains(projectedSearchText(t, s, "unit", "unit"), "DeletedClass") {
+		t.Fatal("classification deletion left a stale unit search document")
 	}
 }
 

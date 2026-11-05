@@ -62,7 +62,7 @@ func (m *mutationTx) projectionPayload(key projectionKey) ([]byte, error) {
 		}
 		return json.Marshal(value)
 	case "search_doc":
-		value, err := m.materializeItemSearch(key.id)
+		value, err := m.materializeSearch(key.id)
 		if err != nil {
 			return nil, err
 		}
