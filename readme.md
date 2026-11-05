@@ -28,7 +28,7 @@ make build
 ./bin/homebox db check --database ./data/homebox.sqlite
 ```
 
-See [Database Operations](docs/database.md) for private storage permissions, explicit legacy adoption, precision mappings, verified pre-migration snapshots, failure recovery, timeouts, and Linux amd64/arm64 builds. Additive migrations retain independent location, taxonomy and catalog-link identities without silently rewriting historical barcode strings or claiming full sync readiness. The [owned catalog persistence foundation](docs/catalog-links.md) does not yet expose link CRUD or maintenance screens. Local migration snapshots are sensitive, unencrypted database-only recovery files, not full encrypted off-host backups.
+See [Database Operations](docs/database.md) for private storage permissions, explicit legacy adoption, precision mappings, verified pre-migration snapshots, failure recovery, timeouts, and Linux amd64/arm64 builds. Additive migrations retain independent location, taxonomy and catalog-link identities without silently rewriting historical barcode strings or claiming full sync readiness. The [owned catalog persistence and write services](docs/catalog-links.md) enforce independent row identity, real barcode validation and atomic owner/search updates internally; link HTTP routes and maintenance screens remain unavailable. Local migration snapshots are sensitive, unencrypted database-only recovery files, not full encrypted off-host backups.
 
 ## Private setup credential (available now)
 
