@@ -125,7 +125,43 @@ const implicitItemStock: components['schemas']['ItemCreate'] = { name: 'Item', q
 // @ts-expect-error Every live item page explicitly indicates whether another page exists.
 const incompleteItemPage: components['schemas']['ItemList'] = { data: [] }
 
-void [itemHeaders, itemProof, measuredItem, clearItem, restoreItem, emptyItemPage, currentItem,
+declare const createCatalogItem: typeof import('../src/lib/api/catalog').createItem
+declare const patchCatalogItem: typeof import('../src/lib/api/catalog').patchItem
+declare const archiveCatalogItem: typeof import('../src/lib/api/catalog').archiveItem
+declare const deleteCatalogItem: typeof import('../src/lib/api/catalog').deleteItem
+declare const fetchCatalogPage: typeof import('../src/lib/api/catalog').fetchItemsPage
+const createMinimalCatalog = createCatalogItem({ name: 'Item' }, writeContext)
+const createDefaultSubset = createCatalogItem({ name: 'Item', unit_code: 'pcs' }, writeContext)
+const createMeasuredCatalog = createCatalogItem(measuredItem, writeContext)
+const createClassifiedCatalog = createCatalogItem({ name: 'Item', category_id: 'category' }, writeContext)
+const patchCatalogNull = patchCatalogItem('item', clearItem, { ...writeContext, expectedRevision: 1 })
+const archiveCatalog = archiveCatalogItem('item', {}, { ...writeContext, expectedRevision: 1 })
+const deleteCatalog = deleteCatalogItem('item', { ...writeContext, expectedRevision: 1 })
+const readFilteredCatalog = fetchCatalogPage({ from: '2026-01-01', to: '2026-12-31', currency: 'TWD', category_id: 'category', location_id: 'location',
+  scope: 'subtree', status: 'active', merchant: 'Merchant', q: 'Query', limit: 50 }, new AbortController().signal)
+// @ts-expect-error Nondefault measurements need the complete explicit tuple, even though the generator ignores if/then.
+const incompleteCatalogUnit = createCatalogItem({ name: 'Item', unit_code: 'kg' }, writeContext)
+// @ts-expect-error A nondefault base unit cannot silently inherit display/scale defaults.
+const incompleteCatalogBase = createCatalogItem({ name: 'Item', base_unit: 'g' }, writeContext)
+// @ts-expect-error A nondefault scale cannot silently infer either unit.
+const incompleteCatalogScale = createCatalogItem({ name: 'Item', scale_factor: 1000 }, writeContext)
+// @ts-expect-error Item creation never attaches an unrelated parent/target proof, including when a category is selected.
+const unrelatedCatalogProof = createCatalogItem({ name: 'Item', category_id: 'category' }, { ...writeContext, expectedRevision: 1 })
+// @ts-expect-error Partial catalog edits require the reviewed original resource proof.
+const unprovenCatalogPatch = patchCatalogItem('item', { name: 'New' }, writeContext)
+// @ts-expect-error Archival requires the original item proof.
+const unprovenCatalogArchive = archiveCatalogItem('item', {}, writeContext)
+// @ts-expect-error Deletion requires the original item proof even for historical reconciliation.
+const unprovenCatalogDelete = deleteCatalogItem('item', writeContext)
+// @ts-expect-error Holdings are not implicit catalog metadata fields.
+const implicitCatalogQuantity = createCatalogItem({ name: 'Item', quantity_base: 1 }, writeContext)
+// @ts-expect-error The catalog status filter has only contracted metadata states.
+const invalidCatalogStatus = fetchCatalogPage({ status: 'disposed' }, new AbortController().signal)
+
+void [createMinimalCatalog, createDefaultSubset, createMeasuredCatalog, createClassifiedCatalog, patchCatalogNull, archiveCatalog, deleteCatalog, readFilteredCatalog,
+  incompleteCatalogUnit, incompleteCatalogBase, incompleteCatalogScale, unrelatedCatalogProof, unprovenCatalogPatch, unprovenCatalogArchive, unprovenCatalogDelete,
+  implicitCatalogQuantity, invalidCatalogStatus,
+  itemHeaders, itemProof, measuredItem, clearItem, restoreItem, emptyItemPage, currentItem,
   itemWithoutOrigin, itemWithoutProof, wrappedItem, nullItemScale, deletedItem, implicitItemStock, incompleteItemPage,
   rootCategory, childCategory, createNamedTag, patchCategoryParent, unprovenCategoryChild, unrelatedCategoryProof, unrelatedTagProof, unprovenCategoryMove,
   rootCategoryHeaders, childCategoryHeaders, categoryCreate, categoryMove, categoryRename, category, tag,

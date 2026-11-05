@@ -1,6 +1,6 @@
 # HTTP Authentication and Transport
 
-**Development status:** all seven authentication API routes, their transport/security checks, the React account/location/taxonomy workflows, [seven location HTTP operations](locations.md), [eight category/tag HTTP operations](taxonomy.md), and [six catalog HTTP operations](catalog.md) are implemented. Catalog browser adapters/screens, privileged reauthentication consumers, other inventory/domain routes, offline PWA, and production deployment are not complete. These commands document working server capabilities, not QNAP or physical-device acceptance.
+**Development status:** all seven authentication API routes, their transport/security checks, the React account/location/taxonomy workflows, [seven location HTTP operations](locations.md), [eight category/tag HTTP operations](taxonomy.md), [six catalog HTTP operations and their typed stateless adapters](catalog.md) are implemented. Reviewed catalog screens, privileged reauthentication consumers, other inventory/domain routes, offline PWA, and production deployment are not complete. These commands document working server capabilities, not QNAP or physical-device acceptance.
 
 ## Start locally
 

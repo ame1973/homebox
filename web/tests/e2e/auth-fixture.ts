@@ -9,7 +9,8 @@ type Application = { url: string; bootstrapToken: string }
 
 // Private per-test stores avoid sharing a setup token/account/rate window across
 // viewports or bypassing the production limiter with a test-only HTTP endpoint.
-export const test = base.extend<{ application: Application }, { homeboxBinary: string }>({
+export const test = base.extend<{ application: Application }, { homeboxBinary: string; applicationWebDirectory: string }>({
+  applicationWebDirectory: [fileURLToPath(new URL('../../dist', import.meta.url)), { scope: 'worker' }],
   homeboxBinary: [async ({ browserName }, provideFixture) => {
     const directory = mkdtempSync(join(tmpdir(), `homebox-auth-${browserName}-binary-`))
     const binary = join(directory, 'homebox')
@@ -18,7 +19,7 @@ export const test = base.extend<{ application: Application }, { homeboxBinary: s
       await provideFixture(binary)
     } finally { rmSync(directory, { recursive: true, force: true }) }
   }, { scope: 'worker' }],
-  application: async ({ homeboxBinary }, provideFixture) => {
+  application: async ({ homeboxBinary, applicationWebDirectory }, provideFixture) => {
     const directory = mkdtempSync(join(tmpdir(), 'homebox-auth-browser-'))
     const database = join(directory, 'homebox.sqlite')
     const tokenFile = join(directory, 'bootstrap.token')
@@ -26,7 +27,7 @@ export const test = base.extend<{ application: Application }, { homeboxBinary: s
     try {
       execFileSync(homeboxBinary, ['db', 'migrate', '--database', database], { stdio: 'pipe' })
       execFileSync(homeboxBinary, ['auth', 'bootstrap', '--database', database, '--output', tokenFile], { stdio: 'pipe' })
-      child = spawn(homeboxBinary, ['serve', '--listen', '127.0.0.1:0', '--database', database, '--web-dir', fileURLToPath(new URL('../../dist', import.meta.url))], { stdio: ['ignore', 'pipe', 'pipe'] })
+      child = spawn(homeboxBinary, ['serve', '--listen', '127.0.0.1:0', '--database', database, '--web-dir', applicationWebDirectory], { stdio: ['ignore', 'pipe', 'pipe'] })
       const server = child
       server.stderr?.resume()
       const ready = await new Promise<{ public_origin: string }>((resolve, reject) => {
