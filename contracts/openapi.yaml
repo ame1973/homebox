@@ -15802,7 +15802,7 @@ components:
             const: no-store
           description: Protected API data is never cached by the service worker.
     Error409:
-      description: Revision, idempotency, or business conflict
+      description: Revision, idempotency, or business conflict. BARCODE_CONFLICT means the same owner already has the product value under the same symbology; ALIAS_CONFLICT means the same owner already has the exact alias. These static codes never echo submitted values or private diagnostics.
       content:
         application/json:
           schema:

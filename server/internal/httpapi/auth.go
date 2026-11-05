@@ -51,7 +51,7 @@ func (a *authAPI) serve(w http.ResponseWriter, r *http.Request, requestID string
 		return
 	}
 	if method == "" {
-		if a.serveLocations(w, r, requestID) || a.serveTaxonomy(w, r, requestID) || a.serveCatalog(w, r, requestID) {
+		if a.serveLocations(w, r, requestID) || a.serveTaxonomy(w, r, requestID) || a.serveCatalogLinks(w, r, requestID) || a.serveCatalog(w, r, requestID) {
 			return
 		}
 		// Worker credentials are a separate boundary, never an administrator session.

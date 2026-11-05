@@ -195,15 +195,19 @@ func writeCatalogError(w http.ResponseWriter, err error, requestID string) {
 		catalogValidation(w, requestID)
 		return
 	case errors.Is(err, store.ErrNotFound):
-		status, code, message = http.StatusNotFound, "NOT_FOUND", "The item or referenced category does not exist."
+		status, code, message = http.StatusNotFound, "NOT_FOUND", "The item or referenced catalog resource does not exist."
 	case errors.Is(err, store.ErrInvalidCursor):
 		status, code, message = http.StatusBadRequest, "INVALID_CURSOR", "Refresh the list; its continuation is invalid, expired, or differently scoped."
 	case errors.Is(err, store.ErrPreconditionRequired):
-		status, code, message = http.StatusConflict, "PRECONDITION_REQUIRED", "Refresh the reviewed item aggregate and send its current revision."
+		status, code, message = http.StatusConflict, "PRECONDITION_REQUIRED", "Refresh the reviewed resource and send its original revision."
 	case errors.Is(err, store.ErrRevisionConflict):
-		status, code, message = http.StatusConflict, "REVISION_CONFLICT", "The item aggregate or owned membership changed. Refresh and review before submitting again."
+		status, code, message = http.StatusConflict, "REVISION_CONFLICT", "The reviewed resource or owning membership changed. Refresh and review before submitting again."
 	case errors.Is(err, store.ErrIdempotencyExpired):
 		status, code, message = http.StatusConflict, "IDEMPOTENCY_EXPIRED", "The original acknowledgement expired. Review current state before using a new key."
+	case errors.Is(err, store.ErrBarcodeDuplicate):
+		status, code, message = http.StatusConflict, "BARCODE_CONFLICT", "This product barcode is already linked to the item under the same symbology."
+	case errors.Is(err, store.ErrAliasDuplicate):
+		status, code, message = http.StatusConflict, "ALIAS_CONFLICT", "This exact alias is already linked to the item."
 	case errors.Is(err, store.ErrItemHistory):
 		status, code, message = http.StatusConflict, "ITEM_HAS_HISTORY", "Retained units, balances, purchases or movements prevent deletion or measurement changes; preserve their meaning and archive metadata instead."
 	}

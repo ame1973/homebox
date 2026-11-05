@@ -3768,7 +3768,7 @@ export interface components {
                 readonly "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Revision, idempotency, or business conflict */
+        /** @description Revision, idempotency, or business conflict. BARCODE_CONFLICT means the same owner already has the product value under the same symbology; ALIAS_CONFLICT means the same owner already has the exact alias. These static codes never echo submitted values or private diagnostics. */
         readonly Error409: {
             headers: {
                 /** @description Protected API data is never cached by the service worker. */

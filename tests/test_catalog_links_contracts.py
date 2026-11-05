@@ -1,4 +1,4 @@
-"""Owned catalog wire guarantees, separate from not-yet-implemented handlers."""
+"""Owned catalog wire guarantees; runtime/HTTP conformance is tested separately."""
 from copy import deepcopy
 import unittest
 
@@ -20,6 +20,18 @@ ROWS = {
 
 
 class CatalogLinkContractTests(unittest.TestCase):
+    def test_owned_duplicate_conflicts_have_static_409_contracts(self):
+        description = API["components"]["responses"]["Error409"]["description"]
+        self.assertIn("BARCODE_CONFLICT", description)
+        self.assertIn("ALIAS_CONFLICT", description)
+        self.assertIn("same owner", description)
+        self.assertIn("never echo", description)
+        for path, method in [("/items/{id}/barcodes", "post"), ("/barcodes/{id}", "patch"),
+                             ("/items/{id}/aliases", "post"), ("/aliases/{id}", "patch")]:
+            with self.subTest(path=path, method=method):
+                self.assertEqual(API["paths"][path][method]["responses"]["409"]["$ref"],
+                                 "#/components/responses/Error409")
+
     def test_rows_have_independent_bounded_identity_revision_and_complete_offline_payloads(self):
         for name, row in ROWS.items():
             with self.subTest(schema=name):

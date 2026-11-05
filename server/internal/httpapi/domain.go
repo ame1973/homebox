@@ -77,7 +77,7 @@ func resourceRevision(w http.ResponseWriter, r *http.Request, requestID string, 
 	values := r.Header.Values("If-Match")
 	if len(values) == 0 {
 		if required {
-			writeError(w, http.StatusConflict, "PRECONDITION_REQUIRED", "Send the current quoted aggregate revision in If-Match.", requestID)
+			writeError(w, http.StatusConflict, "PRECONDITION_REQUIRED", "Send the original quoted resource revision in If-Match.", requestID)
 			return 0, false, false
 		}
 		return 0, false, true
@@ -106,18 +106,22 @@ func resourceRevision(w http.ResponseWriter, r *http.Request, requestID string, 
 }
 
 func metadataListQuery(w http.ResponseWriter, r *http.Request, requestID string) (string, int, bool) {
+	return boundedMetadataQuery(w, r, requestID, 100, 2300)
+}
+
+func boundedMetadataQuery(w http.ResponseWriter, r *http.Request, requestID string, defaultLimit, rawBudget int) (string, int, bool) {
 	invalid := func() (string, int, bool) {
 		writeError(w, http.StatusBadRequest, "INVALID_QUERY", "Use one bounded limit and one opaque list cursor only.", requestID)
 		return "", 0, false
 	}
-	if len(r.URL.RawQuery) > 2300 {
+	if len(r.URL.RawQuery) > rawBudget {
 		return invalid()
 	}
 	values, err := url.ParseQuery(r.URL.RawQuery)
 	if err != nil {
 		return invalid()
 	}
-	limit := 100
+	limit := defaultLimit
 	cursor := ""
 	for name, entries := range values {
 		if len(entries) != 1 {
