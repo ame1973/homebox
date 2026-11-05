@@ -3499,6 +3499,7 @@ export interface components {
             readonly preferences?: components["schemas"]["Preferences"];
             readonly worker?: components["schemas"]["WorkerSettings"];
         };
+        /** @description One retained quantity balance identified by the canonical JSON pair [item_id,location_id], with its own positive revision. quantity_base is an exact nonnegative safe integer in the owning Item's base_unit; the full measurement tuple is copied from current source, not guessed or converted. A zero balance remains a real referenced row. This Stock revision/ETag is independent of the original Item proof used by stock mutations. */
         readonly Stock: {
             readonly base_unit: string;
             readonly item_id: string;
@@ -3508,7 +3509,7 @@ export interface components {
             readonly scale_factor: number;
             readonly unit_code: string;
         };
-        /** @description Set an absolute nonnegative balance. If-Match checks the item revision; a reason is mandatory. */
+        /** @description Set an absolute nonnegative safe quantity_base, never a signed delta or converted display amount, against the original Item revision. An exact nonempty reason is mandatory; the server records the actual difference as an immutable movement and validates tracking/location/counters atomically. Equal current quantity is a no-op receipt, not a new movement. Return the frozen target Stock and its independent row ETag; no response may replace current reads automatically. */
         readonly StockAdjustInput: {
             readonly item_id: string;
             readonly note?: string;
@@ -3516,25 +3517,26 @@ export interface components {
             readonly reason: string;
             readonly target_location_id: string;
         };
-        /** @description quantity_base is an integer in item.base_unit; server validates tracking_mode, balance and transaction idempotency */
+        /** @description Consume an exact positive quantity_base against the original Item revision. The server validates quantity tracking and available source balance in the same transaction as the immutable movement, Item/Stock counters, projections and frozen response. Do not permit negative stock, floating conversion or automatic replay; retain a resulting zero row. Return the frozen source Stock and its independent row ETag. */
         readonly StockConsumeInput: {
             readonly item_id: string;
             readonly note?: string;
             readonly quantity_base: number;
             readonly source_location_id: string;
         };
+        /** @description One complete live page in stable (item_id,location_id) order, including retained zero balances. Required null terminates pagination; no collection ETag or mixed-base-unit total. */
         readonly StockList: {
             readonly data: readonly components["schemas"]["Stock"][];
-            readonly next_cursor?: string | null;
+            readonly next_cursor: string | null;
         };
-        /** @description quantity_base is an integer in item.base_unit; server validates tracking_mode, balance and transaction idempotency */
+        /** @description Receive an exact positive quantity_base in the Item's base_unit against the original Item revision, not a Stock row proof. The server validates quantity tracking, active destination/path, safe addition and immutable movement/idempotency/outbox publication atomically; no unit conversion, purchase or spend is inferred. Return the frozen target Stock and its independent row ETag. */
         readonly StockReceiveInput: {
             readonly item_id: string;
             readonly note?: string;
             readonly quantity_base: number;
             readonly target_location_id: string;
         };
-        /** @description quantity_base is an integer in item.base_unit; server validates tracking_mode, balance and transaction idempotency */
+        /** @description Transfer an exact positive quantity_base within one quantity-tracked Item against its original Item revision. The source and target must differ; source sufficiency, active destination/path and safe target addition are runtime checks. Both balances, Item revision, immutable movement, independent projections and frozen target Stock response commit atomically. A zero source remains a retained row. The target Stock ETag is not the Item proof or a current source balance. */
         readonly StockTransferInput: {
             readonly item_id: string;
             readonly note?: string;
@@ -3592,6 +3594,7 @@ export interface components {
         readonly TagWrite: {
             readonly name: string;
         };
+        /** @description A stable individually tracked physical unit with an immutable owning Item, server-assigned globally unique asset code and independent retained revision. Nullable location/serial fields are always present; null and supplied-empty serial text remain distinct. Retired/disposed status does not erase source or immutable history. Ordinary unit edits cannot reassign ownership, change the asset code, receive quantity stock or post financial events. */
         readonly Unit: {
             readonly asset_code: string;
             readonly id: string;
@@ -3600,23 +3603,26 @@ export interface components {
             readonly notes: string;
             readonly revision: number;
             readonly serial_number: string | null;
-            /** @enum {unknown} */
+            /** @enum {string} */
             readonly status: "stored" | "in_use" | "lent" | "lost" | "retired" | "disposed";
         };
+        /** @description Create one independent physical unit for an individually tracked Item against the original Item revision. The location choice is explicit, including null for no known location; nonnull destinations require an active location/path. The server assigns the immutable UUID/asset code. Omitted serial/notes/status default to null/empty/stored without requiring clients to install defaults. Retired/disposed creation, owner reassignment, quantities, purchases and implicit asset accounting are forbidden. */
         readonly UnitCreate: {
             readonly location_id: string | null;
             readonly notes?: string;
             readonly serial_number?: string | null;
             /**
              * @default stored
-             * @enum {unknown}
+             * @enum {string}
              */
             readonly status?: "stored" | "in_use" | "lent" | "lost";
         };
+        /** @description One complete live stable-ID page belonging to the requested Item, including retained lifecycle states. Required null terminates pagination; no collection ETag or frozen-snapshot claim. */
         readonly UnitList: {
             readonly data: readonly components["schemas"]["Unit"][];
-            readonly next_cursor?: string | null;
+            readonly next_cursor: string | null;
         };
+        /** @description Move only this physical unit to the explicitly reviewed existing active location/path, using the original Unit revision. Ownership and asset code remain unchanged; moving a location container is a separate location operation. The service validates the destination and atomically publishes unit/location/history/search dependencies without creating stock. */
         readonly UnitMove: {
             readonly target_location_id: string;
         };
@@ -3625,11 +3631,13 @@ export interface components {
             /** Format: date-time */
             readonly retired_at: string;
         };
+        /** @description Explicit lifecycle transition against the original Unit revision, not a metadata PATCH or quantity write. Server-side lifecycle/asset guards and immutable events remain mandatory; accepting this shape alone does not authorize bypassing retirement/disposal accounting. Repeating current status is not a new inventory event. */
         readonly UnitStatusInput: {
             readonly note?: string;
             /** @enum {string} */
             readonly status: "stored" | "in_use" | "lent" | "lost" | "retired" | "disposed";
         };
+        /** @description Nonempty partial metadata only. Omitted fields are unchanged; explicit null clears serial_number, while supplied-empty serial text is retained. Ownership, location, asset code, status, inventory and financial fields cannot be changed here. */
         readonly UnitWrite: {
             readonly notes?: string;
             readonly serial_number?: string | null;
@@ -5906,8 +5914,6 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
-                    readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
                 content: {
@@ -6602,8 +6608,6 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
-                    readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
                 content: {
@@ -6627,8 +6631,10 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Original quoted positive safe Item revision; no zero, leading zeros, weak/list/wildcard proof or automatic rebase. Maximum numeric revision is 9007199254740991 and is also validated by the server. */
                 readonly "If-Match": string;
+                /** @description Exact configured public origin; no wildcard or inferred forwarded host. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -6649,7 +6655,7 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Strong quoted independent Unit revision, not an unrelated parent or current-state receipt. Numeric safe bounds and exact resource identity remain server-authoritative. */
                     readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
@@ -8137,8 +8143,10 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Original quoted positive safe Item revision; no zero, leading zeros, weak/list/wildcard proof or automatic rebase. Maximum numeric revision is 9007199254740991 and is also validated by the server. */
                 readonly "If-Match": string;
+                /** @description Exact configured public origin; no wildcard or inferred forwarded host. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -8157,7 +8165,7 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Strong quoted independent Stock revision, not an unrelated parent or current-state receipt. Numeric safe bounds and exact resource identity remain server-authoritative. */
                     readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
@@ -8183,8 +8191,10 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Original quoted positive safe Item revision; no zero, leading zeros, weak/list/wildcard proof or automatic rebase. Maximum numeric revision is 9007199254740991 and is also validated by the server. */
                 readonly "If-Match": string;
+                /** @description Exact configured public origin; no wildcard or inferred forwarded host. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -8203,7 +8213,7 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Strong quoted independent Stock revision, not an unrelated parent or current-state receipt. Numeric safe bounds and exact resource identity remain server-authoritative. */
                     readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
@@ -8229,8 +8239,10 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Original quoted positive safe Item revision; no zero, leading zeros, weak/list/wildcard proof or automatic rebase. Maximum numeric revision is 9007199254740991 and is also validated by the server. */
                 readonly "If-Match": string;
+                /** @description Exact configured public origin; no wildcard or inferred forwarded host. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -8249,7 +8261,7 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Strong quoted independent Stock revision, not an unrelated parent or current-state receipt. Numeric safe bounds and exact resource identity remain server-authoritative. */
                     readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
@@ -8275,8 +8287,10 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Original quoted positive safe Item revision; no zero, leading zeros, weak/list/wildcard proof or automatic rebase. Maximum numeric revision is 9007199254740991 and is also validated by the server. */
                 readonly "If-Match": string;
+                /** @description Exact configured public origin; no wildcard or inferred forwarded host. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -8295,7 +8309,7 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Strong quoted independent Stock revision, not an unrelated parent or current-state receipt. Numeric safe bounds and exact resource identity remain server-authoritative. */
                     readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
@@ -8791,7 +8805,7 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Strong quoted independent Unit revision, not an unrelated parent or current-state receipt. Numeric safe bounds and exact resource identity remain server-authoritative. */
                     readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
@@ -8816,8 +8830,10 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Original quoted positive safe Unit revision; no zero, leading zeros, weak/list/wildcard proof or automatic rebase. Maximum numeric revision is 9007199254740991 and is also validated by the server. */
                 readonly "If-Match": string;
+                /** @description Exact configured public origin; no wildcard or inferred forwarded host. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -8837,7 +8853,9 @@ export interface operations {
                     readonly [name: string]: unknown;
                 };
                 content: {
-                    readonly "application/json": components["schemas"]["ActionAck"];
+                    readonly "application/json": components["schemas"]["ActionAck"] & {
+                        readonly revision: number;
+                    };
                 };
             };
             readonly 400: components["responses"]["Error400"];
@@ -8858,8 +8876,10 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Original quoted positive safe Unit revision; no zero, leading zeros, weak/list/wildcard proof or automatic rebase. Maximum numeric revision is 9007199254740991 and is also validated by the server. */
                 readonly "If-Match": string;
+                /** @description Exact configured public origin; no wildcard or inferred forwarded host. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -8880,7 +8900,7 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Strong quoted independent Unit revision, not an unrelated parent or current-state receipt. Numeric safe bounds and exact resource identity remain server-authoritative. */
                     readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
@@ -9163,8 +9183,10 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Original quoted positive safe Unit revision; no zero, leading zeros, weak/list/wildcard proof or automatic rebase. Maximum numeric revision is 9007199254740991 and is also validated by the server. */
                 readonly "If-Match": string;
+                /** @description Exact configured public origin; no wildcard or inferred forwarded host. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -9185,7 +9207,7 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Strong quoted independent Unit revision, not an unrelated parent or current-state receipt. Numeric safe bounds and exact resource identity remain server-authoritative. */
                     readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
@@ -9295,8 +9317,10 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Original quoted positive safe Unit revision; no zero, leading zeros, weak/list/wildcard proof or automatic rebase. Maximum numeric revision is 9007199254740991 and is also validated by the server. */
                 readonly "If-Match": string;
+                /** @description Exact configured public origin; no wildcard or inferred forwarded host. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -9317,7 +9341,7 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Strong quoted independent Unit revision, not an unrelated parent or current-state receipt. Numeric safe bounds and exact resource identity remain server-authoritative. */
                     readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };

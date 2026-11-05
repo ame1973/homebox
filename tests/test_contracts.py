@@ -366,8 +366,10 @@ class OpenAPIContractTests(unittest.TestCase):
                       {"revision": 0.5}, {"revision": 9007199254740992}]:
             with self.subTest(patch=patch), self.assertRaises(ValidationError):
                 validator("Item").validate({**value, **patch})
-        self.assertEqual({"type": "string"}, SCHEMAS["Unit"]["properties"]["asset_code"])
-        self.assertEqual({"type": "integer"}, SCHEMAS["Unit"]["properties"]["revision"])
+        # Unit now has its own refined boundary; unrelated generic aliases must
+        # remain untouched rather than inheriting catalog/holdings constraints.
+        self.assertEqual({"type": "string"}, SCHEMAS["MediaLink"]["properties"]["id"])
+        self.assertEqual({"type": "integer"}, SCHEMAS["MediaLink"]["properties"]["revision"])
 
     def test_item_response_nullable_presence_and_offline_shape(self):
         payload = {"id": "item", "name": "Item", "tracking_mode": "individual", "unit_code": "pcs",

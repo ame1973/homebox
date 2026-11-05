@@ -1827,6 +1827,8 @@ paths:
   /items/{id}/units:
     get:
       operationId: get_items_id_units
+      x-max-body-bytes: 0
+      x-max-query-bytes: 16384
       summary: Item units
       tags:
       - items
@@ -1842,12 +1844,6 @@ paths:
               schema:
                 const: no-store
               description: Protected API data is never cached by the service worker.
-            ETag:
-              schema:
-                type: string
-                minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -1895,6 +1891,10 @@ paths:
         opaque scoped cursors.
     post:
       operationId: post_items_id_units
+      x-max-body-bytes: 131072
+      x-max-query-bytes: 0
+      x-revision-scope: item
+      x-response-revision-scope: unit
       summary: Create unit
       tags:
       - items
@@ -1914,8 +1914,9 @@ paths:
               schema:
                 type: string
                 minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+                maxLength: 18
+                pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+              description: Strong quoted independent Unit revision, not an unrelated parent or current-state receipt. Numeric safe bounds and exact resource identity remain server-authoritative.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -1939,6 +1940,15 @@ paths:
         '503':
           $ref: '#/components/responses/Error503'
       parameters:
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          format: uri
+        description: Exact configured public origin; no wildcard or inferred forwarded host.
       - name: id
         in: path
         required: true
@@ -1974,10 +1984,9 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+        description: Original quoted positive safe Item revision; no zero, leading zeros, weak/list/wildcard proof or automatic rebase. Maximum numeric revision is 9007199254740991 and is also validated by the server.
       requestBody:
         required: true
         content:
@@ -2155,6 +2164,9 @@ paths:
   /units/{id}:
     get:
       operationId: get_units_id
+      x-max-body-bytes: 0
+      x-max-query-bytes: 0
+      x-response-revision-scope: unit
       summary: Unit detail
       tags:
       - units
@@ -2174,8 +2186,9 @@ paths:
               schema:
                 type: string
                 minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+                maxLength: 18
+                pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+              description: Strong quoted independent Unit revision, not an unrelated parent or current-state receipt. Numeric safe bounds and exact resource identity remain server-authoritative.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -2206,6 +2219,10 @@ paths:
           maxLength: 128
     patch:
       operationId: patch_units_id
+      x-max-body-bytes: 131072
+      x-max-query-bytes: 0
+      x-revision-scope: unit
+      x-response-revision-scope: unit
       summary: Update unit
       tags:
       - units
@@ -2225,8 +2242,9 @@ paths:
               schema:
                 type: string
                 minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+                maxLength: 18
+                pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+              description: Strong quoted independent Unit revision, not an unrelated parent or current-state receipt. Numeric safe bounds and exact resource identity remain server-authoritative.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -2250,6 +2268,15 @@ paths:
         '503':
           $ref: '#/components/responses/Error503'
       parameters:
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          format: uri
+        description: Exact configured public origin; no wildcard or inferred forwarded host.
       - name: id
         in: path
         required: true
@@ -2277,10 +2304,9 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+        description: Original quoted positive safe Unit revision; no zero, leading zeros, weak/list/wildcard proof or automatic rebase. Maximum numeric revision is 9007199254740991 and is also validated by the server.
       - name: X-HomeBox-Client-Version
         in: header
         required: true
@@ -2299,6 +2325,9 @@ paths:
         service validates invariants and commits projections in same SQLite transaction.
     delete:
       operationId: delete_units_id
+      x-max-body-bytes: 0
+      x-max-query-bytes: 0
+      x-revision-scope: unit
       summary: DELETE /units/{id}
       tags:
       - units
@@ -2308,7 +2337,15 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ActionAck'
+                allOf:
+                - $ref: '#/components/schemas/ActionAck'
+                - required:
+                  - revision
+                  properties:
+                    revision:
+                      type: integer
+                      minimum: 1
+                      maximum: 9007199254740991
           headers:
             Cache-Control:
               schema:
@@ -2337,6 +2374,15 @@ paths:
         '426':
           $ref: '#/components/responses/Error426'
       parameters:
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          format: uri
+        description: Exact configured public origin; no wildcard or inferred forwarded host.
       - name: id
         in: path
         required: true
@@ -2372,13 +2418,16 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+        description: Original quoted positive safe Unit revision; no zero, leading zeros, weak/list/wildcard proof or automatic rebase. Maximum numeric revision is 9007199254740991 and is also validated by the server.
   /units/{id}/move:
     post:
       operationId: post_units_id_move
+      x-max-body-bytes: 16384
+      x-max-query-bytes: 0
+      x-revision-scope: unit
+      x-response-revision-scope: unit
       summary: Move unit
       tags:
       - units
@@ -2398,8 +2447,9 @@ paths:
               schema:
                 type: string
                 minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+                maxLength: 18
+                pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+              description: Strong quoted independent Unit revision, not an unrelated parent or current-state receipt. Numeric safe bounds and exact resource identity remain server-authoritative.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -2423,6 +2473,15 @@ paths:
         '503':
           $ref: '#/components/responses/Error503'
       parameters:
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          format: uri
+        description: Exact configured public origin; no wildcard or inferred forwarded host.
       - name: id
         in: path
         required: true
@@ -2450,10 +2509,9 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+        description: Original quoted positive safe Unit revision; no zero, leading zeros, weak/list/wildcard proof or automatic rebase. Maximum numeric revision is 9007199254740991 and is also validated by the server.
       - name: X-HomeBox-Client-Version
         in: header
         required: true
@@ -2473,6 +2531,10 @@ paths:
   /units/{id}/status:
     post:
       operationId: post_units_id_status
+      x-max-body-bytes: 131072
+      x-max-query-bytes: 0
+      x-revision-scope: unit
+      x-response-revision-scope: unit
       summary: Unit status
       tags:
       - units
@@ -2492,8 +2554,9 @@ paths:
               schema:
                 type: string
                 minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+                maxLength: 18
+                pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+              description: Strong quoted independent Unit revision, not an unrelated parent or current-state receipt. Numeric safe bounds and exact resource identity remain server-authoritative.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -2517,6 +2580,15 @@ paths:
         '503':
           $ref: '#/components/responses/Error503'
       parameters:
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          format: uri
+        description: Exact configured public origin; no wildcard or inferred forwarded host.
       - name: id
         in: path
         required: true
@@ -2552,10 +2624,9 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+        description: Original quoted positive safe Unit revision; no zero, leading zeros, weak/list/wildcard proof or automatic rebase. Maximum numeric revision is 9007199254740991 and is also validated by the server.
       requestBody:
         required: true
         content:
@@ -2619,6 +2690,8 @@ paths:
   /inventory:
     get:
       operationId: get_inventory
+      x-max-body-bytes: 0
+      x-max-query-bytes: 16384
       summary: Inventory
       tags:
       - inventory
@@ -2634,12 +2707,6 @@ paths:
               schema:
                 const: no-store
               description: Protected API data is never cached by the service worker.
-            ETag:
-              schema:
-                type: string
-                minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -2741,6 +2808,10 @@ paths:
   /stock/receive:
     post:
       operationId: post_stock_receive
+      x-max-body-bytes: 131072
+      x-max-query-bytes: 0
+      x-revision-scope: item
+      x-response-revision-scope: stock
       summary: Receive stock
       tags:
       - stock
@@ -2760,8 +2831,9 @@ paths:
               schema:
                 type: string
                 minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+                maxLength: 18
+                pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+              description: Strong quoted independent Stock revision, not an unrelated parent or current-state receipt. Numeric safe bounds and exact resource identity remain server-authoritative.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -2785,6 +2857,15 @@ paths:
         '503':
           $ref: '#/components/responses/Error503'
       parameters:
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          format: uri
+        description: Exact configured public origin; no wildcard or inferred forwarded host.
       - name: X-CSRF-Token
         in: header
         required: true
@@ -2813,10 +2894,9 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+        description: Original quoted positive safe Item revision; no zero, leading zeros, weak/list/wildcard proof or automatic rebase. Maximum numeric revision is 9007199254740991 and is also validated by the server.
       requestBody:
         required: true
         content:
@@ -2828,6 +2908,10 @@ paths:
   /stock/consume:
     post:
       operationId: post_stock_consume
+      x-max-body-bytes: 131072
+      x-max-query-bytes: 0
+      x-revision-scope: item
+      x-response-revision-scope: stock
       summary: Consume stock
       tags:
       - stock
@@ -2847,8 +2931,9 @@ paths:
               schema:
                 type: string
                 minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+                maxLength: 18
+                pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+              description: Strong quoted independent Stock revision, not an unrelated parent or current-state receipt. Numeric safe bounds and exact resource identity remain server-authoritative.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -2872,6 +2957,15 @@ paths:
         '503':
           $ref: '#/components/responses/Error503'
       parameters:
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          format: uri
+        description: Exact configured public origin; no wildcard or inferred forwarded host.
       - name: X-CSRF-Token
         in: header
         required: true
@@ -2900,10 +2994,9 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+        description: Original quoted positive safe Item revision; no zero, leading zeros, weak/list/wildcard proof or automatic rebase. Maximum numeric revision is 9007199254740991 and is also validated by the server.
       requestBody:
         required: true
         content:
@@ -2915,6 +3008,10 @@ paths:
   /stock/transfer:
     post:
       operationId: post_stock_transfer
+      x-max-body-bytes: 131072
+      x-max-query-bytes: 0
+      x-revision-scope: item
+      x-response-revision-scope: stock
       summary: Transfer stock
       tags:
       - stock
@@ -2934,8 +3031,9 @@ paths:
               schema:
                 type: string
                 minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+                maxLength: 18
+                pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+              description: Strong quoted independent Stock revision, not an unrelated parent or current-state receipt. Numeric safe bounds and exact resource identity remain server-authoritative.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -2959,6 +3057,15 @@ paths:
         '503':
           $ref: '#/components/responses/Error503'
       parameters:
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          format: uri
+        description: Exact configured public origin; no wildcard or inferred forwarded host.
       - name: X-CSRF-Token
         in: header
         required: true
@@ -2987,10 +3094,9 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+        description: Original quoted positive safe Item revision; no zero, leading zeros, weak/list/wildcard proof or automatic rebase. Maximum numeric revision is 9007199254740991 and is also validated by the server.
       requestBody:
         required: true
         content:
@@ -3002,6 +3108,10 @@ paths:
   /stock/adjust:
     post:
       operationId: post_stock_adjust
+      x-max-body-bytes: 131072
+      x-max-query-bytes: 0
+      x-revision-scope: item
+      x-response-revision-scope: stock
       summary: Adjust stock
       tags:
       - stock
@@ -3021,8 +3131,9 @@ paths:
               schema:
                 type: string
                 minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+                maxLength: 18
+                pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+              description: Strong quoted independent Stock revision, not an unrelated parent or current-state receipt. Numeric safe bounds and exact resource identity remain server-authoritative.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -3046,6 +3157,15 @@ paths:
         '503':
           $ref: '#/components/responses/Error503'
       parameters:
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          format: uri
+        description: Exact configured public origin; no wildcard or inferred forwarded host.
       - name: X-CSRF-Token
         in: header
         required: true
@@ -3074,10 +3194,9 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+        description: Original quoted positive safe Item revision; no zero, leading zeros, weak/list/wildcard proof or automatic rebase. Maximum numeric revision is 9007199254740991 and is also validated by the server.
       requestBody:
         required: true
         content:
@@ -12651,15 +12770,34 @@ components:
     Unit:
       type: object
       additionalProperties: false
+      description: A stable individually tracked physical unit with an immutable owning Item, server-assigned globally unique asset code and independent retained revision. Nullable location/serial fields are always present; null and supplied-empty serial text remain distinct. Retired/disposed status does not erase source or immutable history. Ordinary unit edits cannot reassign ownership, change the asset code, receive quantity stock or post financial events.
       properties:
-        id: *id005
-        revision: *id006
-        item_id: *id005
-        location_id: *id007
-        asset_code: *id005
-        serial_number: *id007
-        notes: *id005
+        id: &holdingID
+          type: string
+          minLength: 1
+          maxLength: 128
+        revision: &holdingRevision
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        item_id: *holdingID
+        location_id: *catalogNullableID
+        asset_code:
+          type: string
+          minLength: 1
+          maxLength: 10000
+        serial_number: &unitSerial
+          type:
+          - string
+          - 'null'
+          minLength: 0
+          maxLength: 10000
+        notes: &holdingText
+          type: string
+          minLength: 0
+          maxLength: 10000
         status:
+          type: string
           enum:
           - stored
           - in_use
@@ -12680,23 +12818,29 @@ components:
       type: object
       required:
       - data
+      - next_cursor
       additionalProperties: false
       properties:
         data:
           type: array
+          maxItems: 100
           items:
             $ref: '#/components/schemas/Unit'
-        next_cursor:
+        next_cursor: &holdingCursor
           type:
           - string
           - 'null'
+          minLength: 1
+          maxLength: 2048
+      description: One complete live stable-ID page belonging to the requested Item, including retained lifecycle states. Required null terminates pagination; no collection ETag or frozen-snapshot claim.
     UnitWrite:
       type: object
       minProperties: 1
       additionalProperties: false
       properties:
-        serial_number: *id007
-        notes: *id005
+        serial_number: *unitSerial
+        notes: *holdingText
+      description: Nonempty partial metadata only. Omitted fields are unchanged; explicit null clears serial_number, while supplied-empty serial text is retained. Ownership, location, asset code, status, inventory and financial fields cannot be changed here.
     Barcode:
       type: object
       additionalProperties: false
@@ -13019,18 +13163,18 @@ components:
     Stock:
       type: object
       additionalProperties: false
+      description: One retained quantity balance identified by the canonical JSON pair [item_id,location_id], with its own positive revision. quantity_base is an exact nonnegative safe integer in the owning Item's base_unit; the full measurement tuple is copied from current source, not guessed or converted. A zero balance remains a real referenced row. This Stock revision/ETag is independent of the original Item proof used by stock mutations.
       properties:
-        item_id: *id005
-        location_id: *id005
-        revision: *id006
-        quantity_base:
+        item_id: *holdingID
+        location_id: *holdingID
+        revision: *holdingRevision
+        quantity_base: &stockQuantity
           type: integer
           minimum: 0
-        unit_code: *id005
-        base_unit: *id005
-        scale_factor:
-          type: integer
-          minimum: 1
+          maximum: 9007199254740991
+        unit_code: *catalogUnitCode
+        base_unit: *catalogBaseUnit
+        scale_factor: *id010
       required:
       - item_id
       - location_id
@@ -13043,16 +13187,16 @@ components:
       type: object
       required:
       - data
+      - next_cursor
       additionalProperties: false
       properties:
         data:
           type: array
+          maxItems: 100
           items:
             $ref: '#/components/schemas/Stock'
-        next_cursor:
-          type:
-          - string
-          - 'null'
+        next_cursor: *holdingCursor
+      description: One complete live page in stable (item_id,location_id) order, including retained zero balances. Required null terminates pagination; no collection ETag or mixed-base-unit total.
     Media:
       type: object
       additionalProperties: false
@@ -13885,7 +14029,8 @@ components:
       required:
       - target_location_id
       properties:
-        target_location_id: *id005
+        target_location_id: *holdingID
+      description: Move only this physical unit to the explicitly reviewed existing active location/path, using the original Unit revision. Ownership and asset code remain unchanged; moving a location container is a separate location operation. The service validates the destination and atomically publishes unit/location/history/search dependencies without creating stock.
     ActionAck:
       type: object
       additionalProperties: false
@@ -14054,9 +14199,10 @@ components:
           - lost
           - retired
           - disposed
-        note: *id019
+        note: *holdingText
       required:
       - status
+      description: Explicit lifecycle transition against the original Unit revision, not a metadata PATCH or quantity write. Server-side lifecycle/asset guards and immutable events remain mandatory; accepting this shape alone does not authorize bypassing retirement/disposal accounting. Repeating current status is not a new inventory event.
     UnitRetireInput:
       type: object
       additionalProperties: false
@@ -14979,14 +15125,11 @@ components:
       type: object
       additionalProperties: false
       properties:
-        location_id: &id023
-          type:
-          - string
-          - 'null'
-        serial_number: *id023
-        notes:
-          type: string
+        location_id: *catalogNullableID
+        serial_number: *unitSerial
+        notes: *holdingText
         status:
+          type: string
           enum:
           - stored
           - in_use
@@ -14995,6 +15138,7 @@ components:
           default: stored
       required:
       - location_id
+      description: Create one independent physical unit for an individually tracked Item against the original Item revision. The location choice is explicit, including null for no known location; nonnull destinations require an active location/path. The server assigns the immutable UUID/asset code. Omitted serial/notes/status default to null/empty/stored without requiring clients to install defaults. Retired/disposed creation, owner reassignment, quantities, purchases and implicit asset accounting are forbidden.
     MediaUploadInput:
       type: object
       additionalProperties: false
@@ -15012,15 +15156,15 @@ components:
       - quantity_base
       - target_location_id
       properties:
-        item_id: *id001
-        target_location_id: *id001
-        quantity_base:
+        item_id: *holdingID
+        target_location_id: *holdingID
+        quantity_base: &positiveStockQuantity
           type: integer
           minimum: 1
-        note:
-          type: string
-      description: quantity_base is an integer in item.base_unit; server validates
-        tracking_mode, balance and transaction idempotency
+          maximum: 9007199254740991
+        note: *holdingText
+      description: Receive an exact positive quantity_base in the Item's base_unit against the original Item revision, not a Stock row proof. The server validates quantity tracking, active destination/path, safe addition and immutable movement/idempotency/outbox publication atomically; no unit conversion, purchase or spend is inferred. Return the frozen target Stock and its independent row ETag.
+      x-runtime-validation: stock-item-proof-safe-base-quantity-v1
     StockConsumeInput:
       type: object
       additionalProperties: false
@@ -15029,15 +15173,12 @@ components:
       - quantity_base
       - source_location_id
       properties:
-        item_id: *id001
-        source_location_id: *id001
-        quantity_base:
-          type: integer
-          minimum: 1
-        note:
-          type: string
-      description: quantity_base is an integer in item.base_unit; server validates
-        tracking_mode, balance and transaction idempotency
+        item_id: *holdingID
+        source_location_id: *holdingID
+        quantity_base: *positiveStockQuantity
+        note: *holdingText
+      description: Consume an exact positive quantity_base against the original Item revision. The server validates quantity tracking and available source balance in the same transaction as the immutable movement, Item/Stock counters, projections and frozen response. Do not permit negative stock, floating conversion or automatic replay; retain a resulting zero row. Return the frozen source Stock and its independent row ETag.
+      x-runtime-validation: stock-item-proof-safe-base-quantity-v1
     StockTransferInput:
       type: object
       additionalProperties: false
@@ -15047,16 +15188,13 @@ components:
       - source_location_id
       - target_location_id
       properties:
-        item_id: *id001
-        source_location_id: *id001
-        target_location_id: *id001
-        quantity_base:
-          type: integer
-          minimum: 1
-        note:
-          type: string
-      description: quantity_base is an integer in item.base_unit; server validates
-        tracking_mode, balance and transaction idempotency
+        item_id: *holdingID
+        source_location_id: *holdingID
+        target_location_id: *holdingID
+        quantity_base: *positiveStockQuantity
+        note: *holdingText
+      description: Transfer an exact positive quantity_base within one quantity-tracked Item against its original Item revision. The source and target must differ; source sufficiency, active destination/path and safe target addition are runtime checks. Both balances, Item revision, immutable movement, independent projections and frozen target Stock response commit atomically. A zero source remains a retained row. The target Stock ETag is not the Item proof or a current source balance.
+      x-runtime-validation: stock-item-proof-safe-base-quantity-v1
     StockAdjustInput:
       type: object
       additionalProperties: false
@@ -15066,20 +15204,16 @@ components:
       - quantity_base
       - reason
       properties:
-        item_id:
-          type: string
-        target_location_id:
-          type: string
-        quantity_base:
-          type: integer
-          minimum: 0
+        item_id: *holdingID
+        target_location_id: *holdingID
+        quantity_base: *stockQuantity
         reason:
           type: string
           minLength: 1
-        note:
-          type: string
-      description: Set an absolute nonnegative balance. If-Match checks the item revision;
-        a reason is mandatory.
+          maxLength: 10000
+        note: *holdingText
+      description: Set an absolute nonnegative safe quantity_base, never a signed delta or converted display amount, against the original Item revision. An exact nonempty reason is mandatory; the server records the actual difference as an immutable movement and validates tracking/location/counters atomically. Equal current quantity is a no-op receipt, not a new movement. Return the frozen target Stock and its independent row ETag; no response may replace current reads automatically.
+      x-runtime-validation: stock-item-proof-safe-base-quantity-v1
     AuthSetupInput:
       type: object
       additionalProperties: false

@@ -230,6 +230,75 @@ const unprovenTagSet = ownedCatalogAPI.replaceItemTags('item', clearMembership, 
 const nullTagSet = ownedCatalogAPI.replaceItemTags('item', { tag_ids: null }, owningItemProof)
 // @ts-expect-error Assigned reads accept only their documented paging fields.
 const filteredOwnedRead = ownedCatalogAPI.fetchItemTagsPage('item', { q: 'uncontracted' }, new AbortController().signal)
+type UnitCreateHeaders = operations['post_items_id_units']['parameters']['header']
+type UnitEditHeaders = operations['patch_units_id']['parameters']['header']
+type StockMutationHeaders = operations['post_stock_receive']['parameters']['header']
+type UnitDeletion = operations['delete_units_id']['responses'][200]['content']['application/json']
+const reviewedHoldingItem = { ...authHeaders, 'If-Match': '"7"' } satisfies UnitCreateHeaders & StockMutationHeaders
+const reviewedHoldingUnit = { ...authHeaders, 'If-Match': '"3"' } satisfies UnitEditHeaders
+const unitWithUnknownLocation = { location_id: null } satisfies components['schemas']['UnitCreate']
+const unitWithEmptySerial = { location_id: 'location', serial_number: '', notes: '', status: 'stored' } satisfies components['schemas']['UnitCreate']
+const unitSerialClear = { serial_number: null } satisfies components['schemas']['UnitWrite']
+const unitNotesClear = { notes: '' } satisfies components['schemas']['UnitWrite']
+const unitMove = { target_location_id: 'destination' } satisfies components['schemas']['UnitMove']
+const unitStatus = { status: 'lost', note: 'Explicitly reviewed' } satisfies components['schemas']['UnitStatusInput']
+const holdingUnit = { id: 'unit', revision: 3, item_id: 'item', location_id: null, asset_code: 'AST-001', serial_number: null, notes: '', status: 'stored' } satisfies components['schemas']['Unit']
+const holdingStock = { item_id: 'item', location_id: 'location', revision: 2, quantity_base: 1500, unit_code: 'kg', base_unit: 'g', scale_factor: 1000 } satisfies components['schemas']['Stock']
+const receiveStock = { item_id: 'item', target_location_id: 'location', quantity_base: 1000 } satisfies components['schemas']['StockReceiveInput']
+const consumeStock = { item_id: 'item', source_location_id: 'location', quantity_base: 1 } satisfies components['schemas']['StockConsumeInput']
+const transferStock = { item_id: 'item', source_location_id: 'source', target_location_id: 'target', quantity_base: 1 } satisfies components['schemas']['StockTransferInput']
+const adjustStockToZero = { item_id: 'item', target_location_id: 'location', quantity_base: 0, reason: 'Explicit count' } satisfies components['schemas']['StockAdjustInput']
+const emptyUnitPage = { data: [], next_cursor: null } satisfies components['schemas']['UnitList']
+const emptyStockPage = { data: [], next_cursor: null } satisfies components['schemas']['StockList']
+const deletedUnit = { ok: true, operation_id: 'event', revision: 4 } satisfies UnitDeletion
+// @ts-expect-error The location decision is explicit even when it is null.
+const unitWithoutLocation: components['schemas']['UnitCreate'] = { serial_number: '' }
+// @ts-expect-error The immutable asset code is assigned by the authoritative service.
+const callerUnitCode: components['schemas']['UnitCreate'] = { location_id: null, asset_code: 'caller' }
+// @ts-expect-error New units cannot start with a terminal lifecycle state.
+const terminalUnitCreate: components['schemas']['UnitCreate'] = { location_id: null, status: 'retired' }
+// @ts-expect-error Only serial text is nullable; notes are exact nonnullable text.
+const nullUnitNotes: components['schemas']['UnitWrite'] = { notes: null }
+// @ts-expect-error Serial numbers are strings, never numeric coercions.
+const numericUnitSerial: components['schemas']['UnitWrite'] = { serial_number: 123 }
+// @ts-expect-error Owning Item identity is immutable on a unit metadata patch.
+const reassignedUnit: components['schemas']['UnitWrite'] = { item_id: 'other' }
+// @ts-expect-error Moving a unit is a separate original-unit-proof command.
+const patchUnitLocation: components['schemas']['UnitWrite'] = { location_id: 'other' }
+// @ts-expect-error Lifecycle transitions are not ordinary metadata patches.
+const patchUnitStatus: components['schemas']['UnitWrite'] = { status: 'disposed' }
+// @ts-expect-error A unit location is cleared only by explicit supported domain workflows, not a null move target.
+const nullUnitMove: components['schemas']['UnitMove'] = { target_location_id: null }
+// @ts-expect-error Quantity stock always uses integer-valued JSON numbers, not text.
+const textHoldingQuantity: components['schemas']['StockReceiveInput'] = { item_id: 'item', target_location_id: 'target', quantity_base: '1000' }
+// @ts-expect-error A transfer must identify both original locations.
+const incompleteStockTransfer: components['schemas']['StockTransferInput'] = { item_id: 'item', target_location_id: 'target', quantity_base: 1 }
+// @ts-expect-error Absolute adjustment requires an explicitly reviewed reason.
+const reasonlessStockAdjustment: components['schemas']['StockAdjustInput'] = { item_id: 'item', target_location_id: 'target', quantity_base: 0 }
+// @ts-expect-error Stock writes never install a caller-supplied measurement conversion.
+const implicitStockConversion: components['schemas']['StockReceiveInput'] = { ...receiveStock, scale_factor: 1000 }
+// @ts-expect-error A read balance must include its actual complete Item measurement tuple.
+const incompleteStockMeasurement: components['schemas']['Stock'] = { item_id: 'item', location_id: 'location', revision: 1, quantity_base: 1 }
+// @ts-expect-error Unit creation requires the original owning Item proof.
+const unprovenHoldingCreation: UnitCreateHeaders = { ...authHeaders }
+// @ts-expect-error Existing unit edits require their independent original Unit proof.
+const unprovenHoldingEdit: UnitEditHeaders = { ...authHeaders }
+// @ts-expect-error Stock mutation requires the original Item proof, not an implicit latest revision.
+const unprovenStockMutation: StockMutationHeaders = { ...authHeaders }
+// @ts-expect-error Same-origin protected unit writes require Origin in addition to the proof.
+const originlessHoldingEdit: UnitEditHeaders = { 'If-Match': '"3"', 'X-CSRF-Token': 'csrf', 'Idempotency-Key': 'key', 'X-HomeBox-Client-Version': '0.1.0-dev' }
+// @ts-expect-error A complete unit page must explicitly terminate or continue.
+const incompleteUnitPage: components['schemas']['UnitList'] = { data: [] }
+// @ts-expect-error A complete inventory page must explicitly terminate or continue.
+const incompleteStockPage: components['schemas']['StockList'] = { data: [] }
+// @ts-expect-error Unit deletion acknowledges its independent retained next revision.
+const unversionedUnitDeletion: UnitDeletion = { ok: true, operation_id: 'event' }
+void [reviewedHoldingItem, reviewedHoldingUnit, unitWithUnknownLocation, unitWithEmptySerial, unitSerialClear, unitNotesClear, unitMove, unitStatus,
+  holdingUnit, holdingStock, receiveStock, consumeStock, transferStock, adjustStockToZero, emptyUnitPage, emptyStockPage, deletedUnit,
+  unitWithoutLocation, callerUnitCode, terminalUnitCreate, nullUnitNotes, numericUnitSerial, reassignedUnit, patchUnitLocation, patchUnitStatus,
+  nullUnitMove, textHoldingQuantity, incompleteStockTransfer, reasonlessStockAdjustment, implicitStockConversion, incompleteStockMeasurement,
+  unprovenHoldingCreation, unprovenHoldingEdit, unprovenStockMutation, originlessHoldingEdit, incompleteUnitPage, incompleteStockPage, unversionedUnitDeletion]
+
 void [ownedSDKCalls, unprovenOwnedBarcode, unprovenOwnedAlias, unprovenOwnedAttribute, ownerlessBarcodePatch, ownerlessAliasDelete, emptyOwnedAttributePatch,
   missingOwnedAttributeValue, normalizedOwnedInput, reassignedOwnedInput, unprovenTagSet, nullTagSet, filteredOwnedRead]
 

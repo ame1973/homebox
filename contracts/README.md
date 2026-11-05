@@ -10,6 +10,8 @@ These are executable interface specifications, not a claim that every HTTP handl
 
 - [Catalog Links and Tag Membership](../docs/catalog-links.md): independent barcode/alias/attribute IDs, immutable owners, explicit Item-versus-row proofs, exact checksum normalization, partial attributes and complete tag sets. All fourteen Go/HTTP operations, typed stateless owned adapters and responsive reviewed maintenance screens are implemented and tested, with independent persistence/materialization, original Item-versus-row proofs and complete owner-scoped signed pages. Schema validation alone is not runtime or HTTP evidence.
 
+- [Individual Units and Quantity Stock](../docs/holdings.md): refined bounded Unit/Stock resources and commands, original Item-versus-Unit proof scopes, independent Stock response revisions, complete live pages and exact safe base quantities. Root schemas/generated types and contract/compile tests are available; authoritative holding services/backfill/HTTP/runtime adapters/screens remain pending. Offline payload shapes and all operation identities are unchanged.
+
 ## Transport and authorization
 
 The application serves `/api/v1` on the same trusted HTTPS origin as the PWA. Only login, protected initial setup, and minimal liveness are anonymous. Setup requires a one-time bootstrap token and is disabled once an administrator exists. Login/setup also require an allowed same-origin request; anonymous does not mean unrestricted.
