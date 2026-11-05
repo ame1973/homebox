@@ -3115,6 +3115,22 @@ paths:
       summary: List categories
       tags:
       - categories
+      parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 100
+      - name: cursor
+        in: query
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+      description: Live stable-ID metadata pages with a principal, dataset epoch, entity type and page-size scoped signed cursor. This is not a frozen offline snapshot.
+      x-max-body-bytes: 0
       responses:
         '200':
           description: Success
@@ -3158,6 +3174,7 @@ paths:
       summary: Create category
       tags:
       - categories
+      x-max-body-bytes: 16384
       responses:
         '200':
           description: Success
@@ -3199,6 +3216,23 @@ paths:
         '503':
           $ref: '#/components/responses/Error503'
       parameters:
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+      - name: If-Match
+        in: header
+        required: false
+        x-required-when: parent_id is non-null
+        description: Required for a reviewed non-root parent aggregate; root creation must omit this header.
+        schema:
+          type: string
+          minLength: 3
+          maxLength: 18
+          pattern: ^"[1-9][0-9]*"$
       - name: X-CSRF-Token
         in: header
         required: true
@@ -3226,15 +3260,15 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CategoryWrite'
-      description: Non-idempotent mutations must use Idempotency-Key and CSRF; domain
-        service validates invariants and commits projections in same SQLite transaction.
+              $ref: '#/components/schemas/CategoryCreate'
+      description: Validate the reviewed parent or target aggregate and reject cycles. Commit category, affected item and approved search projections, immutable mutation audit and idempotent reply together.
   /categories/{id}:
     patch:
       operationId: patch_categories_id
       summary: Edit category
       tags:
       - categories
+      x-max-body-bytes: 16384
       responses:
         '200':
           description: Success
@@ -3276,6 +3310,13 @@ paths:
         '503':
           $ref: '#/components/responses/Error503'
       parameters:
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
       - name: id
         in: path
         required: true
@@ -3303,10 +3344,9 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]*"$
+        description: Quoted positive safe-integer revision of the reviewed resource or branch aggregate.
       - name: X-HomeBox-Client-Version
         in: header
         required: true
@@ -3321,13 +3361,13 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/CategoryWrite'
-      description: Non-idempotent mutations must use Idempotency-Key and CSRF; domain
-        service validates invariants and commits projections in same SQLite transaction.
+      description: Validate the reviewed parent or target aggregate and reject cycles. Commit category, affected item and approved search projections, immutable mutation audit and idempotent reply together.
     delete:
       operationId: delete_categories_id
       summary: DELETE /categories/{id}
       tags:
       - categories
+      x-max-body-bytes: 0
       responses:
         '200':
           description: Successful response
@@ -3363,6 +3403,13 @@ paths:
         '426':
           $ref: '#/components/responses/Error426'
       parameters:
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
       - name: id
         in: path
         required: true
@@ -3398,16 +3445,32 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]*"$
+        description: Quoted positive safe-integer revision of the reviewed resource or branch aggregate.
+      description: Delete a category leaf and atomically clear its item classifications without deleting inventory; nonempty child branches are rejected.
   /tags:
     get:
       operationId: get_tags
       summary: List tags
       tags:
       - tags
+      parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 100
+      - name: cursor
+        in: query
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+      description: Live stable-ID metadata pages with a principal, dataset epoch, entity type and page-size scoped signed cursor. This is not a frozen offline snapshot.
+      x-max-body-bytes: 0
       responses:
         '200':
           description: Success
@@ -3451,6 +3514,7 @@ paths:
       summary: Create tag
       tags:
       - tags
+      x-max-body-bytes: 16384
       responses:
         '200':
           description: Success
@@ -3492,6 +3556,13 @@ paths:
         '503':
           $ref: '#/components/responses/Error503'
       parameters:
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
       - name: X-CSRF-Token
         in: header
         required: true
@@ -3520,14 +3591,14 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/TagWrite'
-      description: Non-idempotent mutations must use Idempotency-Key and CSRF; domain
-        service validates invariants and commits projections in same SQLite transaction.
+      description: Preserve exact unique tag text and commit tag, affected approved search projections, immutable mutation audit and idempotent reply together.
   /tags/{id}:
     patch:
       operationId: patch_tags_id
       summary: Edit tag
       tags:
       - tags
+      x-max-body-bytes: 16384
       responses:
         '200':
           description: Success
@@ -3569,6 +3640,13 @@ paths:
         '503':
           $ref: '#/components/responses/Error503'
       parameters:
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
       - name: id
         in: path
         required: true
@@ -3596,10 +3674,9 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]*"$
+        description: Quoted positive safe-integer revision of the reviewed resource or branch aggregate.
       - name: X-HomeBox-Client-Version
         in: header
         required: true
@@ -3614,13 +3691,13 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/TagWrite'
-      description: Non-idempotent mutations must use Idempotency-Key and CSRF; domain
-        service validates invariants and commits projections in same SQLite transaction.
+      description: Preserve exact unique tag text and commit tag, affected approved search projections, immutable mutation audit and idempotent reply together.
     delete:
       operationId: delete_tags_id
       summary: DELETE /tags/{id}
       tags:
       - tags
+      x-max-body-bytes: 0
       responses:
         '200':
           description: Successful response
@@ -3656,6 +3733,13 @@ paths:
         '426':
           $ref: '#/components/responses/Error426'
       parameters:
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
       - name: id
         in: path
         required: true
@@ -3691,10 +3775,10 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]*"$
+        description: Quoted positive safe-integer revision of the reviewed resource or branch aggregate.
+      description: Delete the tag and atomically detach item-tag links, emit independent link tombstones and rebuild affected approved search text. Inventory remains intact.
   /items/{id}/aliases:
     get:
       operationId: get_items_id_aliases
@@ -12500,15 +12584,31 @@ components:
     Category:
       type: object
       additionalProperties: false
+      description: A stable category with a branch aggregate revision. Parent paths are derived from IDs. Metadata, descendant membership, and item classification changes invalidate affected ancestor proofs.
       properties:
-        id: *id005
-        revision: *id006
-        name: *id005
-        parent_id: *id007
+        id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        revision:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        parent_id:
+          type:
+          - string
+          - 'null'
+          minLength: 1
+          maxLength: 128
       required:
       - id
       - revision
       - name
+      - parent_id
     CategoryList:
       type: object
       required:
@@ -12517,28 +12617,65 @@ components:
       properties:
         data:
           type: array
+          maxItems: 100
           items:
             $ref: '#/components/schemas/Category'
         next_cursor:
           type:
           - string
           - 'null'
+          minLength: 1
+          maxLength: 2048
+    CategoryCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        parent_id:
+          type:
+          - string
+          - 'null'
+          minLength: 1
+          maxLength: 128
+          default: null
+      required:
+      - name
     CategoryWrite:
       type: object
       minProperties: 1
       additionalProperties: false
+      description: Omitted fields remain unchanged; explicit parent_id=null moves the category to root. Duplicate category names are allowed. Cycles are rejected inside the authoritative transaction.
       properties:
-        name: *id005
-        parent_id: *id007
-      required:
-      - name
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        parent_id:
+          type:
+          - string
+          - 'null'
+          minLength: 1
+          maxLength: 128
     Tag:
       type: object
       additionalProperties: false
+      description: A stable exact-name tag. Its aggregate revision also covers item-tag membership so stale deletion cannot silently detach newly linked items.
       properties:
-        id: *id005
-        revision: *id006
-        name: *id005
+        id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        revision:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
       required:
       - id
       - revision
@@ -12551,18 +12688,25 @@ components:
       properties:
         data:
           type: array
+          maxItems: 100
           items:
             $ref: '#/components/schemas/Tag'
         next_cursor:
           type:
           - string
           - 'null'
+          minLength: 1
+          maxLength: 2048
     TagWrite:
       type: object
       minProperties: 1
       additionalProperties: false
+      description: Tag names are unique by exact stored text. Whitespace, case and Unicode normalization are preserved rather than silently merged.
       properties:
-        name: *id005
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
       required:
       - name
     Alias:

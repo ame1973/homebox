@@ -63,6 +63,27 @@ const unprovenChild = createLocation({ name: 'Box', code: 'BOX-2', parent_id: 'p
 // @ts-expect-error Root creation cannot silently attach an unrelated If-Match.
 const unrelatedRootProof = createLocation({ name: 'Box', code: 'BOX-1' }, { ...writeContext, expectedRevision: 3 })
 
-void [createRoot, createChild, unprovenChild, unrelatedRootProof,
+type CategoryCreateHeaders = operations['post_categories']['parameters']['header']
+const rootCategoryHeaders = { ...authHeaders } satisfies CategoryCreateHeaders
+const childCategoryHeaders = { ...authHeaders, 'If-Match': '"3"' } satisfies CategoryCreateHeaders
+const categoryCreate = { name: 'Category' } satisfies components['schemas']['CategoryCreate']
+const categoryMove = { parent_id: null } satisfies components['schemas']['CategoryWrite']
+const categoryRename = { name: 'Renamed' } satisfies components['schemas']['CategoryWrite']
+const category = { id: 'category', name: 'Category', parent_id: null, revision: 1 } satisfies components['schemas']['Category']
+const tag = { name: 'Tag' } satisfies components['schemas']['TagWrite']
+// @ts-expect-error Creating a category must include a name, unlike a nullable-parent-only patch.
+const missingCategoryName: components['schemas']['CategoryCreate'] = { parent_id: null }
+// @ts-expect-error Category responses always include the explicit nullable parent.
+const missingCategoryParent: components['schemas']['Category'] = { id: 'category', name: 'Category', revision: 1 }
+// @ts-expect-error Internal parent presence wrappers are not wire objects.
+const categoryParentWrapper: components['schemas']['CategoryWrite'] = { parent_id: { set: true, value: null } }
+// @ts-expect-error Classification writes require Origin independently of CSRF.
+const missingCategoryOrigin: CategoryCreateHeaders = { 'X-CSRF-Token': 'csrf-fixture', 'Idempotency-Key': 'category-fixture-key', 'X-HomeBox-Client-Version': '0.1.0-dev' }
+// @ts-expect-error Tag names are not nullable.
+const nullTag: components['schemas']['TagWrite'] = { name: null }
+
+void [rootCategoryHeaders, childCategoryHeaders, categoryCreate, categoryMove, categoryRename, category, tag,
+  missingCategoryName, missingCategoryParent, categoryParentWrapper, missingCategoryOrigin, nullTag,
+  createRoot, createChild, unprovenChild, unrelatedRootProof,
   invalidDelete, missingRevision, invalidQuantity, authHeaders, noOrigin, noCSRF, rawCredentialAdmin, hashLogin,
   childLocationHeaders, rootLocationHeaders, locationWithoutOrigin, rootLocation, minimalLocation, minimalItem, rootMove, parentWrapper, textSortOrder, nullKind]

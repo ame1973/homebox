@@ -580,12 +580,15 @@ export interface paths {
             readonly path?: never;
             readonly cookie?: never;
         };
-        /** List categories */
+        /**
+         * List categories
+         * @description Live stable-ID metadata pages with a principal, dataset epoch, entity type and page-size scoped signed cursor. This is not a frozen offline snapshot.
+         */
         readonly get: operations["get_categories"];
         readonly put?: never;
         /**
          * Create category
-         * @description Non-idempotent mutations must use Idempotency-Key and CSRF; domain service validates invariants and commits projections in same SQLite transaction.
+         * @description Validate the reviewed parent or target aggregate and reject cycles. Commit category, affected item and approved search projections, immutable mutation audit and idempotent reply together.
          */
         readonly post: operations["post_categories"];
         readonly delete?: never;
@@ -604,13 +607,16 @@ export interface paths {
         readonly get?: never;
         readonly put?: never;
         readonly post?: never;
-        /** DELETE /categories/{id} */
+        /**
+         * DELETE /categories/{id}
+         * @description Delete a category leaf and atomically clear its item classifications without deleting inventory; nonempty child branches are rejected.
+         */
         readonly delete: operations["delete_categories_id"];
         readonly options?: never;
         readonly head?: never;
         /**
          * Edit category
-         * @description Non-idempotent mutations must use Idempotency-Key and CSRF; domain service validates invariants and commits projections in same SQLite transaction.
+         * @description Validate the reviewed parent or target aggregate and reject cycles. Commit category, affected item and approved search projections, immutable mutation audit and idempotent reply together.
          */
         readonly patch: operations["patch_categories_id"];
         readonly trace?: never;
@@ -1736,12 +1742,15 @@ export interface paths {
             readonly path?: never;
             readonly cookie?: never;
         };
-        /** List tags */
+        /**
+         * List tags
+         * @description Live stable-ID metadata pages with a principal, dataset epoch, entity type and page-size scoped signed cursor. This is not a frozen offline snapshot.
+         */
         readonly get: operations["get_tags"];
         readonly put?: never;
         /**
          * Create tag
-         * @description Non-idempotent mutations must use Idempotency-Key and CSRF; domain service validates invariants and commits projections in same SQLite transaction.
+         * @description Preserve exact unique tag text and commit tag, affected approved search projections, immutable mutation audit and idempotent reply together.
          */
         readonly post: operations["post_tags"];
         readonly delete?: never;
@@ -1760,13 +1769,16 @@ export interface paths {
         readonly get?: never;
         readonly put?: never;
         readonly post?: never;
-        /** DELETE /tags/{id} */
+        /**
+         * DELETE /tags/{id}
+         * @description Delete the tag and atomically detach item-tag links, emit independent link tombstones and rebuild affected approved search text. Inventory remains intact.
+         */
         readonly delete: operations["delete_tags_id"];
         readonly options?: never;
         readonly head?: never;
         /**
          * Edit tag
-         * @description Non-idempotent mutations must use Idempotency-Key and CSRF; domain service validates invariants and commits projections in same SQLite transaction.
+         * @description Preserve exact unique tag text and commit tag, affected approved search projections, immutable mutation audit and idempotent reply together.
          */
         readonly patch: operations["patch_tags_id"];
         readonly trace?: never;
@@ -2351,18 +2363,25 @@ export interface components {
             readonly server_instance_id: string;
             readonly snapshot_id: string;
         };
+        /** @description A stable category with a branch aggregate revision. Parent paths are derived from IDs. Metadata, descendant membership, and item classification changes invalidate affected ancestor proofs. */
         readonly Category: {
             readonly id: string;
             readonly name: string;
-            readonly parent_id?: string | null;
+            readonly parent_id: string | null;
             readonly revision: number;
+        };
+        readonly CategoryCreate: {
+            readonly name: string;
+            /** @default null */
+            readonly parent_id?: string | null;
         };
         readonly CategoryList: {
             readonly data: readonly components["schemas"]["Category"][];
             readonly next_cursor?: string | null;
         };
+        /** @description Omitted fields remain unchanged; explicit parent_id=null moves the category to root. Duplicate category names are allowed. Cycles are rejected inside the authoritative transaction. */
         readonly CategoryWrite: {
-            readonly name: string;
+            readonly name?: string;
             readonly parent_id?: string | null;
         };
         readonly Change: {
@@ -3492,6 +3511,7 @@ export interface components {
             readonly retention_days: number;
             readonly server_instance_id: string;
         };
+        /** @description A stable exact-name tag. Its aggregate revision also covers item-tag membership so stale deletion cannot silently detach newly linked items. */
         readonly Tag: {
             readonly id: string;
             readonly name: string;
@@ -3501,6 +3521,7 @@ export interface components {
             readonly data: readonly components["schemas"]["Tag"][];
             readonly next_cursor?: string | null;
         };
+        /** @description Tag names are unique by exact stored text. Whitespace, case and Unicode normalization are preserved rather than silently merged. */
         readonly TagWrite: {
             readonly name: string;
         };
@@ -5290,7 +5311,10 @@ export interface operations {
     };
     readonly get_categories: {
         readonly parameters: {
-            readonly query?: never;
+            readonly query?: {
+                readonly cursor?: string;
+                readonly limit?: number;
+            };
             readonly header?: never;
             readonly path?: never;
             readonly cookie?: never;
@@ -5327,6 +5351,9 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
+                /** @description Required for a reviewed non-root parent aggregate; root creation must omit this header. */
+                readonly "If-Match"?: string;
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -5336,7 +5363,7 @@ export interface operations {
         };
         readonly requestBody: {
             readonly content: {
-                readonly "application/json": components["schemas"]["CategoryWrite"];
+                readonly "application/json": components["schemas"]["CategoryCreate"];
             };
         };
         readonly responses: {
@@ -5371,8 +5398,9 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Quoted positive safe-integer revision of the reviewed resource or branch aggregate. */
                 readonly "If-Match": string;
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -5413,8 +5441,9 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Quoted positive safe-integer revision of the reviewed resource or branch aggregate. */
                 readonly "If-Match": string;
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -8486,7 +8515,10 @@ export interface operations {
     };
     readonly get_tags: {
         readonly parameters: {
-            readonly query?: never;
+            readonly query?: {
+                readonly cursor?: string;
+                readonly limit?: number;
+            };
             readonly header?: never;
             readonly path?: never;
             readonly cookie?: never;
@@ -8523,6 +8555,7 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -8567,8 +8600,9 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Quoted positive safe-integer revision of the reviewed resource or branch aggregate. */
                 readonly "If-Match": string;
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -8609,8 +8643,9 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Quoted positive safe-integer revision of the reviewed resource or branch aggregate. */
                 readonly "If-Match": string;
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;

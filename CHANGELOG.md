@@ -44,6 +44,8 @@
 
 ### Fixed
 
+- Refine taxonomy contracts with distinct category creation/partial-patch schemas, required nullable response parents, Unicode/identity/positive-safe-revision bounds, reviewed child/target proofs, Origin/body admission, and bounded signed live pages. Preserve all operation identities and version-one offline payloads; add negative schema/generated-type fixtures before transaction and HTTP integration.
+
 - Handle the first location-review Escape synchronously after browser-Back modal handoff, before the UI library's effect-installed document listener is ready. Pending Escape interrupts local waiting without undoing a committed server write or generating a replacement request; add an actual commit/held-response/back/stay/leave browser regression.
 
 - Keep imported location IDs matching `new` distinct from the static create route through a safe detail escape without rewriting stored identity. Reject inconsistent live list/detail revisions before enabling writes. Preserve dialog layout at enlarged text sizes with shrinkable grid composition, start long reviews at visible static content, and avoid low-contrast enabled-opacity transitions without editing generated UI primitives.

@@ -376,6 +376,69 @@ class OpenAPIContractTests(unittest.TestCase):
                              set(SCHEMAS["AssetCostSummary"]["required"]))
 
 
+    def test_taxonomy_creation_patch_and_nullable_parent_are_distinct(self):
+        validator("CategoryCreate").validate({"name": "  分類 😀  "})
+        validator("CategoryCreate").validate({"name": "分類", "parent_id": None})
+        validator("CategoryWrite").validate({"parent_id": None})
+        validator("CategoryWrite").validate({"parent_id": "parent"})
+        for schema, value in [
+            ("CategoryCreate", {}), ("CategoryCreate", {"parent_id": "parent"}),
+            ("CategoryWrite", {}), ("CategoryWrite", {"name": None}),
+            ("CategoryWrite", {"parent_id": {"set": True, "value": None}}),
+            ("CategoryWrite", {"parent_id": ""}), ("CategoryWrite", {"parent_id": "x" * 129}),
+            ("TagWrite", {}), ("TagWrite", {"name": None}), ("TagWrite", {"name": "", "extra": True}),
+        ]:
+            with self.subTest(schema=schema, value=value), self.assertRaises(ValidationError):
+                validator(schema).validate(value)
+        for schema in ["CategoryCreate", "CategoryWrite", "TagWrite"]:
+            validator(schema).validate({"name": "😀" * 200})
+            for value in ["", "x" * 201]:
+                with self.subTest(schema=schema, name=value), self.assertRaises(ValidationError):
+                    validator(schema).validate({"name": value})
+
+    def test_taxonomy_resources_have_bounded_identity_positive_revision_and_exact_payloads(self):
+        for schema, value in [("Category", {"id": "category", "parent_id": None, "name": "分類", "revision": 1}),
+                              ("Tag", {"id": "tag", "name": "標籤", "revision": 1})]:
+            validator(schema).validate(value)
+            payload = {key: entry for key, entry in value.items() if key != "revision"}
+            Draft202012Validator(PROJECTION["$defs"][schema.lower()]).validate(payload)
+            for change in [{"id": ""}, {"id": "x" * 129}, {"name": ""}, {"name": "x" * 201},
+                           {"revision": 0}, {"revision": -1}, {"revision": 1.5}, {"revision": 9007199254740992}]:
+                with self.subTest(schema=schema, change=change), self.assertRaises(ValidationError):
+                    validator(schema).validate({**value, **change})
+        with self.assertRaises(ValidationError):
+            validator("Category").validate({"id": "category", "name": "分類", "revision": 1})
+
+    def test_taxonomy_writes_require_origin_safe_proofs_and_bounded_bodies(self):
+        for path in ["/categories", "/tags", "/categories/{id}", "/tags/{id}"]:
+            for method, operation in API["paths"][path].items():
+                if method == "get":
+                    continue
+                with self.subTest(path=path, method=method):
+                    headers = {entry["name"]: entry for entry in operation["parameters"] if entry["in"] == "header"}
+                    self.assertTrue(headers["Origin"]["required"])
+                    self.assertEqual(2048, headers["Origin"]["schema"]["maxLength"])
+                    self.assertEqual(0 if method == "delete" else 16384, operation["x-max-body-bytes"])
+                    if method != "post" or path == "/categories":
+                        proof = headers["If-Match"]
+                        self.assertEqual('^"[1-9][0-9]*"$', proof["schema"]["pattern"])
+                        self.assertEqual(18, proof["schema"]["maxLength"])
+                        self.assertEqual(method != "post", proof["required"])
+        creation = API["paths"]["/categories"]["post"]
+        self.assertEqual("#/components/schemas/CategoryCreate", creation["requestBody"]["content"]["application/json"]["schema"]["$ref"])
+        self.assertEqual("parent_id is non-null", next(entry for entry in creation["parameters"] if entry["name"] == "If-Match")["x-required-when"])
+
+    def test_taxonomy_live_lists_are_bounded_and_never_claim_frozen_sync(self):
+        for path, schema in [("/categories", "CategoryList"), ("/tags", "TagList")]:
+            operation = API["paths"][path]["get"]
+            query = {entry["name"]: entry["schema"] for entry in operation["parameters"]}
+            self.assertEqual({"type": "integer", "minimum": 1, "maximum": 100, "default": 100}, query["limit"])
+            self.assertEqual(2048, query["cursor"]["maxLength"])
+            validator(schema).validate({"data": [], "next_cursor": None})
+            self.assertEqual(100, SCHEMAS[schema]["properties"]["data"]["maxItems"])
+            self.assertEqual(2048, SCHEMAS[schema]["properties"]["next_cursor"]["maxLength"])
+
+
 class OfflineProjectionTests(unittest.TestCase):
     def setUp(self):
         self.check = Draft202012Validator(PROJECTION, format_checker=FORMAT)
