@@ -3,7 +3,6 @@ package httpapi
 import (
 	"errors"
 	"net/http"
-	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -57,7 +56,7 @@ func (a *authAPI) serveLocations(w http.ResponseWriter, r *http.Request, request
 		if !requireNoBody(w, r, requestID) {
 			return true
 		}
-		cursor, limit, ok := locationListQuery(w, r, requestID)
+		cursor, limit, ok := metadataListQuery(w, r, requestID)
 		if !ok {
 			return true
 		}
@@ -77,7 +76,7 @@ func (a *authAPI) serveLocations(w http.ResponseWriter, r *http.Request, request
 		writeLocationResult(w, location, err, requestID)
 		return true
 	}
-	revision, supplied, ok := locationRevision(w, r, requestID, route != "create")
+	revision, supplied, ok := resourceRevision(w, r, requestID, route != "create")
 	if !ok {
 		return true
 	}
@@ -92,12 +91,7 @@ func (a *authAPI) serveLocations(w http.ResponseWriter, r *http.Request, request
 			locationValidation(w, requestID)
 			return true
 		}
-		if fields.ParentID.Value != nil && !supplied {
-			writeError(w, http.StatusConflict, "PRECONDITION_REQUIRED", "Child creation requires the current parent revision in If-Match.", requestID)
-			return true
-		}
-		if fields.ParentID.Value == nil && supplied {
-			writeError(w, http.StatusBadRequest, "INVALID_REVISION", "Root creation does not accept a parent If-Match.", requestID)
+		if !reviewedParentProof(w, requestID, fields.ParentID.Value, supplied) {
 			return true
 		}
 		input := store.LocationCreate{ParentID: fields.ParentID.Value, Name: *fields.Name, Code: *fields.Code, Kind: fields.Kind, Status: fields.Status}
@@ -142,75 +136,6 @@ func (a *authAPI) serveLocations(w http.ResponseWriter, r *http.Request, request
 		writeJSON(w, ack)
 	}
 	return true
-}
-
-func locationRevision(w http.ResponseWriter, r *http.Request, requestID string, required bool) (int64, bool, bool) {
-	values := r.Header.Values("If-Match")
-	if len(values) == 0 {
-		if required {
-			writeError(w, http.StatusConflict, "PRECONDITION_REQUIRED", "Send the current quoted aggregate revision in If-Match.", requestID)
-			return 0, false, false
-		}
-		return 0, false, true
-	}
-	invalid := func() (int64, bool, bool) {
-		writeError(w, http.StatusBadRequest, "INVALID_REVISION", "If-Match must contain one quoted positive safe-integer revision.", requestID)
-		return 0, true, false
-	}
-	if len(values) != 1 || len(values[0]) < 3 || len(values[0]) > 18 {
-		return invalid()
-	}
-	text := values[0]
-	if text[0] != '"' || text[len(text)-1] != '"' || text[1] == '0' {
-		return invalid()
-	}
-	for _, character := range text[1 : len(text)-1] {
-		if character < '0' || character > '9' {
-			return invalid()
-		}
-	}
-	revision, err := strconv.ParseInt(text[1:len(text)-1], 10, 64)
-	if err != nil || revision < 1 || revision > maxJSONInteger {
-		return invalid()
-	}
-	return revision, true, true
-}
-
-func locationListQuery(w http.ResponseWriter, r *http.Request, requestID string) (string, int, bool) {
-	invalid := func() (string, int, bool) {
-		writeError(w, http.StatusBadRequest, "INVALID_QUERY", "Use one bounded limit and one opaque location cursor only.", requestID)
-		return "", 0, false
-	}
-	if len(r.URL.RawQuery) > 2300 {
-		return invalid()
-	}
-	values, err := url.ParseQuery(r.URL.RawQuery)
-	if err != nil {
-		return invalid()
-	}
-	limit := 100
-	cursor := ""
-	for name, entries := range values {
-		if len(entries) != 1 {
-			return invalid()
-		}
-		switch name {
-		case "limit":
-			value, err := strconv.Atoi(entries[0])
-			if err != nil || value < 1 || value > 100 {
-				return invalid()
-			}
-			limit = value
-		case "cursor":
-			if len(entries[0]) == 0 || len(entries[0]) > 2048 {
-				return invalid()
-			}
-			cursor = entries[0]
-		default:
-			return invalid()
-		}
-	}
-	return cursor, limit, true
 }
 
 func writeLocationResult(w http.ResponseWriter, location store.Location, err error, requestID string) {

@@ -19,7 +19,7 @@ import (
 	"homebox/internal/store"
 )
 
-func locationHTTPFixture(t *testing.T) (*store.Auth, http.Handler, *http.Cookie, string) {
+func domainHTTPFixture(t *testing.T) (*store.Auth, http.Handler, *http.Cookie, string) {
 	t.Helper()
 	auth := newTestAuth(t)
 	setupAccount(t, auth, true)
@@ -27,7 +27,7 @@ func locationHTTPFixture(t *testing.T) (*store.Auth, http.Handler, *http.Cookie,
 	return auth, authHandler(t, auth), cookie, csrf
 }
 
-func locationRequest(method, path, body string, cookie *http.Cookie, csrf, key, revision string) *http.Request {
+func domainRequest(method, path, body string, cookie *http.Cookie, csrf, key, revision string) *http.Request {
 	r := apiRequest(method, path, body)
 	if cookie != nil {
 		r.AddCookie(cookie)
@@ -200,53 +200,53 @@ func TestLocationHTTPThroughVerifiedTLSWithRealSessionAndFrozenReplies(t *testin
 }
 
 func TestLocationHTTPParentProofStaleInputAndSubtreeConfirmation(t *testing.T) {
-	_, handler, cookie, csrf := locationHTTPFixture(t)
-	root := responseLocation(t, respond(handler, locationRequest(http.MethodPost, "/api/v1/locations", `{"name":"Root","code":"ROOT"}`, cookie, csrf, "create-root-key", "")))
+	_, handler, cookie, csrf := domainHTTPFixture(t)
+	root := responseLocation(t, respond(handler, domainRequest(http.MethodPost, "/api/v1/locations", `{"name":"Root","code":"ROOT"}`, cookie, csrf, "create-root-key", "")))
 	childBody := fmt.Sprintf(`{"name":"Child","code":"CHILD","parent_id":%q}`, root.ID)
-	expectError(t, respond(handler, locationRequest(http.MethodPost, "/api/v1/locations", childBody, cookie, csrf, "missing-parent-proof", "")), 409, "PRECONDITION_REQUIRED")
-	child := responseLocation(t, respond(handler, locationRequest(http.MethodPost, "/api/v1/locations", childBody, cookie, csrf, "create-child-key", `"1"`)))
-	expectError(t, respond(handler, locationRequest(http.MethodPost, "/api/v1/locations", strings.ReplaceAll(childBody, "CHILD", "NEXT"), cookie, csrf, "stale-parent-key", `"1"`)), 409, "REVISION_CONFLICT")
-	expectError(t, respond(handler, locationRequest(http.MethodPost, "/api/v1/locations/"+root.ID+"/archive", `{}`, cookie, csrf, "unreviewed-subtree", `"2"`)), 409, "LOCATION_HAS_CHILDREN")
-	archived := responseLocation(t, respond(handler, locationRequest(http.MethodPost, "/api/v1/locations/"+root.ID+"/archive", `{"archive_children":true,"reason":"Reviewed empty subtree"}`, cookie, csrf, "archive-subtree-key", `"2"`)))
+	expectError(t, respond(handler, domainRequest(http.MethodPost, "/api/v1/locations", childBody, cookie, csrf, "missing-parent-proof", "")), 409, "PRECONDITION_REQUIRED")
+	child := responseLocation(t, respond(handler, domainRequest(http.MethodPost, "/api/v1/locations", childBody, cookie, csrf, "create-child-key", `"1"`)))
+	expectError(t, respond(handler, domainRequest(http.MethodPost, "/api/v1/locations", strings.ReplaceAll(childBody, "CHILD", "NEXT"), cookie, csrf, "stale-parent-key", `"1"`)), 409, "REVISION_CONFLICT")
+	expectError(t, respond(handler, domainRequest(http.MethodPost, "/api/v1/locations/"+root.ID+"/archive", `{}`, cookie, csrf, "unreviewed-subtree", `"2"`)), 409, "LOCATION_HAS_CHILDREN")
+	archived := responseLocation(t, respond(handler, domainRequest(http.MethodPost, "/api/v1/locations/"+root.ID+"/archive", `{"archive_children":true,"reason":"Reviewed empty subtree"}`, cookie, csrf, "archive-subtree-key", `"2"`)))
 	if archived.Status != "archived" || archived.Revision != 3 {
 		t.Fatal("subtree archive did not advance the aggregate once")
 	}
-	child = responseLocation(t, respond(handler, locationRequest(http.MethodGet, "/api/v1/locations/"+child.ID, "", cookie, csrf, "", "")))
+	child = responseLocation(t, respond(handler, domainRequest(http.MethodGet, "/api/v1/locations/"+child.ID, "", cookie, csrf, "", "")))
 	if child.Status != "archived" || child.Revision != 2 {
 		t.Fatal("descendant was not atomically archived")
 	}
-	expectError(t, respond(handler, locationRequest(http.MethodPatch, "/api/v1/locations/"+child.ID, `{"status":"active"}`, cookie, csrf, "restore-child-first", `"2"`)), 409, "LOCATION_ARCHIVED")
-	expectError(t, respond(handler, locationRequest(http.MethodDelete, "/api/v1/locations/"+root.ID, "", cookie, csrf, "delete-with-child", `"3"`)), 409, "LOCATION_HAS_CHILDREN")
-	expectError(t, respond(handler, locationRequest(http.MethodPatch, "/api/v1/locations/"+child.ID, `{"name":"Changed"}`, cookie, csrf, "archive-subtree-key", `"2"`)), 409, "IDEMPOTENCY_CONFLICT")
+	expectError(t, respond(handler, domainRequest(http.MethodPatch, "/api/v1/locations/"+child.ID, `{"status":"active"}`, cookie, csrf, "restore-child-first", `"2"`)), 409, "LOCATION_ARCHIVED")
+	expectError(t, respond(handler, domainRequest(http.MethodDelete, "/api/v1/locations/"+root.ID, "", cookie, csrf, "delete-with-child", `"3"`)), 409, "LOCATION_HAS_CHILDREN")
+	expectError(t, respond(handler, domainRequest(http.MethodPatch, "/api/v1/locations/"+child.ID, `{"name":"Changed"}`, cookie, csrf, "archive-subtree-key", `"2"`)), 409, "IDEMPOTENCY_CONFLICT")
 }
 
 func TestLocationHTTPListUsesSignedBoundedCursors(t *testing.T) {
-	_, handler, cookie, csrf := locationHTTPFixture(t)
+	_, handler, cookie, csrf := domainHTTPFixture(t)
 	for _, code := range []string{"FIRST", "SECOND", "THIRD"} {
-		responseLocation(t, respond(handler, locationRequest(http.MethodPost, "/api/v1/locations", fmt.Sprintf(`{"name":"Box","code":%q}`, code), cookie, csrf, "create-"+code, "")))
+		responseLocation(t, respond(handler, domainRequest(http.MethodPost, "/api/v1/locations", fmt.Sprintf(`{"name":"Box","code":%q}`, code), cookie, csrf, "create-"+code, "")))
 	}
-	response := respond(handler, locationRequest(http.MethodGet, "/api/v1/locations/tree?limit=2", "", cookie, csrf, "", ""))
+	response := respond(handler, domainRequest(http.MethodGet, "/api/v1/locations/tree?limit=2", "", cookie, csrf, "", ""))
 	var first store.LocationList
 	if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &first) != nil || len(first.Data) != 2 || first.NextCursor == nil {
 		t.Fatal("first real HTTP page failed", response.Body.String())
 	}
 	nextURL := "/api/v1/locations/tree?limit=2&cursor=" + url.QueryEscape(*first.NextCursor)
-	response = respond(handler, locationRequest(http.MethodGet, nextURL, "", cookie, csrf, "", ""))
+	response = respond(handler, domainRequest(http.MethodGet, nextURL, "", cookie, csrf, "", ""))
 	var second store.LocationList
 	if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &second) != nil || len(second.Data) != 1 || second.NextCursor != nil || second.Data[0].ID <= first.Data[1].ID {
 		t.Fatal("signed HTTP continuation did not produce the final stable page")
 	}
-	expectError(t, respond(handler, locationRequest(http.MethodGet, strings.Replace(nextURL, "limit=2", "limit=1", 1), "", cookie, csrf, "", "")), 400, "INVALID_CURSOR")
+	expectError(t, respond(handler, domainRequest(http.MethodGet, strings.Replace(nextURL, "limit=2", "limit=1", 1), "", cookie, csrf, "", "")), 400, "INVALID_CURSOR")
 	for _, query := range []string{"?limit=0", "?limit=101", "?limit=x", "?limit=1&limit=2", "?cursor=", "?cursor=x&cursor=y", "?unexpected=true", "?limit=1;cursor=x", "?cursor=%zz", "?cursor=" + strings.Repeat("x", 2049), "?" + strings.Repeat("x", 2301)} {
-		r := locationRequest(http.MethodGet, "/api/v1/locations/tree", "", cookie, csrf, "", "")
+		r := domainRequest(http.MethodGet, "/api/v1/locations/tree", "", cookie, csrf, "", "")
 		r.URL.RawQuery = strings.TrimPrefix(query, "?")
 		expectError(t, respond(handler, r), 400, "INVALID_QUERY")
 	}
-	expectError(t, respond(handler, locationRequest(http.MethodGet, "/api/v1/locations/tree?cursor=unsigned", "", cookie, csrf, "", "")), 400, "INVALID_CURSOR")
+	expectError(t, respond(handler, domainRequest(http.MethodGet, "/api/v1/locations/tree?cursor=unsigned", "", cookie, csrf, "", "")), 400, "INVALID_CURSOR")
 }
 
 func TestLocationHTTPRequiresActiveSessionCSRFVersionKeyAndExactOrigin(t *testing.T) {
-	auth, handler, cookie, csrf := locationHTTPFixture(t)
+	auth, handler, cookie, csrf := domainHTTPFixture(t)
 	body := `{"name":"Box","code":"BOX"}`
 	for _, input := range []struct {
 		name   string
@@ -264,16 +264,16 @@ func TestLocationHTTPRequiresActiveSessionCSRFVersionKeyAndExactOrigin(t *testin
 		{"cross origin", func(r *http.Request) { r.Header.Set("Origin", "https://untrusted.test") }, 403, "ORIGIN_REJECTED"},
 		{"host", func(r *http.Request) { r.Host = "untrusted.test" }, 403, "ORIGIN_REJECTED"},
 	} {
-		r := locationRequest(http.MethodPost, "/api/v1/locations", body, cookie, csrf, "protected-create-key", "")
+		r := domainRequest(http.MethodPost, "/api/v1/locations", body, cookie, csrf, "protected-create-key", "")
 		input.change(r)
 		expectError(t, respond(handler, r), input.status, input.code)
 	}
-	root := responseLocation(t, respond(handler, locationRequest(http.MethodPost, "/api/v1/locations", body, cookie, csrf, "protected-create-key", "")))
+	root := responseLocation(t, respond(handler, domainRequest(http.MethodPost, "/api/v1/locations", body, cookie, csrf, "protected-create-key", "")))
 	if _, err := auth.Logout(t.Context(), cookie.Value, "logout-domain-http"); err != nil {
 		t.Fatal(err)
 	}
-	expectError(t, respond(handler, locationRequest(http.MethodPost, "/api/v1/locations", body, cookie, csrf, "protected-create-key", "")), 401, "AUTHENTICATION_REQUIRED")
-	expectError(t, respond(handler, locationRequest(http.MethodGet, "/api/v1/locations/"+root.ID, "", cookie, csrf, "", "")), 401, "AUTHENTICATION_REQUIRED")
+	expectError(t, respond(handler, domainRequest(http.MethodPost, "/api/v1/locations", body, cookie, csrf, "protected-create-key", "")), 401, "AUTHENTICATION_REQUIRED")
+	expectError(t, respond(handler, domainRequest(http.MethodGet, "/api/v1/locations/"+root.ID, "", cookie, csrf, "", "")), 401, "AUTHENTICATION_REQUIRED")
 }
 
 func TestLocationHTTPMandatoryChangeGatePrecedesBodyParsing(t *testing.T) {
@@ -281,55 +281,55 @@ func TestLocationHTTPMandatoryChangeGatePrecedesBodyParsing(t *testing.T) {
 	setupAccount(t, auth, false)
 	cookie, csrf := testCredentials(t, auth, initialPassword)
 	handler := authHandler(t, auth)
-	expectError(t, respond(handler, locationRequest(http.MethodPost, "/api/v1/locations", `{invalid}`, cookie, csrf, "mandatory-domain-key", "")), 403, "PASSWORD_CHANGE_REQUIRED")
-	expectError(t, respond(handler, locationRequest(http.MethodGet, "/api/v1/locations/tree", "", cookie, csrf, "", "")), 403, "PASSWORD_CHANGE_REQUIRED")
+	expectError(t, respond(handler, domainRequest(http.MethodPost, "/api/v1/locations", `{invalid}`, cookie, csrf, "mandatory-domain-key", "")), 403, "PASSWORD_CHANGE_REQUIRED")
+	expectError(t, respond(handler, domainRequest(http.MethodGet, "/api/v1/locations/tree", "", cookie, csrf, "", "")), 403, "PASSWORD_CHANGE_REQUIRED")
 }
 
 func TestLocationHTTPRevisionSyntaxMethodsAndURLBoundaries(t *testing.T) {
-	_, handler, cookie, csrf := locationHTTPFixture(t)
-	root := responseLocation(t, respond(handler, locationRequest(http.MethodPost, "/api/v1/locations", `{"name":"Box","code":"BOX"}`, cookie, csrf, "syntax-create-key", "")))
+	_, handler, cookie, csrf := domainHTTPFixture(t)
+	root := responseLocation(t, respond(handler, domainRequest(http.MethodPost, "/api/v1/locations", `{"name":"Box","code":"BOX"}`, cookie, csrf, "syntax-create-key", "")))
 	path := "/api/v1/locations/" + root.ID
 	for _, revision := range []string{`1`, `"0"`, `"01"`, `"-1"`, `W/"1"`, `*`, `"1", "2"`, `"1.0"`, `"9007199254740992"`, `"99999999999999999"`, `"x"`} {
-		expectError(t, respond(handler, locationRequest(http.MethodPatch, path, `{"name":"No change"}`, cookie, csrf, "syntax-invalid-key", revision)), 400, "INVALID_REVISION")
+		expectError(t, respond(handler, domainRequest(http.MethodPatch, path, `{"name":"No change"}`, cookie, csrf, "syntax-invalid-key", revision)), 400, "INVALID_REVISION")
 	}
-	r := locationRequest(http.MethodPatch, path, `{"name":"No change"}`, cookie, csrf, "duplicate-revision-key", `"1"`)
+	r := domainRequest(http.MethodPatch, path, `{"name":"No change"}`, cookie, csrf, "duplicate-revision-key", `"1"`)
 	r.Header.Add("If-Match", `"1"`)
 	expectError(t, respond(handler, r), 400, "INVALID_REVISION")
-	expectError(t, respond(handler, locationRequest(http.MethodPatch, path, `{"name":"No change"}`, cookie, csrf, "missing-revision-key", "")), 409, "PRECONDITION_REQUIRED")
-	expectError(t, respond(handler, locationRequest(http.MethodPost, "/api/v1/locations", `{"name":"No change","code":"OTHER"}`, cookie, csrf, "unrelated-parent-key", `"1"`)), 400, "INVALID_REVISION")
+	expectError(t, respond(handler, domainRequest(http.MethodPatch, path, `{"name":"No change"}`, cookie, csrf, "missing-revision-key", "")), 409, "PRECONDITION_REQUIRED")
+	expectError(t, respond(handler, domainRequest(http.MethodPost, "/api/v1/locations", `{"name":"No change","code":"OTHER"}`, cookie, csrf, "unrelated-parent-key", `"1"`)), 400, "INVALID_REVISION")
 	for _, target := range []string{path + "?unexpected=1", path + "?", "/api/v1/locations/..", "/api/v1/locations/%5ctarget", "/api/v1/locations/%00target", "/api/v1/locations/%61lias", "/api/v1/locations/" + strings.Repeat("x", 129)} {
-		expectError(t, respond(handler, locationRequest(http.MethodGet, target, "", cookie, csrf, "", "")), 400, "INVALID_LOCATION_URL")
+		expectError(t, respond(handler, domainRequest(http.MethodGet, target, "", cookie, csrf, "", "")), 400, "INVALID_LOCATION_URL")
 	}
 	for _, input := range []struct{ method, path, allow string }{
 		{http.MethodPut, path, "GET, PATCH, DELETE"}, {http.MethodHead, path, "GET, PATCH, DELETE"},
 		{http.MethodGet, "/api/v1/locations", "POST"}, {http.MethodPost, "/api/v1/locations/tree", "GET"},
 		{http.MethodGet, path + "/move", "POST"}, {http.MethodGet, path + "/archive", "POST"},
 	} {
-		response := respond(handler, locationRequest(input.method, input.path, "", cookie, csrf, "wrong-method-key", ""))
+		response := respond(handler, domainRequest(input.method, input.path, "", cookie, csrf, "wrong-method-key", ""))
 		expectError(t, response, 405, "METHOD_NOT_ALLOWED")
 		if response.Header().Get("Allow") != input.allow {
 			t.Fatal("method denial omitted its exact Allow header")
 		}
 	}
 	for _, target := range []string{"/api/v1/locations/", path + "/unknown", path + "/move/", "/api/v1/locations-not-real"} {
-		expectError(t, respond(handler, locationRequest(http.MethodGet, target, "", cookie, csrf, "", "")), 404, "NOT_FOUND")
+		expectError(t, respond(handler, domainRequest(http.MethodGet, target, "", cookie, csrf, "", "")), 404, "NOT_FOUND")
 	}
 }
 
 func TestLocationHTTPDenialsNeverApplyPartialInput(t *testing.T) {
-	_, handler, cookie, csrf := locationHTTPFixture(t)
+	_, handler, cookie, csrf := domainHTTPFixture(t)
 	for _, body := range []string{`{}`, `{"name":"Missing code"}`, `{"code":"Missing name"}`, `{"name":"Box","code":"BOX","sort_order":0.5}`, `{"name":"Box","code":"BOX","description":null}`, `{"name":"Box","code":"BOX","parent_id":{}}`} {
-		expectError(t, respond(handler, locationRequest(http.MethodPost, "/api/v1/locations", body, cookie, csrf, "rejected-create-key", "")), 422, "VALIDATION_ERROR")
+		expectError(t, respond(handler, domainRequest(http.MethodPost, "/api/v1/locations", body, cookie, csrf, "rejected-create-key", "")), 422, "VALIDATION_ERROR")
 	}
-	response := respond(handler, locationRequest(http.MethodGet, "/api/v1/locations/tree", "", cookie, csrf, "", ""))
+	response := respond(handler, domainRequest(http.MethodGet, "/api/v1/locations/tree", "", cookie, csrf, "", ""))
 	var list store.LocationList
 	if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &list) != nil || len(list.Data) != 0 {
 		t.Fatal("malformed input left authoritative locations behind")
 	}
-	root := responseLocation(t, respond(handler, locationRequest(http.MethodPost, "/api/v1/locations", `{"name":"Original","code":"BOX"}`, cookie, csrf, "rejected-create-key", "")))
-	expectError(t, respond(handler, locationRequest(http.MethodPatch, "/api/v1/locations/"+root.ID, `{}`, cookie, csrf, "empty-patch-key", `"1"`)), 422, "VALIDATION_ERROR")
-	expectError(t, respond(handler, locationRequest(http.MethodDelete, "/api/v1/locations/"+root.ID, `{}`, cookie, csrf, "body-delete-key", `"1"`)), 400, "INVALID_BODY")
-	if got := responseLocation(t, respond(handler, locationRequest(http.MethodGet, "/api/v1/locations/"+root.ID, "", cookie, csrf, "", ""))); got.Name != "Original" || got.Revision != 1 {
+	root := responseLocation(t, respond(handler, domainRequest(http.MethodPost, "/api/v1/locations", `{"name":"Original","code":"BOX"}`, cookie, csrf, "rejected-create-key", "")))
+	expectError(t, respond(handler, domainRequest(http.MethodPatch, "/api/v1/locations/"+root.ID, `{}`, cookie, csrf, "empty-patch-key", `"1"`)), 422, "VALIDATION_ERROR")
+	expectError(t, respond(handler, domainRequest(http.MethodDelete, "/api/v1/locations/"+root.ID, `{}`, cookie, csrf, "body-delete-key", `"1"`)), 400, "INVALID_BODY")
+	if got := responseLocation(t, respond(handler, domainRequest(http.MethodGet, "/api/v1/locations/"+root.ID, "", cookie, csrf, "", ""))); got.Name != "Original" || got.Revision != 1 {
 		t.Fatal("invalid edit/delete changed the resource")
 	}
 }
@@ -349,8 +349,8 @@ func (reader *beforeRead) Read(buffer []byte) (int, error) {
 }
 
 func TestLocationHTTPRevalidatesRevocationAfterMiddlewareBeforeMutation(t *testing.T) {
-	auth, handler, cookie, csrf := locationHTTPFixture(t)
-	r := locationRequest(http.MethodPost, "/api/v1/locations", `{"name":"Not committed","code":"BOX"}`, cookie, csrf, "late-revocation-key", "")
+	auth, handler, cookie, csrf := domainHTTPFixture(t)
+	r := domainRequest(http.MethodPost, "/api/v1/locations", `{"name":"Not committed","code":"BOX"}`, cookie, csrf, "late-revocation-key", "")
 	r.Body = io.NopCloser(&beforeRead{Reader: r.Body, before: func() {
 		if _, err := auth.Logout(t.Context(), cookie.Value, "revoke-before-source-write"); err != nil {
 			t.Fatal(err)
@@ -358,7 +358,7 @@ func TestLocationHTTPRevalidatesRevocationAfterMiddlewareBeforeMutation(t *testi
 	}})
 	expectError(t, respond(handler, r), 401, "AUTHENTICATION_REQUIRED")
 	fresh, freshCSRF := testCredentials(t, auth, changedPassword)
-	response := respond(handler, locationRequest(http.MethodGet, "/api/v1/locations/tree", "", fresh, freshCSRF, "", ""))
+	response := respond(handler, domainRequest(http.MethodGet, "/api/v1/locations/tree", "", fresh, freshCSRF, "", ""))
 	var list store.LocationList
 	if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &list) != nil || len(list.Data) != 0 {
 		t.Fatal("revoked-after-middleware request committed business data")
@@ -366,14 +366,14 @@ func TestLocationHTTPRevalidatesRevocationAfterMiddlewareBeforeMutation(t *testi
 }
 
 func TestLocationHTTPUsesTheUnmodifiedGeneralRequestBudget(t *testing.T) {
-	_, handler, cookie, csrf := locationHTTPFixture(t)
+	_, handler, cookie, csrf := domainHTTPFixture(t)
 	for range 60 {
-		response := respond(handler, locationRequest(http.MethodGet, "/api/v1/locations/tree", "", cookie, csrf, "", ""))
+		response := respond(handler, domainRequest(http.MethodGet, "/api/v1/locations/tree", "", cookie, csrf, "", ""))
 		if response.Code != 200 {
 			t.Fatal("normal list did not use the general read budget", response.Code)
 		}
 	}
-	expectError(t, respond(handler, locationRequest(http.MethodPost, "/api/v1/locations", `{"name":"Limited","code":"BOX"}`, cookie, csrf, "limited-create-key", "")), 429, "RATE_LIMITED")
+	expectError(t, respond(handler, domainRequest(http.MethodPost, "/api/v1/locations", `{"name":"Limited","code":"BOX"}`, cookie, csrf, "limited-create-key", "")), 429, "RATE_LIMITED")
 }
 
 func TestLocationErrorsAreSafeMachineReadableAndNeverClearCookies(t *testing.T) {

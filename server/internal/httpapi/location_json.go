@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"bytes"
 	"encoding/json"
 	"math/big"
 	"net/http"
@@ -12,30 +11,10 @@ import (
 )
 
 const locationBodyLimit = 128 << 10
-const maxJSONInteger int64 = 9007199254740991
 
 func locationValidation(w http.ResponseWriter, requestID string) bool {
 	writeError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "Location fields must use their documented types, lengths, and integer bounds.", requestID)
 	return false
-}
-
-func locationString(raw json.RawMessage, minimum, maximum int) (*string, bool) {
-	if len(raw) == 0 || raw[0] != '"' {
-		return nil, false
-	}
-	var value string
-	if json.Unmarshal(raw, &value) != nil || !boundedString(value, minimum, maximum) {
-		return nil, false
-	}
-	return &value, true
-}
-
-func locationParent(raw json.RawMessage) (store.NullableID, bool) {
-	if bytes.Equal(raw, []byte("null")) {
-		return store.NullableID{Set: true}, true
-	}
-	value, ok := locationString(raw, 1, 128)
-	return store.NullableID{Set: true, Value: value}, ok
 }
 
 func readLocationFields(w http.ResponseWriter, r *http.Request, requestID string) (store.LocationPatch, bool) {
@@ -53,7 +32,7 @@ func readLocationFields(w http.ResponseWriter, r *http.Request, requestID string
 		{"status", 1, 8, &input.Status}, {"description", 0, 10000, &input.Description},
 	} {
 		if raw, exists := values[field.name]; exists {
-			value, ok := locationString(raw, field.min, field.max)
+			value, ok := jsonString(raw, field.min, field.max)
 			if !ok {
 				return input, locationValidation(w, requestID)
 			}
@@ -64,7 +43,7 @@ func readLocationFields(w http.ResponseWriter, r *http.Request, requestID string
 		return input, locationValidation(w, requestID)
 	}
 	if raw, exists := values["parent_id"]; exists {
-		parent, ok := locationParent(raw)
+		parent, ok := jsonParent(raw)
 		if !ok {
 			return input, locationValidation(w, requestID)
 		}
@@ -125,7 +104,7 @@ func readLocationMove(w http.ResponseWriter, r *http.Request, requestID string) 
 	if !exists {
 		return nil, locationValidation(w, requestID)
 	}
-	parent, ok := locationParent(raw)
+	parent, ok := jsonParent(raw)
 	if !ok {
 		return nil, locationValidation(w, requestID)
 	}
@@ -145,7 +124,7 @@ func readLocationArchive(w http.ResponseWriter, r *http.Request, requestID strin
 		}
 	}
 	if raw, exists := values["reason"]; exists {
-		value, ok := locationString(raw, 0, 10000)
+		value, ok := jsonString(raw, 0, 10000)
 		if !ok {
 			return false, "", locationValidation(w, requestID)
 		}

@@ -1,6 +1,6 @@
 # Categories and Tags
 
-**Implementation status:** executable contracts, the authoritative Go/SQLite category/tag transaction services, signed live metadata pages, and dependent item/link/approved-search publication are implemented and tested. HTTP handlers, browser adapters, and settings screens remain pending; the serving router does not expose these taxonomy operations yet. Complete item/stock/media/search/worker workflows and 22-entity sync remain in progress.
+**Implementation status:** the eight category/tag HTTP operations below, signed live metadata pages, authoritative Go/SQLite transaction services, and dependent item/link/approved-search publication are implemented and tested. Browser adapters and settings screens remain pending. Complete item/stock/media/search/worker workflows and 22-entity sync remain in progress.
 
 ## Identity and names
 
@@ -10,7 +10,7 @@ Category/tag names contain 1–200 Unicode code points; IDs and nonnull parent I
 
 ## Request boundaries
 
-All routes below are relative to `/api/v1` and protected by the same configured Origin, session, mandatory-password-change, CSRF, idempotency, client-version, and admission policy as other domain operations. Describing the contract does not claim a running handler.
+All routes below are relative to `/api/v1` and protected by the same configured Origin, session, mandatory-password-change, CSRF, idempotency, client-version, and admission policy as other domain operations. They are available through the Go server; there is no taxonomy settings screen yet. Resource writes return a strong quoted revision ETag. Live lists and deletion acknowledgements do not invent a resource ETag, and no taxonomy response changes the session cookie.
 
 | Operation | Contract |
 | --- | --- |
@@ -18,11 +18,17 @@ All routes below are relative to `/api/v1` and protected by the same configured 
 | `POST /categories` | Required name and optional nullable parent; a child requires the reviewed parent's quoted aggregate revision; a root omits unrelated If-Match |
 | `PATCH /categories/{id}` | Nonempty partial name/parent patch and original target proof; omitted parent is unchanged, explicit null moves to root |
 | `DELETE /categories/{id}` | Original target proof and no body; delete a leaf, clearing its item classifications rather than deleting inventory |
-| `POST /tags` | Required exact unique name |
+| `POST /tags` | Required exact unique name; omit unrelated If-Match |
 | `PATCH /tags/{id}` | Required replacement name and original tag proof |
 | `DELETE /tags/{id}` | Original tag proof and no body; detach item-tag links and preserve inventory |
 
-Taxonomy write JSON is bounded to 16 KiB, with exact field names, duplicate/Unicode checks, and no null nonnullable fields. Proofs use one quoted positive decimal safe integer, not weak tags, leading zeros, lists, wildcards, or silently rounded values. Lists use principal/epoch/entity-type/page-size-scoped signed continuations, not a frozen/offline snapshot. Authentication and authorization must still be rechecked inside each SQL transaction.
+Taxonomy write JSON is bounded to 16 KiB, with exact field names, duplicate/Unicode checks, and no null nonnullable fields. Proofs use one quoted positive decimal safe integer, not weak tags, leading zeros, lists, wildcards, or silently rounded values. Lists use principal/epoch/entity-type/page-size-scoped signed continuations, not a frozen/offline snapshot. Authentication and authorization are rechecked inside each SQL transaction, including after HTTP admission and body reading.
+
+Use exact documented paths. Collection reads accept only one `limit` and one nonempty `cursor`; writes never accept query parameters. GET and DELETE reject bodies and content encodings. Unsupported methods return `405` with `Allow`; there is deliberately no single-category/tag GET operation in this contract. Read the full live list for metadata, rather than assuming a successful historical write acknowledgement describes current state.
+
+Safe error codes include `400 INVALID_TAXONOMY_URL`, `INVALID_QUERY`, `INVALID_CURSOR`, or `INVALID_REVISION`; `409 PRECONDITION_REQUIRED`, `REVISION_CONFLICT`, `CATEGORY_CYCLE`, `CATEGORY_HAS_CHILDREN`, `TAG_NAME_CONFLICT`, `IDEMPOTENCY_CONFLICT`, or `IDEMPOTENCY_EXPIRED`; and the shared authentication, validation, body/media, rate, upgrade, and availability errors. Messages/details never contain submitted secrets, private paths, or SQL diagnostics. Clients should localize allowlisted codes, not render arbitrary server messages. Failed/uncertain writes require explicit foreground reconciliation with the original key/body/proof; never silently retry, refresh a proof, or rebase.
+
+For example, after authenticating and obtaining an in-memory CSRF token, send a root category body `{"name":"Household"}` without If-Match. To create its child, read the current parent from the live category list and send `{"name":"Tools","parent_id":"<reviewed-parent-id>"}` with that parent's original quoted revision. To move an existing category to root, send only `{"parent_id":null}` with the category's original target revision. These examples are request shapes, not shell commands containing reusable credentials.
 
 ## Hierarchy and concurrency
 
@@ -58,9 +64,11 @@ npm --prefix web run api:generate
 npm --prefix web run typecheck
 ```
 
-Contract tests exercise separate create/partial-patch shapes, nullable parent presence, code-point/identity/revision bounds, exact offline payload compatibility, positive quoted proofs, Origin/body limits, and bounded live pagination. Strict generated-type fixtures reject missing creation names, missing response parents, internal command wrappers, missing Origin, and null tag names. Store tests replay every mutation's frozen changes onto the old current state and require exact equality, verify deep hierarchies/concurrent retries/stale proofs, inject dependent-write/deferred-commit/late-auth failures, and assert approved-only FTS publication without modifying inventory or AI source evidence. HTTP/browser acceptance remains pending; physical NAS/phone acceptance is not implied.
+Contract tests exercise separate create/partial-patch shapes, nullable parent presence, code-point/identity/revision bounds, exact offline payload compatibility, positive quoted proofs, Origin/body limits, and bounded live pagination. Strict generated-type fixtures reject missing creation names, missing response parents, internal command wrappers, missing Origin, and null tag names. Store tests replay every mutation's frozen changes onto the old current state and require exact equality, verify deep hierarchies/concurrent retries/stale proofs, inject dependent-write/deferred-commit/late-auth failures, and assert approved-only FTS publication without modifying inventory or AI source evidence. HTTP tests drive all eight operations through verified TLS and a real cookie jar, strict JSON/URL/header boundaries, cross-list cursors, unchanged admission limits, post-middleware revocation and changed proofs, no-op and fresh-session frozen replies. A bounded fuzz target exercises both taxonomy JSON readers. Taxonomy browser-screen acceptance remains pending; physical NAS/phone acceptance is not implied.
 
 ```sh
 go -C server test -race -count=1 ./internal/store -run '^TestTaxonomy'
+go -C server test -race -count=1 ./internal/httpapi -run '^TestTaxonomy'
+go -C server test ./internal/httpapi -run '^$' -fuzz FuzzTaxonomyJSON -fuzztime=5s -parallel=2
 make check-backend
 ```

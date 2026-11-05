@@ -582,7 +582,7 @@ export interface paths {
         };
         /**
          * List categories
-         * @description Live stable-ID metadata pages with a principal, dataset epoch, entity type and page-size scoped signed cursor. This is not a frozen offline snapshot.
+         * @description Live stable-ID metadata pages with a principal, dataset epoch, entity type and page-size scoped signed cursor, valid for 15 minutes. A cursor never authorizes a read by itself. This is not a frozen offline snapshot.
          */
         readonly get: operations["get_categories"];
         readonly put?: never;
@@ -1744,13 +1744,13 @@ export interface paths {
         };
         /**
          * List tags
-         * @description Live stable-ID metadata pages with a principal, dataset epoch, entity type and page-size scoped signed cursor. This is not a frozen offline snapshot.
+         * @description Live stable-ID metadata pages with a principal, dataset epoch, entity type and page-size scoped signed cursor, valid for 15 minutes. A cursor never authorizes a read by itself. This is not a frozen offline snapshot.
          */
         readonly get: operations["get_tags"];
         readonly put?: never;
         /**
          * Create tag
-         * @description Preserve exact unique tag text and commit tag, affected approved search projections, immutable mutation audit and idempotent reply together.
+         * @description Preserve exact unique tag text and commit tag, affected approved search projections, immutable mutation audit and idempotent reply together. Tag creation must omit unrelated If-Match headers.
          */
         readonly post: operations["post_tags"];
         readonly delete?: never;

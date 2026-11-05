@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { z } from 'zod'
 
 const fetchMock = vi.fn<typeof fetch>()
 beforeEach(() => { vi.resetModules(); fetchMock.mockReset(); vi.stubGlobal('fetch', fetchMock) })
@@ -74,5 +75,25 @@ describe('same-origin health boundary', () => {
     await vi.advanceTimersByTimeAsync(8_000)
     await rejection
     expect(vi.getTimerCount()).toBe(0)
+  })
+})
+
+describe('safe taxonomy error boundary', () => {
+  it.each([
+    ['INVALID_TAXONOMY_URL', 400], ['CATEGORY_CYCLE', 409],
+    ['CATEGORY_HAS_CHILDREN', 409], ['TAG_NAME_CONFLICT', 409],
+    ['ARBITRARY_PRIVATE_DIAGNOSTIC', 503],
+  ] as const)('retains only allowlisted metadata for %s', async (code, status) => {
+    const { ApiError, requestData } = await import('./client')
+    const payload = { error: { code, request_id: 'safe-request',
+      message: 'secret=do-not-retain', details: { path: '/private/database' } } }
+    const failure = await requestData(new AbortController().signal,
+      async () => ({ error: payload, response: Response.json(payload, { status }) }), z.never(),
+    ).catch((error: unknown) => error)
+    expect(failure).toBeInstanceOf(ApiError)
+    expect(failure).toMatchObject({ code: code === 'ARBITRARY_PRIVATE_DIAGNOSTIC' ? 'UNKNOWN_ERROR' : code, status,
+      requestId: code === 'ARBITRARY_PRIVATE_DIAGNOSTIC' ? undefined : 'safe-request' })
+    expect(String(failure)).not.toContain('secret=')
+    expect(JSON.stringify(failure)).not.toMatch(/secret=|private\/database|message|details|cause/)
   })
 })

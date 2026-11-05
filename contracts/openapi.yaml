@@ -3129,7 +3129,7 @@ paths:
           type: string
           minLength: 1
           maxLength: 2048
-      description: Live stable-ID metadata pages with a principal, dataset epoch, entity type and page-size scoped signed cursor. This is not a frozen offline snapshot.
+      description: Live stable-ID metadata pages with a principal, dataset epoch, entity type and page-size scoped signed cursor, valid for 15 minutes. A cursor never authorizes a read by itself. This is not a frozen offline snapshot.
       x-max-body-bytes: 0
       responses:
         '200':
@@ -3469,7 +3469,7 @@ paths:
           type: string
           minLength: 1
           maxLength: 2048
-      description: Live stable-ID metadata pages with a principal, dataset epoch, entity type and page-size scoped signed cursor. This is not a frozen offline snapshot.
+      description: Live stable-ID metadata pages with a principal, dataset epoch, entity type and page-size scoped signed cursor, valid for 15 minutes. A cursor never authorizes a read by itself. This is not a frozen offline snapshot.
       x-max-body-bytes: 0
       responses:
         '200':
@@ -3591,7 +3591,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/TagWrite'
-      description: Preserve exact unique tag text and commit tag, affected approved search projections, immutable mutation audit and idempotent reply together.
+      description: Preserve exact unique tag text and commit tag, affected approved search projections, immutable mutation audit and idempotent reply together. Tag creation must omit unrelated If-Match headers.
   /tags/{id}:
     patch:
       operationId: patch_tags_id

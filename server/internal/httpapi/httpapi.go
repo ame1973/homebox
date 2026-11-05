@@ -51,7 +51,11 @@ func New(cfg Config) (http.Handler, error) {
 	if err != nil {
 		return nil, fmt.Errorf("location service is required: %w", err)
 	}
-	api := &authAPI{auth: cfg.Auth, locations: locations, origin: policy, limiter: newRequestLimiter()}
+	taxonomy, err := store.NewTaxonomy(cfg.Auth)
+	if err != nil {
+		return nil, fmt.Errorf("taxonomy service is required: %w", err)
+	}
+	api := &authAPI{auth: cfg.Auth, locations: locations, taxonomy: taxonomy, origin: policy, limiter: newRequestLimiter()}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestID := rand.Text()
 		w.Header().Set("X-Request-ID", requestID)

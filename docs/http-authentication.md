@@ -1,6 +1,6 @@
 # HTTP Authentication and Transport
 
-**Development status:** all seven authentication API routes, their transport/security checks, the React setup/login/password-change/logout workflow, and [seven location HTTP operations](locations.md) are implemented. Privileged reauthentication consumers, other inventory/domain routes, location screens, offline PWA, and production deployment are not complete. These commands document working server capabilities, not QNAP or physical-device acceptance.
+**Development status:** all seven authentication API routes, their transport/security checks, the React account/location workflows, [seven location HTTP operations](locations.md), and [eight category/tag HTTP operations](taxonomy.md) are implemented. Taxonomy browser adapters/settings screens, privileged reauthentication consumers, other inventory/domain routes, offline PWA, and production deployment are not complete. These commands document working server capabilities, not QNAP or physical-device acceptance.
 
 ## Start locally
 
@@ -95,7 +95,7 @@ Protected writes additionally require:
 
 - `X-CSRF-Token`: the token obtained for this active session, not a cookie/grant or another session's token.
 - `X-HomeBox-Client-Version`: currently exactly `0.1.0` or `0.1.0-dev`; missing, duplicated, older, newer, or specification-pack versions receive `426 CLIENT_UPGRADE_REQUIRED`.
-- `Idempotency-Key`: one 8–128-character key bound to this session, operation, and typed request.
+- `Idempotency-Key`: one 8–128-character key. Authentication keys bind this session, operation, and typed request; domain keys bind the administrator and dataset epoch, with operation/body/precondition binding and active completed authorization even on replay.
 
 Do not automatically retry/resume paused writes. After a failed/uncertain response, foreground review and an explicit retry must preserve the original key/body/preconditions. A changed operation or request conflicts. Password change/logout can replay only their original acknowledgement with the original cookie and CSRF token, within the original server lifetime bounds; this does not reactivate the revoked session or fetch another token. Success clears the browser cookie and password change requires a fresh login. Reauthentication replay returns the same grant/deadline without extending expiry or resetting single use.
 
