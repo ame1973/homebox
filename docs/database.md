@@ -38,7 +38,9 @@ Migration files are immutable once applied. The runner records their original SH
 
 Migration 0003 adds private authentication metadata. It revokes reference sessions without idle-expiry history, marks existing accounts for password change, and enforces a single administrator. More than one legacy administrator causes the whole upgrade to roll back; resolve the intended account ownership explicitly rather than deleting accounts automatically. The [HTTP authentication workflow](http-authentication.md) is implemented. Migration 0004 binds new session/bootstrap credentials to the dataset epoch and invalidates older unbound credentials; rotating the epoch then invalidates existing credentials as well.
 
-Migration 0007 adds location descriptions/logical-deletion metadata, independent current projections with commit-time revision integrity, and immutable mutation audit. Its backfill covers existing locations and movements, preserving source IDs, revisions, and quantity counts. It does not certify all 22 offline entities or enable sync endpoints. See [Location Rules](locations.md) for the implemented service/HTTP operations and remaining browser/sync limits.
+Migration 0007 adds location descriptions/logical-deletion metadata, independent current projections with commit-time revision integrity, and immutable mutation audit. Its backfill covers existing locations and movements, preserving source IDs, revisions, and quantity counts. See [Location Rules](locations.md) for the implemented service/HTTP/browser workflows and remaining contents/QR/sync limits.
+
+Migration 0008 adds indexed category-parent/tag-membership lookups and current category/tag/item-tag projections, preserving existing counters and canonical composite identities. It seeds item/search counters but does not copy unverified legacy search-cache text into published projections. Neither migration certifies the full 22-entity backfill or enables sync endpoints. [Categories and Tags](taxonomy.md) distinguishes these foundations from the pending authoritative service/HTTP/UI workflows.
 
 Before changing an existing database, the runner:
 

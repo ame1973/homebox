@@ -4,6 +4,8 @@
 
 ### Added
 
+- Add forward-only migration 0008 for indexed category-parent/tag-membership lookups and retained-counter category/tag/item-tag materialization. Seed dependent item/search counters without publishing unverified legacy cache text or fake changes. Verify canonical Unicode link keys, source/quantity preservation, index plans, and full DDL/ledger rollback on unsafe revisions; complete sync and taxonomy transaction/HTTP workflows remain separately gated.
+
 - Add responsive real-server location hierarchy/detail/editor/move/archive/restore/delete screens with complete graph validation, native parent selection, explicit before/after review, original parent/target proofs, dirty-navigation protection, safe protected deep links, and shared phone/tablet/desktop capabilities. Retain uncertain volatile requests for explicit original-key retry and fresh read reconciliation; never install historical acknowledgements as current state or replay writes on reconnect. Add isolated real-server workflows, conflict/committed-malformed-reply tests, light/dark accessibility, long paths and 200% text across five emulated layouts.
 
 - Add a foreground-only location mutation controller with explicit review/confirmation, original-key/proof retention for uncertain outcomes, read-only cache invalidation, interruption handling, session-loss cleanup, and no automatic write replay. Controller tests cover concurrent confirmation, pre-send failures, conflicts, malformed replies, cancellation and late results; screen integration remains separate.

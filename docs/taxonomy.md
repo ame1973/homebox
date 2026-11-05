@@ -36,6 +36,8 @@ Every source mutation, immutable mutation event, frozen idempotent reply, projec
 
 Category changes update category projections and affected item/search projections. Tag renames update their own metadata and affected search text; deleting a tag emits independent item-tag tombstones before rebuilding search. Composite identities are canonical JSON pairs, not delimiter concatenations. No unreviewed OCR, rejected candidate, model job error, or unapproved suggestion may enter a search projection. Confirmed category/tag/title/brand/model values are read from realized source fields, not resurrected from historical candidate labels after a later user override. The AI worker is not required for these ordinary mutations.
 
+Migration 0008 materializes existing category, tag and item-tag metadata under their retained counters, adds parent/reverse-membership indexes, and seeds existing item/search counters. It does not copy unverified legacy search-cache text, emit fabricated mutation changes, rescale stock, or make a complete replica available. Dependent mutations still need authoritative source-derived item/search publication.
+
 A taxonomy backfill is only one part of the required 22-entity frozen-sync implementation. It must not enable an incomplete replica or advertise a full search/worker feature before those services are implemented and tested.
 
 ## Verification
