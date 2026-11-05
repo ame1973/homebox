@@ -17,7 +17,7 @@ import (
 func domainState(t *testing.T, s *Store) map[string]string {
 	t.Helper()
 	state := make(map[string]string)
-	for _, table := range []string{"locations", "location_events", "media_links", "projection_revisions", "current_projections", "sync_changes", "data_revision", "api_idempotency", "mutation_events", "sessions", "sqlite_sequence"} {
+	for _, table := range []string{"locations", "location_events", "categories", "tags", "items", "item_units", "stock_balances", "item_tags", "item_aliases", "item_attributes", "item_barcodes", "purchases", "purchase_lines", "inventory_events", "media", "media_links", "ai_jobs", "ai_review_entries", "ocr_results", "search_documents", "unit_search_documents", "projection_revisions", "current_projections", "sync_changes", "data_revision", "api_idempotency", "mutation_events", "sessions", "admin_accounts", "sync_state", "sqlite_sequence"} {
 		rows, err := s.db.QueryContext(t.Context(), "SELECT * FROM "+table+" ORDER BY 1,2")
 		if err != nil {
 			t.Fatal(err)

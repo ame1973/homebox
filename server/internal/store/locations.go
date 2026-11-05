@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 )
 
@@ -586,32 +585,4 @@ type locationMovement struct {
 	OccurredAt   string  `json:"occurred_at"`
 	FromParentID *string `json:"from_parent_id"`
 	ToParentID   *string `json:"to_parent_id"`
-}
-
-func (m *mutationTx) projectionPayload(key projectionKey) ([]byte, error) {
-	switch key.kind {
-	case "location":
-		location, err := loadLocation(m.ctx, m.tx, key.id)
-		if err != nil {
-			return nil, err
-		}
-		return json.Marshal(location.LocationData)
-	case "location_event":
-		var movement locationMovement
-		var from, to sql.NullString
-		err := m.tx.QueryRowContext(m.ctx, `SELECT id,location_id,occurred_at,from_parent_id,to_parent_id FROM location_events WHERE id=?`, key.id).
-			Scan(&movement.ID, &movement.LocationID, &movement.OccurredAt, &from, &to)
-		if err != nil {
-			return nil, err
-		}
-		if from.Valid {
-			movement.FromParentID = &from.String
-		}
-		if to.Valid {
-			movement.ToParentID = &to.String
-		}
-		return json.Marshal(movement)
-	default:
-		return nil, ErrDomainState
-	}
 }

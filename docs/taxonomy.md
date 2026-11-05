@@ -1,6 +1,6 @@
 # Categories and Tags
 
-**Implementation status:** executable request/response contracts are defined and validated. The authoritative transaction services, HTTP handlers, browser adapters, and settings screens are being implemented separately; the schemas alone do not make those operations available. Core item/stock/media/search workflows remain in progress.
+**Implementation status:** executable contracts, the authoritative Go/SQLite category/tag transaction services, and dependent item/link/approved-search publication are implemented and tested. HTTP handlers, signed taxonomy-list continuations, browser adapters, and settings screens remain pending; the serving router does not expose these taxonomy operations yet. Complete item/stock/media/search/worker workflows and 22-entity sync remain in progress.
 
 ## Identity and names
 
@@ -30,6 +30,14 @@ A category cannot point to itself or a descendant. Reparenting changes a stable 
 
 Deletion never implicitly deletes a category subtree. Remove or reparent children explicitly first. Deleting a category leaf clears category references on assigned items atomically. Deleting a tag removes only that tag's item links. Counters/tombstones retain old identities so a later same-name tag with a different ID does not acquire an earlier tag's meaning.
 
+## Transaction service
+
+`store.NewTaxonomy(auth)` binds the module to the existing private authentication store. It offers authenticated category/tag detail and internal bounded stable-ID pages plus create/partial-edit/delete transaction methods. HTTP still owns Origin/CSRF/version/admission; unsigned `NextID` is internal state, not a public cursor. Category commands preserve omitted versus explicit-null parents through the internal presence wrapper, never a wire wrapper.
+
+The shared mutation runner freezes principal/epoch-scoped replies and immutable events only after every source write, current/outbox projection, and derived FTS write succeeds. Each identity is staged once; final-state search materialization occurs during flush, not when an intermediate source field first changes. Failed statements, late authorization changes, exhausted counters/sequences, or deferred commit failure return no successful DTO/acknowledgement and roll back all dependent rows.
+
+Search materialization reads manual item fields, category ancestry, live tag links, aliases, attributes, barcode identifiers, and permitted purchase notes/merchants. Explicitly reviewed `keyword`/`specification` candidates contribute accepted values or corrected replacements. Pending/rejected entries, missing review decisions, raw OCR/jobs, stale cached text, historical realized-field candidates, and unit-specific identifiers do not become item-level published terms. Confirmed title/brand/model/category/tag values come from their realized source fields, preserving later manual overrides. The worker and query API are not required or implicitly made available by this publisher.
+
 ## Projections and approved search
 
 Every source mutation, immutable mutation event, frozen idempotent reply, projection/counter update, dependent search rebuild, and outbox row commits together. No-op metadata changes keep their projection revisions while still receiving a frozen acknowledgement. A successful replay returns the original result, not a new mutation or necessarily the latest resource. Expired claims are never silently reused.
@@ -48,4 +56,9 @@ npm --prefix web run api:generate
 npm --prefix web run typecheck
 ```
 
-Contract tests exercise separate create/partial-patch shapes, nullable parent presence, code-point/identity/revision bounds, exact offline payload compatibility, positive quoted proofs, Origin/body limits, and bounded live pagination. Strict generated-type fixtures reject missing creation names, missing response parents, internal command wrappers, missing Origin, and null tag names. Service/HTTP/browser acceptance must be recorded separately when executed; physical NAS/phone acceptance is not implied.
+Contract tests exercise separate create/partial-patch shapes, nullable parent presence, code-point/identity/revision bounds, exact offline payload compatibility, positive quoted proofs, Origin/body limits, and bounded live pagination. Strict generated-type fixtures reject missing creation names, missing response parents, internal command wrappers, missing Origin, and null tag names. Store tests replay every mutation's frozen changes onto the old current state and require exact equality, verify deep hierarchies/concurrent retries/stale proofs, inject dependent-write/deferred-commit/late-auth failures, and assert approved-only FTS publication without modifying inventory or AI source evidence. HTTP/browser acceptance remains pending; physical NAS/phone acceptance is not implied.
+
+```sh
+go -C server test -race -count=1 ./internal/store -run '^TestTaxonomy'
+make check-backend
+```
