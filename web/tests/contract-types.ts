@@ -431,6 +431,66 @@ const reassignedPurchaseLine: components['schemas']['PurchaseLineWrite'] = { ...
 const lifecyclePurchaseQuery: PurchaseQuery = { status: 'disposed' }
 // @ts-expect-error The selected Purchase line collection accepts only paging fields.
 const filteredPurchaseLines: PurchaseLineQuery = { currency: 'JPY' }
+declare const purchaseSDK: typeof import('../src/lib/api/purchases')
+declare const purchaseTransport: typeof import('../src/lib/api/client').apiClient
+const reviewedPurchase = { id: 'purchase', revision: 7, ...purchaseHeader, receipt_note: 'Retained' } satisfies components['schemas']['Purchase']
+const purchaseSDKContext = { ...writeContext, purchase: reviewedPurchase }
+const purchaseSDKLineContext = { ...purchaseSDKContext, item: { ...reviewedQuantityItem, revision: 7 } }
+const purchaseSDKCalls = [
+  purchaseSDK.fetchPurchase(reviewedPurchase.id, new AbortController().signal),
+  purchaseSDK.fetchPurchasesPage(filteredPurchases, new AbortController().signal),
+  purchaseSDK.fetchItemPurchasesPage(currentItem.id, { limit: 50 }, new AbortController().signal),
+  purchaseSDK.fetchPurchaseLinesPage(reviewedPurchase.id, { limit: 50 }, new AbortController().signal),
+  purchaseSDK.createPurchase(purchaseHeader, writeContext),
+  purchaseSDK.patchPurchase(reviewedPurchase.id, purchaseReceiptClear, purchaseSDKContext),
+  purchaseSDK.createPurchaseLine(reviewedPurchase.id, unallocatedPurchaseLine, purchaseSDKLineContext),
+  purchaseSDK.createPurchaseLine(reviewedPurchase.id, allocatedPurchaseLine, { ...purchaseSDKContext, item: { ...currentItem, revision: 7 } }),
+]
+const rawNullPurchaseLine = purchaseTransport.POST('/purchases/{id}/lines', { params: { path: { id: reviewedPurchase.id }, header: purchaseProof }, body: unallocatedPurchaseLine })
+const rawNamedPurchaseLine = purchaseTransport.POST('/purchases/{id}/lines', { params: { path: { id: reviewedPurchase.id }, header: purchaseProof }, body: allocatedPurchaseLine })
+// @ts-expect-error A new header has no unrelated aggregate proof.
+const unrelatedSDKPurchaseProof = purchaseSDK.createPurchase(purchaseHeader, { ...writeContext, expectedRevision: 7 })
+// @ts-expect-error Header metadata cannot double count a paid total.
+const totalSDKPurchaseHeader = purchaseSDK.createPurchase({ ...purchaseHeader, paid_minor: 120000 }, writeContext)
+// @ts-expect-error Corrections retain the whole original Purchase, not a loose proof.
+const looseSDKPurchaseProof = purchaseSDK.patchPurchase(reviewedPurchase.id, purchaseReceiptClear, { ...writeContext, expectedRevision: 7 })
+// @ts-expect-error An independently refreshed revision cannot override the reviewed header.
+const overriddenSDKPurchaseProof = purchaseSDK.patchPurchase(reviewedPurchase.id, purchaseReceiptClear, { ...purchaseSDKContext, expectedRevision: 7 })
+// @ts-expect-error A descriptive correction includes at least one actual field.
+const emptySDKPurchasePatch = purchaseSDK.patchPurchase(reviewedPurchase.id, {}, purchaseSDKContext)
+// @ts-expect-error Receipt text clears through empty, never null.
+const nullSDKPurchaseReceipt = purchaseSDK.patchPurchase(reviewedPurchase.id, { receipt_note: null }, purchaseSDKContext)
+// @ts-expect-error A Line also retains the whole original Item interpretation.
+const ownerlessSDKPurchaseLine = purchaseSDK.createPurchaseLine(reviewedPurchase.id, unallocatedPurchaseLine, purchaseSDKContext)
+// @ts-expect-error A Stock row is not an Item interpretation.
+const stockAsSDKPurchaseItem = purchaseSDK.createPurchaseLine(reviewedPurchase.id, unallocatedPurchaseLine, { ...purchaseSDKContext, item: holdingStock })
+// @ts-expect-error The body still requires original Item revision separately from Purchase proof.
+const unprovenSDKPurchaseItem = purchaseSDK.createPurchaseLine(reviewedPurchase.id, { item_id: 'item', item_unit_id: null, quantity_base: 1, paid_minor: 0 }, purchaseSDKLineContext)
+// @ts-expect-error The nullable Unit decision cannot be omitted.
+const implicitSDKPurchaseUnit = purchaseSDK.createPurchaseLine(reviewedPurchase.id, { item_id: 'item', item_revision: 7, quantity_base: 1, paid_minor: 0 }, purchaseSDKLineContext)
+// @ts-expect-error One named Unit has quantity exactly one, not a bulk multiplier.
+const bulkSDKPurchaseUnit = purchaseSDK.createPurchaseLine(reviewedPurchase.id, { ...allocatedPurchaseLine, quantity_base: 2 }, purchaseSDKLineContext)
+// @ts-expect-error Money is the complete numeric minor-unit amount, not display text.
+const textSDKPurchaseMoney = purchaseSDK.createPurchaseLine(reviewedPurchase.id, { ...unallocatedPurchaseLine, paid_minor: '120000' }, purchaseSDKLineContext)
+// @ts-expect-error A Line cannot override header currency.
+const currencySDKPurchaseLine = purchaseSDK.createPurchaseLine(reviewedPurchase.id, { ...unallocatedPurchaseLine, currency: 'USD' }, purchaseSDKLineContext)
+// @ts-expect-error Purchase collections have no catalog text query.
+const searchedSDKPurchases = purchaseSDK.fetchPurchasesPage({ q: 'uncontracted' }, new AbortController().signal)
+// @ts-expect-error Owned headers do not silently accept global filters.
+const filteredSDKItemPurchases = purchaseSDK.fetchItemPurchasesPage(currentItem.id, { currency: 'JPY' }, new AbortController().signal)
+// @ts-expect-error Owned Lines also accept only their original collection paging scope.
+const filteredSDKPurchaseLines = purchaseSDK.fetchPurchaseLinesPage(reviewedPurchase.id, { status: 'active' }, new AbortController().signal)
+// @ts-expect-error The shared transport must still require explicit nullable presence.
+const implicitRawPurchaseUnit = purchaseTransport.POST('/purchases/{id}/lines', { params: { path: { id: reviewedPurchase.id }, header: purchaseProof }, body: { item_id: 'item', item_revision: 7, quantity_base: 1, paid_minor: 0 } })
+// @ts-expect-error Null preservation must not widen the named-Unit oneOf constraint.
+const bulkRawPurchaseUnit = purchaseTransport.POST('/purchases/{id}/lines', { params: { path: { id: reviewedPurchase.id }, header: purchaseProof }, body: { ...allocatedPurchaseLine, quantity_base: 2 } })
+// @ts-expect-error A type-only write marker is never an actual wire value.
+const markedRawPurchaseUnit = purchaseTransport.POST('/purchases/{id}/lines', { params: { path: { id: reviewedPurchase.id }, header: purchaseProof }, body: { ...unallocatedPurchaseLine, item_unit_id: { $write: null } } })
+void [purchaseSDKCalls, rawNullPurchaseLine, rawNamedPurchaseLine, unrelatedSDKPurchaseProof, totalSDKPurchaseHeader, looseSDKPurchaseProof,
+  overriddenSDKPurchaseProof, emptySDKPurchasePatch, nullSDKPurchaseReceipt, ownerlessSDKPurchaseLine, stockAsSDKPurchaseItem, unprovenSDKPurchaseItem,
+  implicitSDKPurchaseUnit, bulkSDKPurchaseUnit, textSDKPurchaseMoney, currencySDKPurchaseLine, searchedSDKPurchases, filteredSDKItemPurchases,
+  filteredSDKPurchaseLines, implicitRawPurchaseUnit, bulkRawPurchaseUnit, markedRawPurchaseUnit]
+
 void [purchaseHeaders, purchaseProof, purchaseHeader, purchaseReceiptClear, unallocatedPurchaseLine, allocatedPurchaseLine, completePurchasePage, completePurchaseLinePage,
   filteredPurchases, originlessPurchase, unprovenPurchase, unprovenPurchaseLine, unrelatedPurchaseProof, headerPurchaseAmount, implicitPurchaseAllocation,
   bulkUnitPurchaseLine, textPurchaseAmount, nullPurchaseReceipt, incompletePurchasePage, incompletePurchaseLinePage, reassignedPurchaseLine, lifecyclePurchaseQuery, filteredPurchaseLines]

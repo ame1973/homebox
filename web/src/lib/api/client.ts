@@ -1,9 +1,17 @@
 import createClient from 'openapi-fetch'
+import type { $Write } from 'openapi-typescript-helpers'
 import { z } from 'zod'
 import { version as clientVersion } from '../../../package.json'
 import type { components, paths } from './schema'
 
-export const apiClient = createClient<paths>({
+// helpers 0.1.0 misclassifies a literal-null property as readOnly because
+// NonNullable<null> is never. Its public write marker preserves null in request
+// types only; Writable unwraps it before accepting the unchanged wire command.
+type PreserveNull<T> = T extends null ? $Write<null> : T extends object ? { [K in keyof T]: PreserveNull<T[K]> } : T
+type RequestNulls<T> = { [K in keyof T]: K extends 'requestBody' ? PreserveNull<T[K]> : T[K] }
+type ClientPaths = { [P in keyof paths]: { [M in keyof paths[P]]: RequestNulls<paths[P][M]> } }
+
+export const apiClient = createClient<ClientPaths>({
   baseUrl: new URL('/api/v1', window.location.origin).href,
   credentials: 'same-origin', cache: 'no-store', redirect: 'error',
 })

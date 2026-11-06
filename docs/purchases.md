@@ -1,6 +1,6 @@
 # Purchases and Financial Allocations
 
-**Availability:** all seven Go/HTTP purchase operations below are implemented and tested: authorized header detail/creation/audited descriptive correction, immutable unbacked allocation, complete global filtered headers, Item-associated headers and Purchase-owned independent Lines. The routes use the existing completed-session/Origin/CSRF/client-version/idempotency/admission boundary, strict input readers and real SQL authorization. Retained loaders, migrations 0013/0014, pinned finite ISO currency policy, signed live continuations and atomic publication remain authoritative. All seven operations have verified-TLS/cookie-jar coverage; compiled-server/socket replies are separately validated against executable contracts. Stateless purchase browser adapters and reviewed operating screens are not implemented yet. Existing asset profiles deliberately require the unfinished asset financial producer before another allocation; see the integration boundary below. Existing [catalog](catalog.md) and [physical Unit/Stock](holdings.md) workflows remain functional without purchase entry or an AI worker.
+**Availability:** all seven Go/HTTP purchase operations below are implemented and tested: authorized header detail/creation/audited descriptive correction, immutable unbacked allocation, complete global filtered headers, Item-associated headers and Purchase-owned independent Lines. The routes use the existing completed-session/Origin/CSRF/client-version/idempotency/admission boundary, strict input readers and real SQL authorization. Retained loaders, migrations 0013/0014, pinned finite ISO currency policy, signed live continuations and atomic publication remain authoritative. All seven operations have verified-TLS/cookie-jar coverage; compiled-server/socket replies are separately validated against executable contracts. All seven stateless purchase browser adapters are implemented with strict runtime/type validation, original whole Purchase/Item contexts, independent ETags and no automatic replay. Reviewed purchase operating screens are not implemented yet. Existing asset profiles deliberately require the unfinished asset financial producer before another allocation; see the integration boundary below. Existing [catalog](catalog.md) and [physical Unit/Stock](holdings.md) workflows remain functional without purchase entry or an AI worker.
 
 ## Header, allocation and physical receipt
 
@@ -30,7 +30,7 @@ Protected writes require exact same-origin `Origin`, CSRF, supported application
 
 ### Calling the implemented APIs
 
-Complete setup, mandatory password change and a fresh login first. Keep the cookie private and obtain a CSRF token for the current session. A same-origin API caller supplies `Content-Type: application/json`, the exact configured `Origin`, `X-CSRF-Token`, a supported `X-HomeBox-Client-Version` and a caller-owned `Idempotency-Key` on each write. Do not put credentials or financial commands in URLs, logs or persistent replay queues. There is no purchase operating screen yet.
+Complete setup, mandatory password change and a fresh login first. Keep the cookie private and obtain a CSRF token for the current session. A same-origin API caller supplies `Content-Type: application/json`, the exact configured `Origin`, `X-CSRF-Token`, a supported `X-HomeBox-Client-Version` and a caller-owned `Idempotency-Key` on each write. Do not put credentials or financial commands in URLs, logs or persistent replay queues. The stateless browser SDK is available below; there is no purchase operating screen yet.
 
 For example, `POST /purchases` accepts this complete header without an `If-Match`, amount or implicit stock receipt:
 
@@ -127,6 +127,40 @@ The global purchase collection retains all documented filters: `from`, `to`, `cu
 - A named Unit allocation uses that actual nondisposed Unit's current location, not a sibling Unit elsewhere. An unallocated line uses its Item's current positive quantity balances or nondisposed Units. A financial allocation alone does not prove current placement; retained zero balances/disposed Units do not establish it. This is current placement filtering, not historical purchase-location reconstruction.
 - Unallocated headers remain visible when no Item-dependent criterion is requested. An existing Item with no allocations has an empty associated page. Missing owners are not invented. Item-associated and Purchase-owned line routes accept only their owner path and paging fields, not silently ignored global filters.
 
+## Stateless browser SDK
+
+`web/src/lib/api/purchases.ts` exposes the same seven operations; it is a library boundary, not a purchase operating screen or persistent draft queue:
+
+| Adapter | Caller-owned context |
+| --- | --- |
+| `fetchPurchase(id, signal)` | Exact resource identity and cancellation |
+| `fetchPurchasesPage(query, signal)` | Complete global filter/cursor scope |
+| `fetchItemPurchasesPage(itemID, query, signal)` | Exact Item owner and paging only |
+| `fetchPurchaseLinesPage(purchaseID, query, signal)` | Exact Purchase owner and paging only |
+| `createPurchase(body, context)` | CSRF, original key and signal; no unrelated revision |
+| `patchPurchase(id, patch, context)` | The same write context plus the whole original `purchase` |
+| `createPurchaseLine(id, body, context)` | The same write context plus whole original `purchase` and `item` |
+
+Read and explicitly review the relevant resources before confirmation. Keep those snapshots and the original key/body together; do not substitute independently refreshed loose revisions. For example, a confirmed quantity allocation can call:
+
+```ts
+await createPurchaseLine(reviewedPurchase.id, {
+  item_id: reviewedItem.id,
+  item_revision: reviewedItem.revision,
+  item_unit_id: null,
+  quantity_base: 1500,
+  paid_minor: 120000,
+}, { ...originalWriteContext, purchase: reviewedPurchase, item: reviewedItem })
+```
+
+The write context owns the current in-memory CSRF token, original idempotency key and AbortSignal. The adapter verifies path/body/snapshot identity, Item revision/tracking/measurement representation, explicit nullable/single-Unit intent, exact safe counts/amounts, partial text and strict instants before sending one request. It never inserts outgoing note defaults, converts display units/currency, fetches new proofs, automatically paginates, stores commands/tokens, retries or submits on reconnect. Reads have eight-second deadlines and writes thirty seconds. Abort/timeout or an invalid reply after sending is uncertain, not proof of rollback.
+
+Responses require complete exact resource fields and their own strong ETags. Creation/allocation require revision one; header correction permits only the original or next revision and verifies every expected field, preserving omitted source. New/actually changed instants use canonical UTC nanoseconds; an equal instant retains exact original spelling. Date conversion touches whole seconds only, retaining all nine fractional digits separately, so even a one-nanosecond alteration within the same JavaScript millisecond is rejected. Complete pages require distinct identities, bounded rows and required null continuations; owned Lines must retain their actual Purchase. Lists reject ETags, incomplete/repeated continuations and uncontracted filters. Query validation reuses catalog civil/filter policy without `q` and the installed client's exact percent-encoding for the 16 KiB budget, rejecting malformed Unicode before encoding.
+
+Retained responses still accept bounded historical uppercase currency and Unit-associated bulk allocations; new-input discrimination never repairs history. Registry, actual Unit ownership, asset basis/currency, financial references and same-Line/current-placement/home-timezone selection remain server-authoritative. A frozen original reply is only reconciliation evidence, never permission to overwrite current query state.
+
+The shared typed client preserves literal-null request fields using the installed helper's public type-only write marker: helper 0.1.0 otherwise treats `NonNullable<null>` as `never` and wrongly removes a null-only `oneOf` branch. This compatibility mapping affects request typing only, not response types, generated contracts or wire JSON. Strict fixtures accept real null, still require its presence and original proofs, reject named-Unit bulk counts, and reject actual marker objects. No dependency, generated-type edit, cast or runtime wrapper bypasses validation.
+
 ## Verification and remaining work
 
 `tests/test_purchases_contracts.py` exercises bounded complete resources, exact/null/omitted input semantics, single-Unit versus bulk allocation, safe amount/count extrema, strict instants, original Purchase and Item proofs versus independent ETag, complete pages, preserved filters and unchanged offline payload envelopes. `web/tests/contract-types.ts` exercises generated required fields, the separately required Item proof, explicit nullable allocation/one-Unit discrimination, write headers and filter scopes with strict library checking. Generate declarations only through `npm --prefix web run api:generate` and verify drift through `make check-web`.
@@ -146,4 +180,12 @@ make check
 make test-go-pure
 ```
 
-These automated checks do not establish purchase runtime SDK/UI behavior, asset acquisition/adjustment math, receipts/media, the complete offline replica, physical phones or production NAS acceptance. Those remain separate implementation/testing gates, not dropped product scope. Existing offline `purchase`/`purchase_line` payloads and all original operation identities are preserved; strict HTTP boundaries and real Go commands/collections do not enable the complete 22-entity sync protocol.
+Private actual-SDK/Go browser workflows exercise every adapter, complete signed scopes, genuine first-allocation Item/Purchase changes, whole-amount allocation, no implicit physical mutation and original replies after a fresh login. Adverse-reply tests let real commands commit before corrupting owner/amount/independent revision/nanosecond/currency or losing a response; only an explicit identical original command reconciles, without another allocation/header or historical-state installation. Runtime tests additionally cover exact Unicode/null/partial/safe-integer/date/query extrema, all seven deadlines, cancellation, no storage/reconnect submission and safe conflicts. Strict compile fixtures preserve both generated request constraints and whole-context SDK requirements.
+
+```sh
+npm --prefix web test -- --coverage.enabled=false src/lib/api/purchases.test.ts
+npm --prefix web run test:e2e -- tests/e2e/purchases-api.spec.ts
+make check-web
+```
+
+These automated checks do not establish reviewed purchase UI behavior, asset acquisition/adjustment math, receipts/media, the complete offline replica, physical phones or production NAS acceptance. Those remain separate implementation/testing gates, not dropped product scope. Existing offline `purchase`/`purchase_line` payloads and all original operation identities are preserved; strict HTTP boundaries and real Go commands/collections do not enable the complete 22-entity sync protocol.
