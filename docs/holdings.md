@@ -1,6 +1,6 @@
 # Individual Units and Quantity Stock
 
-**Implementation status:** all twelve Unit/quantity-stock HTTP operations are implemented through the private Go `Inventory` service, with strict JSON/query admission, original proofs, independent resource ETags, completed-session/Origin/CSRF/version/key protection and authoritative transactional revalidation. Unit/Stock source/counter loaders, current/frozen publication and migrations 0010–0012 are tested. Asset-backed lifecycle producers, public history reads, typed runtime adapters and responsive operating screens are still being built. Existing catalog/owned-metadata screens do not receive stock or create physical units. HTTP/service evidence is not complete-sync, physical-device or browser operating-screen acceptance.
+**Implementation status:** all twelve Unit/quantity-stock HTTP operations are implemented through the private Go `Inventory` service, with strict JSON/query admission, original proofs, independent resource ETags, completed-session/Origin/CSRF/version/key protection and authoritative transactional revalidation. Unit/Stock source/counter loaders, current/frozen publication and migrations 0010–0012 are tested. All twelve typed stateless browser adapters are implemented with strict runtime/response checks and original proof/measurement contexts. Asset-backed lifecycle producers, public history reads and responsive operating screens are still being built. Existing catalog/owned-metadata screens do not receive stock or create physical units. HTTP/service evidence is not complete-sync, physical-device or browser operating-screen acceptance.
 
 ## Distinct physical identities
 
@@ -14,7 +14,7 @@ Item/Unit/location IDs contain 1–128 Unicode code points. Unit and Stock revis
 
 ## Unit commands
 
-Paths are relative to `/api/v1`. All seven Unit operations below are implemented HTTP routes delegating to `Inventory.GetUnit/PageUnits/CreateUnit/PatchUnit/MoveUnit/SetUnitStatus/DeleteUnit`. SQL and physical policy remain in the private transaction service, not handlers or a second database. Browser operating screens/runtime adapters remain separate.
+Paths are relative to `/api/v1`. All seven Unit operations below are implemented HTTP routes delegating to `Inventory.GetUnit/PageUnits/CreateUnit/PatchUnit/MoveUnit/SetUnitStatus/DeleteUnit`. SQL and physical policy remain in the private transaction service, not handlers or a second database. The stateless typed adapters below use those routes; foreground operating screens remain separate.
 
 | Operation | Original proof | Result |
 | --- | --- | --- |
@@ -80,6 +80,40 @@ An optional note contains at most 10,000 exact code points. Adjustment requires 
 Transfer's source and target must differ. The authoritative transaction must check quantity tracking, source sufficiency, an active destination/path and safe target addition before changing either balance. Both legs, the original Item scope, immutable history, independent projections and frozen target response commit or roll back together. Depleting a balance to zero retains that row. The target-only response does not describe a current source balance, authorize mixed-unit sums or permit a partial transfer.
 
 For example, an Item proof of `"7"` can validly produce a target Stock with revision 2: these are different counters. Never validate a Stock result by assuming it is the Item proof plus one, reinterpret its ETag as a newer Item proof, or install a frozen historical response as current source. Re-read authoritative state after confirmation.
+
+## Stateless browser adapters
+
+`web/src/lib/api/holdings.ts` exposes the actual same-origin browser SDK, not a separate database, background queue or production test endpoint:
+
+- Reads: `fetchUnit`, `fetchItemUnitsPage`, `fetchStockPage`.
+- Independent Unit commands: `createUnit`, `patchUnit`, `moveUnit`, `setUnitStatus`, `deleteUnit`.
+- Quantity commands: `receiveStock`, `consumeStock`, `transferStock`, `adjustStock`.
+
+Every call requires the caller's `AbortSignal`. Writes additionally take an in-memory CSRF token and original idempotency key. Unit creation accepts an original Item `expectedRevision`; existing Unit writes require the independent original Unit `expectedRevision` and retained `itemID`. That owner is validated against the response, not added as an invented concurrency header. Empty Unit patches, omitted creation-location decisions and ambiguous disposal are rejected at both the TypeScript and runtime boundaries. Optional defaults are not inserted into outgoing requests.
+
+Stock writes take `StockWriteContext` with one complete reviewed `item: Item`, not a loose `expectedRevision` or Stock row. The adapter snapshots that Item, verifies quantity tracking/body ownership, and uses its revision for `If-Match`. It validates the affected response pair and full `unit_code`/`base_unit`/`scale_factor` interpretation against the same snapshot. Catalog and Stock share measurement validation; no unit-name conversion or independently refreshed proof is installed. The returned Stock counter can be lower than, equal to or higher than the submitted Item proof. Receive/transfer responses include at least the submitted quantity, consumption remains within safe subtraction bounds, and adjustment returns exactly its reviewed absolute count.
+
+For a browser caller that already owns the reviewed Item, chosen location, CSRF token, original key and signal:
+
+```ts
+import { receiveStock } from './lib/api/holdings'
+
+const body = {
+  item_id: reviewedItem.id,
+  target_location_id: reviewedLocation.id,
+  quantity_base: 1000,
+}
+const original = { item: reviewedItem, csrfToken, idempotencyKey: originalKey, signal }
+
+// Send only after foreground review and explicit confirmation.
+const receipt = await receiveStock(body, original)
+```
+
+For `kg/g/1000`, that exact request receives 1,000 grams; it never sends a fractional display quantity. A timeout, abort or malformed reply after sending is uncertain, not proof of rollback. Keep the same volatile `body`/`original` for an explicitly chosen reconciliation attempt; do not fetch another Item merely to replace that command's proof. A retry can return an old frozen receipt after current holdings changed. Use fresh authoritative reads after confirmation, never install `receipt` as a current Item or balance. Logout/unmount/draft lifecycle remains the foreground caller's responsibility; the SDK itself persists nothing.
+
+Resource responses require a matching strong ETag and exact identity/owner/requested fields. New Units require revision one; existing Unit replies may be unchanged no-ops or the independent next revision. Deletion requires the independent next acknowledgement and no ETag. Complete list responses require distinct identities, a nullable continuation, the requested/default page bound and no ETag; a continuation requires a full page and cannot repeat the submitted cursor. Unit cursors remain 2 KiB, Stock 4 KiB. Each adapter reads exactly one live page; collection completion and consistency review belong to its caller, not hidden pagination.
+
+Reads have eight-second deadlines and writes thirty seconds. Caller cancellation discards late success; errors retain only shared allowlisted codes/status/retry metadata/request IDs, never arbitrary server messages, details or causes. No adapter reads credentials from storage, refreshes CSRF/proofs, retries, rebases, queues a mutation or submits on `online`.
 
 ## Movement direction, placement and no-op receipts
 
@@ -157,7 +191,7 @@ Migration 0012 rebuilds only inventory-event storage to remove its live Unit FK 
 
 Shared Unit search publication uses the same retained asset-code/serial/notes bounds as the Unit source (10,000 code points), not an obsolete 128-character asset-code restriction. Unit and catalog invalidators rebuild from final approved source, preserve exact valid wide/control text and withhold every partial result on invalid UTF-8/bounds or materialization failure. They never copy a poisoned legacy cache or broaden a Unit's private identifiers into its owner/siblings.
 
-Future asset/batch producers must still validate their own original proof, apply physical/accounting rules, append actual immutable history and stage every required dependency inside the same transaction. The payload builder does not infer or authorize those workflows or generic deletion of zero balances. Public history reads, typed runtime adapters/review UI and complete sync remain separate implementation gates.
+Future asset/batch producers must still validate their own original proof, apply physical/accounting rules, append actual immutable history and stage every required dependency inside the same transaction. The payload builder does not infer or authorize those workflows or generic deletion of zero balances. Public history reads, foreground review UI and complete sync remain separate implementation gates.
 
 ## Verification and remaining implementation
 
@@ -173,6 +207,8 @@ go -C server test ./internal/httpapi -run '^$' -fuzz FuzzHoldingsJSON -fuzztime=
 npm --prefix web run api:generate
 npm --prefix web run api:check
 npm --prefix web run typecheck
+npm --prefix web test -- --coverage.enabled=false src/lib/api/holdings.test.ts
+npm --prefix web run test:e2e -- tests/e2e/holdings-api.spec.ts --project=phone
 make check-web
 ```
 
@@ -182,10 +218,12 @@ Real SQLite persistence tests separately cover complete retained resources, sour
 
 The actual `Inventory` service tests separately drive all four public Go methods against real SQLite: original Item proofs versus independent Stock replies, exact signed direction/differences, maximum-safe arithmetic, canonical Unicode pairs, complete active/deep/archived paths, retained zero/new-zero/recreated-pair semantics, complete source/current/frozen delta replay and no-op context. They cover all original request fields, changed-proof/operation conflicts, fresh-login/frozen replies after later source changes/removal, expired claims, cancellation, epoch separation without raw-key collisions, transactional session gates, concurrent identical/competing commands and opposite-transfer conservation. Statement/authority/exhaustion/final-event-corruption/late-auth/deferred-COMMIT failures roll back both legs, all history/projections and the original receipt. Migration tests preserve legacy bytes/authority/publication and roll back all pending holding/event DDL/ledger rows; immutable event/audit triggers and nonunique deferred associations are exercised directly. These are real Go service tests, not HTTP or screen evidence.
 
-The read-service suite exercises complete multi-page retained Unit/Stock collections, detail/list equality, all lifecycle/null/zero states, source-versus-cache behavior, real quantity writes and mixed measurement rows, actual location/category/status/purchase/date filtering before lookahead, maximum Unicode/control pair continuations, every filter/timezone/size binding and owner/collection isolation. It checks live source removal, same-principal fresh login, expired/malformed/signed-invalid positions, all read authorization gates, SQL/timezone/signing/session/late-expiry/deferred-COMMIT failures and no read-side publication. Root contract and strict generated-type fixtures separately pin the Stock-only cursor budget and Item metadata status without claiming a runtime browser adapter.
+The read-service suite exercises complete multi-page retained Unit/Stock collections, detail/list equality, all lifecycle/null/zero states, source-versus-cache behavior, real quantity writes and mixed measurement rows, actual location/category/status/purchase/date filtering before lookahead, maximum Unicode/control pair continuations, every filter/timezone/size binding and owner/collection isolation. It checks live source removal, same-principal fresh login, expired/malformed/signed-invalid positions, all read authorization gates, SQL/timezone/signing/session/late-expiry/deferred-COMMIT failures and no read-side publication. Root contract and strict generated-type fixtures separately pin the Stock-only cursor budget and Item metadata status; they do not by themselves certify the runtime browser adapter.
 
-The Unit mutation suite drives all five public Go methods, independent original proofs, UUID/code assignment, null/empty/omitted metadata, all initial/operational/retired/disposed rules, explicit physical kinds and real asset/purchase guards. It covers complete source/current/frozen replay, Unit-only approved search, shared-media preservation, immutable history after source deletion, all original fields/operations/proofs, fresh login/epoch/expiry/cancellation, identical/competing concurrent requests and SQL/cascade/authority/counter/FTS/late-auth/deferred-COMMIT failures. Upgrade tests preserve every event value/current/frozen byte, old constraints and rollback the whole rebuild on failure; they reject invalid pre-upgrade live references instead of laundering them. Wide retained Unit search is checked through both Unit and catalog producers, including byte-preserving failure on invalid UTF-8/native-NUL bounds. These are Go/SQLite tests, not a claim of completed holding HTTP/SDK/UI or financial asset lifecycle.
+The Unit mutation suite drives all five public Go methods, independent original proofs, UUID/code assignment, null/empty/omitted metadata, all initial/operational/retired/disposed rules, explicit physical kinds and real asset/purchase guards. It covers complete source/current/frozen replay, Unit-only approved search, shared-media preservation, immutable history after source deletion, all original fields/operations/proofs, fresh login/epoch/expiry/cancellation, identical/competing concurrent requests and SQL/cascade/authority/counter/FTS/late-auth/deferred-COMMIT failures. Upgrade tests preserve every event value/current/frozen byte, old constraints and rollback the whole rebuild on failure; they reject invalid pre-upgrade live references instead of laundering them. Wide retained Unit search is checked through both Unit and catalog producers, including byte-preserving failure on invalid UTF-8/native-NUL bounds. These are Go/SQLite tests, not browser operating-screen or financial asset-lifecycle acceptance.
 
 HTTP tests drive all twelve operations through real services and verified TLS/cookie jars, exact body/query/proof/header/path/method budgets, default-50 complete collections, independent Item-versus-row ETags, retained zeros, runtime tracking/arithmetic guards and original replies after changed/deleted source/fresh login. Every writer is revoked after middleware/body reading to verify SQL authorization; changed Item/Unit proofs are not rebased. Strict actual JSON readers have bounded fuzz coverage; browser-safe errors discard private details. The compiled CLI/server socket smoke additionally provisions a genuine account/password rotation, validates actual replies against executable root schemas, reconciles original keys, shuts down cleanly and checks private DB integrity. None of this claims a shipped inventory review screen or physical-device acceptance.
 
-Still pending are public history reads, asset-backed lifecycle producers, real runtime adapters, foreground review screens, QR/camera, physical holdings acceptance and complete sync. These are not marked passed by the Go service/persistence/schema/type checks above. Existing metadata/auth/browser coverage remains separate evidence. Physical NAS/phone/operator TLS/VPN/off-host recovery gates remain blocked until actually performed.
+SDK tests separately drive all twelve adapters with exact one-request transport, original proofs, in-flight snapshot isolation, strict inputs/resources/ETags/owner/measurement/quantity bounds, live-page completeness/uniqueness/cursor rules, no storage/reconnect replay, safe errors and explicit retry. Every adapter has its actual eight/thirty-second deadline checked; caller cancellation rejects late replies and cleans up timers. Strict compile fixtures require explicit nullable creation, nonempty Unit edits, original owner/proof contexts and one complete reviewed Item for stock, excluding loose proofs and caller financial/conversion fields. Private browser bundles import the real SDK under genuine Go setup/password rotation/session protection, exercise every operation, signed pages, stale proofs, retained zeros/no-ops and original frozen receipts after later changes/deletion. Malformed-owner/measurement and lost-reply cases first let the real mutation commit, then verify only an explicit identical-key/body/proof retry reconciles it without duplicating or rebasing effects. No SDK test asset enters the production build; credential artifacts remain disabled.
+
+Still pending are public history reads, asset-backed lifecycle producers, foreground review screens, QR/camera, physical holdings acceptance and complete sync. These are not marked passed by the Go/HTTP/SDK tests above. Existing metadata/auth/screen-browser coverage remains separate evidence. Physical NAS/phone/operator TLS/VPN/off-host recovery gates remain blocked until actually performed.

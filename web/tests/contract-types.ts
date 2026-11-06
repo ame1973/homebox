@@ -322,6 +322,62 @@ const textStockReadSize: StockReadQuery = { limit: '50' }
 const nullStockReadCategory: StockReadQuery = { category_id: null }
 void [unfilteredStockRead, filteredStockRead, lifecycleStockRead, searchedStockRead, textStockReadSize, nullStockReadCategory]
 
+declare const holdingSDK: typeof import('../src/lib/api/holdings')
+const independentUnitContext = { ...writeContext, itemID: currentItem.id, expectedRevision: holdingUnit.revision }
+const reviewedQuantityItem = { ...currentItem, tracking_mode: 'quantity' as const, unit_code: 'kg', base_unit: 'g', scale_factor: 1000 }
+const reviewedStockContext = { ...writeContext, item: reviewedQuantityItem }
+const holdingSDKCalls = [
+  holdingSDK.fetchUnit(holdingUnit.id, new AbortController().signal),
+  holdingSDK.fetchItemUnitsPage(currentItem.id, { limit: 50 }, new AbortController().signal),
+  holdingSDK.fetchStockPage(filteredStockRead, new AbortController().signal),
+  holdingSDK.createUnit(currentItem.id, unitWithUnknownLocation, owningItemProof),
+  holdingSDK.patchUnit(holdingUnit.id, unitSerialClear, independentUnitContext),
+  holdingSDK.patchUnit(holdingUnit.id, unitNotesClear, independentUnitContext),
+  holdingSDK.moveUnit(holdingUnit.id, unitMove, independentUnitContext),
+  holdingSDK.setUnitStatus(holdingUnit.id, unitStatus, independentUnitContext),
+  holdingSDK.setUnitStatus(holdingUnit.id, physicalUnitDisposal, independentUnitContext),
+  holdingSDK.deleteUnit(holdingUnit.id, independentUnitContext),
+  holdingSDK.receiveStock(receiveStock, reviewedStockContext),
+  holdingSDK.consumeStock(consumeStock, reviewedStockContext),
+  holdingSDK.transferStock(transferStock, reviewedStockContext),
+  holdingSDK.adjustStock(adjustStockToZero, reviewedStockContext),
+]
+// @ts-expect-error Unit creation requires an explicit nullable location decision.
+const implicitSDKLocation = holdingSDK.createUnit(currentItem.id, {}, owningItemProof)
+// @ts-expect-error Unit creation requires the original Item proof.
+const unprovenSDKUnit = holdingSDK.createUnit(currentItem.id, unitWithUnknownLocation, writeContext)
+// @ts-expect-error Metadata editing requires at least one explicit field.
+const emptySDKUnitPatch = holdingSDK.patchUnit(holdingUnit.id, {}, independentUnitContext)
+// @ts-expect-error Independent Unit edits retain their original owner identity.
+const ownerlessSDKUnitPatch = holdingSDK.patchUnit(holdingUnit.id, unitSerialClear, owningItemProof)
+// @ts-expect-error Independent Unit deletion also retains the original owner.
+const ownerlessSDKUnitDelete = holdingSDK.deleteUnit(holdingUnit.id, owningItemProof)
+// @ts-expect-error Metadata editing cannot change physical location.
+const implicitSDKUnitMove = holdingSDK.patchUnit(holdingUnit.id, { location_id: 'target' }, independentUnitContext)
+// @ts-expect-error Physical disposal has an explicit discriminated action.
+const ambiguousSDKDisposal = holdingSDK.setUnitStatus(holdingUnit.id, { status: 'disposed' }, independentUnitContext)
+// @ts-expect-error Financial lifecycle input cannot bypass the asset command.
+const financialSDKDisposal = holdingSDK.setUnitStatus(holdingUnit.id, { status: 'disposed', disposal_kind: 'sold', realized_proceeds_minor: 1 }, independentUnitContext)
+// @ts-expect-error Stock proofs and measurement come from one whole reviewed Item, not a loose row revision.
+const looseSDKStockProof = holdingSDK.receiveStock(receiveStock, owningItemProof)
+// @ts-expect-error A Stock row cannot stand in for the reviewed authoritative Item.
+const stockAsSDKItem = holdingSDK.receiveStock(receiveStock, { ...writeContext, item: holdingStock })
+// @ts-expect-error An independently supplied proof cannot override the reviewed Item revision.
+const overriddenSDKStockProof = holdingSDK.receiveStock(receiveStock, { ...reviewedStockContext, expectedRevision: 2 })
+// @ts-expect-error Stock requests cannot silently install measurement conversion fields.
+const convertedSDKStock = holdingSDK.receiveStock({ ...receiveStock, scale_factor: 1000 }, reviewedStockContext)
+// @ts-expect-error Transfers require the actual source as well as destination.
+const incompleteSDKTransfer = holdingSDK.transferStock(receiveStock, reviewedStockContext)
+// @ts-expect-error An absolute physical adjustment always needs an explicit reason.
+const reasonlessSDKAdjust = holdingSDK.adjustStock({ ...receiveStock, quantity_base: 0 }, reviewedStockContext)
+// @ts-expect-error Unit pages accept only their collection paging fields.
+const filteredSDKUnits = holdingSDK.fetchItemUnitsPage(currentItem.id, { status: 'stored' }, new AbortController().signal)
+// @ts-expect-error Stock reads do not invent a text-search query.
+const searchedSDKStock = holdingSDK.fetchStockPage({ q: 'uncontracted' }, new AbortController().signal)
+void [holdingSDKCalls, implicitSDKLocation, unprovenSDKUnit, emptySDKUnitPatch, ownerlessSDKUnitPatch, ownerlessSDKUnitDelete, implicitSDKUnitMove,
+  ambiguousSDKDisposal, financialSDKDisposal, looseSDKStockProof, stockAsSDKItem, overriddenSDKStockProof, convertedSDKStock, incompleteSDKTransfer,
+  reasonlessSDKAdjust, filteredSDKUnits, searchedSDKStock]
+
 void [ownedSDKCalls, unprovenOwnedBarcode, unprovenOwnedAlias, unprovenOwnedAttribute, ownerlessBarcodePatch, ownerlessAliasDelete, emptyOwnedAttributePatch,
   missingOwnedAttributeValue, normalizedOwnedInput, reassignedOwnedInput, unprovenTagSet, nullTagSet, filteredOwnedRead]
 

@@ -13,11 +13,15 @@ export type ItemCreateInput = Omit<components['schemas']['ItemCreate'], 'unit_co
   Readonly<{ unit_code: string; base_unit: string; scale_factor: number }>
 )
 
+export const itemMeasurementFields = {
+  unit_code: text(1, 32), base_unit: text(1, 32).regex(/^[A-Za-z][A-Za-z0-9_/-]{0,31}(?![\s\S])/),
+  scale_factor: revisionSchema,
+}
+
 const fields = {
   name: text(1, 300), brand: text(0, 300).nullable(), model: text(0, 300).nullable(), category_id: idSchema.nullable(),
   description: text(0, 10000), notes: text(0, 10000), tracking_mode: z.enum(['individual', 'quantity']),
-  unit_code: text(1, 32), base_unit: text(1, 32).regex(/^[A-Za-z][A-Za-z0-9_/-]{0,31}(?![\s\S])/),
-  scale_factor: revisionSchema, status: z.enum(['active', 'archived']),
+  ...itemMeasurementFields, status: z.enum(['active', 'archived']),
 }
 export const itemSchema: z.ZodType<Item> = z.strictObject({ id: idSchema, revision: revisionSchema, ...fields })
 const optionalFields = z.strictObject(fields).partial()
@@ -32,7 +36,7 @@ export const itemPatchSchema: z.ZodType<components['schemas']['ItemWrite']> = op
 export const itemArchiveSchema: z.ZodType<components['schemas']['ItemArchiveInput']> = z.strictObject({ reason: fields.notes.optional() })
 const pageSchema: z.ZodType<ItemsPage> = z.strictObject({ data: z.array(itemSchema).max(100), next_cursor: text(1, 2048).nullable() })
   .refine((page) => new Set(page.data.map((item) => item.id)).size === page.data.length)
-const civilDateSchema = z.iso.date().refine((value) => !value.startsWith('0000-'))
+export const civilDateSchema = z.iso.date().refine((value) => !value.startsWith('0000-'))
 export const itemPageQuerySchema: z.ZodType<ItemPageQuery> = z.strictObject({
   ...pageQuerySchema.shape, from: civilDateSchema.optional(), to: civilDateSchema.optional(),
   currency: z.string().regex(/^[A-Z]{3}(?![\s\S])/).optional(), category_id: idSchema.optional(), location_id: idSchema.optional(),
