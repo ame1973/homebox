@@ -82,6 +82,30 @@ func (m *mutationTx) projectionPayload(key projectionKey) ([]byte, error) {
 			return nil, err
 		}
 		return json.Marshal(value.PurchaseLineData)
+	case "asset":
+		value, err := loadAsset(m.ctx, m.tx, key.id)
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(value.AssetData)
+	case "usage":
+		value, err := loadUsage(m.ctx, m.tx, key.id)
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(value.UsageData)
+	case "cost":
+		value, err := loadCost(m.ctx, m.tx, key.id)
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(value.CostData)
+	case "disposal":
+		value, err := loadDisposal(m.ctx, m.tx, key.id)
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(value.DisposalData)
 	case "barcode":
 		value, err := loadBarcode(m.ctx, m.tx, key.id)
 		if err != nil {

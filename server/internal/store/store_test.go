@@ -25,7 +25,7 @@ func privateTempDir(t *testing.T) string {
 	return path
 }
 
-func openTestStore(t *testing.T) *Store {
+func openFreshTestStore(t *testing.T) *Store {
 	t.Helper()
 	s, err := Open(t.Context(), Config{Path: filepath.Join(privateTempDir(t), "homebox.sqlite"), Migrate: true})
 	if err != nil {
@@ -90,7 +90,7 @@ func legacyFixture(t *testing.T, version int) (string, *sql.DB) {
 }
 
 func TestFreshMigrationCapabilitiesAndReopen(t *testing.T) {
-	s := openTestStore(t)
+	s := openFreshTestStore(t)
 	all, err := migrations.Load()
 	if err != nil {
 		t.Fatal(err)

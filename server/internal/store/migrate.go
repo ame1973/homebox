@@ -121,6 +121,11 @@ func (s *Store) migrate(ctx context.Context, cfg Config, all []migrations.Migrat
 				return report, fmt.Errorf("validate purchase allocation backfill: %w", err)
 			}
 		}
+		if migration.Version == 15 {
+			if err = validateAssetsBackfill(ctx, tx); err != nil {
+				return report, fmt.Errorf("validate asset financial backfill: %w", err)
+			}
+		}
 		// Reference migrations insert their own version row. New migrations can
 		// leave metadata to the runner, which always owns checksum publication.
 		if _, err = tx.ExecContext(ctx, `INSERT INTO schema_migrations(version,name,applied_at)
