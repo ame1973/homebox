@@ -4606,12 +4606,6 @@ paths:
               schema:
                 const: no-store
               description: Protected API data is never cached by the service worker.
-            ETag:
-              schema:
-                type: string
-                minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -4698,9 +4692,10 @@ paths:
         in: query
         required: false
         schema:
-          type: string
-          minLength: 1
-          maxLength: 32
+          enum:
+          - active
+          - archived
+        description: Current Item metadata status, not Unit lifecycle or payment status.
       - name: merchant
         in: query
         required: false
@@ -4708,8 +4703,9 @@ paths:
           type: string
           minLength: 1
           maxLength: 300
-      description: Lists use stable ID ordering, or (occurred_at,id) for events, with
-        opaque scoped cursors.
+      description: Live stable-ID purchase headers, including unallocated headers when no Item criteria are supplied. Apply every filter before slicing. Date/currency/exact stored merchant criteria match the header; inclusive civil dates use its instant in the configured home timezone (UTC only when unset), including DST/skipped dates, with from not after to. Category, Item metadata status and current location criteria must match the same line, not unrelated qualifying Items; an explicitly allocated Unit uses that actual nondisposed Unit's location, otherwise current positive balances/nondisposed Units of its Item establish location membership. Scope defaults to subtree and never duplicates headers. Signed cursors bind principal, dataset epoch, page size, every normalized filter and timezone for 15 minutes; they are not frozen snapshots or authorization. No body or list ETag and no inferred money/quantity total.
+      x-max-body-bytes: 0
+      x-max-query-bytes: 16384
     post:
       operationId: post_purchases
       summary: Create purchase
@@ -4731,8 +4727,9 @@ paths:
               schema:
                 type: string
                 minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+                maxLength: 18
+                pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+              description: Strong quoted revision of the returned Purchase; safe-integer upper bounds remain a runtime check.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -4778,14 +4775,24 @@ paths:
           minLength: 1
           maxLength: 32
         description: Semantic application version. Incompatible writes return 426.
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/PurchaseWrite'
-      description: Non-idempotent mutations must use Idempotency-Key and CSRF; domain
-        service validates invariants and commits projections in same SQLite transaction.
+      description: Create one independent header against an active completed session and exact Origin/CSRF/version/original key, without If-Match or an implicit total/allocation/physical receipt. Source, new revision one, current/outbox publication, immutable audit and frozen response commit atomically. Explicit reconciliation preserves the original key/body; never retry, rebase or replay automatically. No query, duplicate/unknown fields, invalid UTF-8 or repaired input.
+      x-max-body-bytes: 131072
+      x-max-query-bytes: 0
+      x-content-type: application/json
+      x-response-revision-scope: purchase
   /purchases/{id}:
     get:
       operationId: get_purchases_id
@@ -4808,8 +4815,9 @@ paths:
               schema:
                 type: string
                 minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+                maxLength: 18
+                pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+              description: Strong quoted revision of the returned Purchase; safe-integer upper bounds remain a runtime check.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -4838,6 +4846,10 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
+      description: Read the actual Purchase source and retained aggregate counter under completed transactional authorization, not a current projection or frozen reply. Return its own strong ETag. No body/query; missing or invalid authority is never fabricated.
+      x-max-body-bytes: 0
+      x-max-query-bytes: 0
+      x-response-revision-scope: purchase
     patch:
       operationId: patch_purchases_id
       summary: Edit purchase
@@ -4859,8 +4871,9 @@ paths:
               schema:
                 type: string
                 minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+                maxLength: 18
+                pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+              description: Strong quoted revision of the returned Purchase, not an allocation revision; safe-integer upper bounds remain a runtime check.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -4911,10 +4924,9 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+        description: Original reviewed Purchase aggregate revision; a strong positive safe integer, not an allocation proof.
       - name: X-HomeBox-Client-Version
         in: header
         required: true
@@ -4923,14 +4935,25 @@ paths:
           minLength: 1
           maxLength: 32
         description: Semantic application version. Incompatible writes return 426.
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/PurchasePatch'
-      description: Non-idempotent mutations must use Idempotency-Key and CSRF; domain
-        service validates invariants and commits projections in same SQLite transaction.
+      description: Correct only supplied descriptive header fields using the original Purchase proof, active completed session and exact Origin/CSRF/version/key. Never change currency after any allocation, including zero paid amounts, or rewrite posted financial lines/inventory. Equal fields keep counters but retain a no-op receipt. Actual source, dependent approved search/analytics, revisions, immutable audit and original response commit atomically; unknown results require explicit identical-key/body/proof reconciliation, never automatic rebase/replay. No query, unknown/duplicate fields, invalid UTF-8 or implicit normalization.
+      x-revision-scope: purchase
+      x-response-revision-scope: purchase
+      x-max-body-bytes: 131072
+      x-max-query-bytes: 0
+      x-content-type: application/json
   /items/{id}/purchases:
     get:
       operationId: get_items_id_purchases
@@ -4949,12 +4972,6 @@ paths:
               schema:
                 const: no-store
               description: Protected API data is never cached by the service worker.
-            ETag:
-              schema:
-                type: string
-                minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -4998,8 +5015,9 @@ paths:
           type: string
           minLength: 1
           maxLength: 2048
-      description: Lists use stable ID ordering, or (occurred_at,id) for events, with
-        opaque scoped cursors.
+      description: Complete actual Item-associated purchase headers in live stable-ID order, one header per identity even with several matching lines. Require the actual Item/counter; an existing Item without allocations returns an empty page, not a fabricated header. Sign independent owner/collection/principal/epoch/size scope for 15 minutes, retain required null continuation and validate lookahead before returning a page. No body/list ETag or extra filters; not a frozen snapshot.
+      x-max-body-bytes: 0
+      x-max-query-bytes: 16384
   /purchases/{id}/lines:
     post:
       operationId: post_purchases_id_lines
@@ -5022,8 +5040,9 @@ paths:
               schema:
                 type: string
                 minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+                maxLength: 18
+                pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+              description: Strong quoted independent PurchaseLine revision, not Purchase-proof-plus-one; safe-integer upper bounds remain a runtime check.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -5082,21 +5101,31 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+        description: Original reviewed Purchase aggregate revision, not the Item or Unit revision and never a Line response ETag. Validate the positive safe integer transactionally.
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/PurchaseLineWrite'
-      description: Non-idempotent mutations must use Idempotency-Key and CSRF; domain
-        service validates invariants and commits projections in same SQLite transaction.
+      description: Append an independent immutable allocation using the original Purchase proof and completed-session/Origin/CSRF/version/key boundary. Validate actual Item/Unit authority, explicit nullable allocation, whole safe minor/base integers and financial-basis/currency compatibility in the same transaction as the new Line revision one, Purchase aggregate, dependent approved search/analytics, audit/current/outbox and frozen Line response. The response ETag is independent, not Purchase-proof-plus-one. Do not receive inventory, create an asset, infer a per-unit price or overwrite posted allocations. Original-key retries retain the original body/proof after later changes; never automatically replay or rebase. No query, unknown/duplicate fields, invalid UTF-8 or lossy float parsing.
+      x-revision-scope: purchase
+      x-response-revision-scope: purchase_line
+      x-max-body-bytes: 131072
+      x-max-query-bytes: 0
+      x-content-type: application/json
     get:
       operationId: get_purchases_id_lines
-      summary: GET /purchases/{id}/lines
+      summary: List purchase allocations
       tags:
       - purchases
       responses:
@@ -5111,12 +5140,6 @@ paths:
               schema:
                 const: no-store
               description: Protected API data is never cached by the service worker.
-            ETag:
-              schema:
-                type: string
-                minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -5137,8 +5160,9 @@ paths:
           $ref: '#/components/responses/Error429'
         '503':
           $ref: '#/components/responses/Error503'
-      description: Lists use stable ID ordering, or (occurred_at,id) for events, with
-        opaque scoped cursors.
+      description: Complete actual Purchase-owned independent allocation rows in live stable-ID order, including zero-paid history. Require the actual Purchase/counter, validate each row's retained owner/Item/Unit authority and lookahead, and sign independent owner/collection/principal/epoch/size scope for 15 minutes. No body/list ETag or filters beyond limit/cursor; required null ends pagination, not a frozen snapshot or implicit spend total.
+      x-max-body-bytes: 0
+      x-max-query-bytes: 16384
       parameters:
       - name: id
         in: path
@@ -13298,17 +13322,31 @@ components:
       type: object
       additionalProperties: false
       properties:
-        id: *id005
-        revision: *id006
-        merchant_name:
+        id: &purchaseID
+          type: string
+          minLength: 1
+          maxLength: 128
+        revision: &purchaseRevision
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        merchant_name: &purchaseMerchant
           type: string
           minLength: 1
           maxLength: 300
-        purchased_at: &id013
-          type: string
-          format: date-time
+        purchased_at: &purchaseInstant
+          allOf:
+          - &id013
+            type: string
+            format: date-time
+          - minLength: 20
+            maxLength: 35
+            pattern: ^(?!0000)[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-5][0-9]:[0-5][0-9](\.[0-9]{1,9})?(Z|[+-]([01][0-9]|2[0-3]):[0-5][0-9])(?![\s\S])
         currency: *id012
-        receipt_note: *id005
+        receipt_note: &purchaseNote
+          type: string
+          minLength: 0
+          maxLength: 10000
       required:
       - id
       - revision
@@ -13316,57 +13354,65 @@ components:
       - purchased_at
       - currency
       - receipt_note
+      description: A purchase header with its own aggregate revision and explicit currency, exact merchant/receipt text and purchase instant. Allocated spend belongs to independent PurchaseLine rows, never a second header total. Normalize valid instants to UTC without inventing a date or losing subsecond precision. Header corrections and allocation additions advance this aggregate atomically with immutable audit, dependent publication and original replies; they never imply physical receipt.
     PurchaseList:
       type: object
       required:
       - data
+      - next_cursor
       additionalProperties: false
       properties:
         data:
           type: array
+          maxItems: 100
           items:
             $ref: '#/components/schemas/Purchase'
         next_cursor:
           type:
           - string
           - 'null'
+          minLength: 1
+          maxLength: 2048
+      description: One complete live stable-ID page with required null continuation at the end, not a frozen snapshot, list ETag or mixed-currency total.
     PurchaseWrite:
       type: object
-      minProperties: 1
       additionalProperties: false
       properties:
-        merchant_name:
-          type: string
-          minLength: 1
-          maxLength: 300
-        purchased_at: *id013
+        merchant_name: *purchaseMerchant
+        purchased_at: *purchaseInstant
         currency: *id012
-        receipt_note: *id005
+        receipt_note:
+          allOf:
+          - *purchaseNote
+          default: ''
       required:
       - merchant_name
       - purchased_at
       - currency
+      description: Create only the purchase header. The server assigns a new independent identity/revision and defaults omitted receipt_note to empty; clients need not insert defaults. No totals, lines, stock, Unit, media or asset accounting is created implicitly. Money is allocated later in explicitly reviewed PurchaseLine commands.
     PurchaseLine:
       type: object
       additionalProperties: false
       properties:
-        id: *id005
-        revision: *id006
-        purchase_id: *id005
-        item_id: *id005
-        item_unit_id: *id007
-        quantity_base:
+        id: *purchaseID
+        revision: *purchaseRevision
+        purchase_id: *purchaseID
+        item_id: *purchaseID
+        item_unit_id: &purchaseNullableID
+          type:
+          - string
+          - 'null'
+          minLength: 1
+          maxLength: 128
+        quantity_base: &purchaseQuantity
           type: integer
           minimum: 1
           maximum: 9007199254740991
-        paid_minor:
+        paid_minor: &purchaseAmount
           type: integer
           minimum: 0
           maximum: 9007199254740991
-        note:
-          type: string
-          minLength: 0
-          maxLength: 10000
+        note: *purchaseNote
       required:
       - id
       - revision
@@ -13376,43 +13422,53 @@ components:
       - quantity_base
       - paid_minor
       - note
+      description: An independent retained financial allocation. paid_minor is the complete allocated amount, including allocated tax/shipping once, not a per-unit price or an amount to multiply by quantity_base. Currency comes only from its Purchase; quantities use its Item's retained base measurement. Zero-paid rows remain financial references. Preserve immutable ownership/history and independent revision; do not infer receipt, conversion, asset eligibility or a counter from the Purchase proof.
     PurchaseLineList:
       type: object
       required:
       - data
+      - next_cursor
       additionalProperties: false
       properties:
         data:
           type: array
+          maxItems: 100
           items:
             $ref: '#/components/schemas/PurchaseLine'
         next_cursor:
           type:
           - string
           - 'null'
+          minLength: 1
+          maxLength: 2048
+      description: One complete live stable-ID page of actual independent allocations for the selected Purchase, including zero-paid lines; required null ends pagination. No list ETag, frozen snapshot or cross-unit/currency total.
     PurchaseLineWrite:
       type: object
-      minProperties: 1
       additionalProperties: false
       properties:
-        item_id: *id005
-        item_unit_id: *id007
-        quantity_base:
-          type: integer
-          minimum: 1
-          maximum: 9007199254740991
-        paid_minor:
-          type: integer
-          minimum: 0
-          maximum: 9007199254740991
+        item_id: *purchaseID
+        item_unit_id: *purchaseNullableID
+        quantity_base: *purchaseQuantity
+        paid_minor: *purchaseAmount
         note:
-          type: string
-          minLength: 0
-          maxLength: 10000
+          allOf:
+          - *purchaseNote
+          default: ''
       required:
       - item_id
+      - item_unit_id
       - quantity_base
       - paid_minor
+      oneOf:
+      - properties:
+          item_unit_id:
+            type: 'null'
+      - properties:
+          item_unit_id: *purchaseID
+          quantity_base:
+            const: 1
+      description: Append one immutable allocation against the original Purchase revision. Explicit null item_unit_id means no individual Unit allocation; a supplied Unit must belong to the same Item and quantity_base must be one. Quantity-tracked Items require null; unallocated individual bulk purchase counts remain explicit. paid_minor is the entire nonnegative safe minor-unit amount in the Purchase currency, never a unit price. Validate actual Item/Unit counters, tracking and asset currency/manual-basis compatibility transactionally; preserve retained zero-valued references. This command does not receive stock, create/move Units, change measurement or silently enable an asset. New Line identity/revision, Purchase aggregate, dependent source/search/analytics publication, immutable audit and original response commit atomically. Omitted note defaults to empty without client default insertion.
+      x-runtime-validation: purchase-allocation-safe-minor-base-v1
     Asset:
       type: object
       additionalProperties: false
@@ -15420,23 +15476,11 @@ components:
       minProperties: 1
       additionalProperties: false
       properties:
-        merchant_name:
-          type: string
-          minLength: 1
-          maxLength: 300
-        purchased_at:
-          type: string
-          format: date-time
-        currency:
-          type: string
-          minLength: 3
-          maxLength: 3
-          pattern: ^[A-Z]{3}$
-        receipt_note:
-          type: string
-      required: []
-      description: Audited descriptive correction only; currency cannot change after
-        allocations exist.
+        merchant_name: *purchaseMerchant
+        purchased_at: *purchaseInstant
+        currency: *id012
+        receipt_note: *purchaseNote
+      description: Audited descriptive correction only; currency cannot change after allocations exist, even when every paid amount is zero. Preserve exact omitted-versus-supplied text, the original Purchase revision, immutable audit and dependent approved search/analytics publication. A value-equal correction is a no-op receipt without counter changes. Never edit posted allocation amounts, owners, quantities, physical inventory or asset bases through this header patch.
     ImportUploadInput:
       type: object
       additionalProperties: false

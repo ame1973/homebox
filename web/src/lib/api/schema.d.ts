@@ -960,7 +960,7 @@ export interface paths {
         };
         /**
          * Item purchases
-         * @description Lists use stable ID ordering, or (occurred_at,id) for events, with opaque scoped cursors.
+         * @description Complete actual Item-associated purchase headers in live stable-ID order, one header per identity even with several matching lines. Require the actual Item/counter; an existing Item without allocations returns an empty page, not a fabricated header. Sign independent owner/collection/principal/epoch/size scope for 15 minutes, retain required null continuation and validate lookahead before returning a page. No body/list ETag or extra filters; not a frozen snapshot.
          */
         readonly get: operations["get_items_id_purchases"];
         readonly put?: never;
@@ -1337,13 +1337,13 @@ export interface paths {
         };
         /**
          * List purchases
-         * @description Lists use stable ID ordering, or (occurred_at,id) for events, with opaque scoped cursors.
+         * @description Live stable-ID purchase headers, including unallocated headers when no Item criteria are supplied. Apply every filter before slicing. Date/currency/exact stored merchant criteria match the header; inclusive civil dates use its instant in the configured home timezone (UTC only when unset), including DST/skipped dates, with from not after to. Category, Item metadata status and current location criteria must match the same line, not unrelated qualifying Items; an explicitly allocated Unit uses that actual nondisposed Unit's location, otherwise current positive balances/nondisposed Units of its Item establish location membership. Scope defaults to subtree and never duplicates headers. Signed cursors bind principal, dataset epoch, page size, every normalized filter and timezone for 15 minutes; they are not frozen snapshots or authorization. No body or list ETag and no inferred money/quantity total.
          */
         readonly get: operations["get_purchases"];
         readonly put?: never;
         /**
          * Create purchase
-         * @description Non-idempotent mutations must use Idempotency-Key and CSRF; domain service validates invariants and commits projections in same SQLite transaction.
+         * @description Create one independent header against an active completed session and exact Origin/CSRF/version/original key, without If-Match or an implicit total/allocation/physical receipt. Source, new revision one, current/outbox publication, immutable audit and frozen response commit atomically. Explicit reconciliation preserves the original key/body; never retry, rebase or replay automatically. No query, duplicate/unknown fields, invalid UTF-8 or repaired input.
          */
         readonly post: operations["post_purchases"];
         readonly delete?: never;
@@ -1359,7 +1359,10 @@ export interface paths {
             readonly path?: never;
             readonly cookie?: never;
         };
-        /** Purchase detail */
+        /**
+         * Purchase detail
+         * @description Read the actual Purchase source and retained aggregate counter under completed transactional authorization, not a current projection or frozen reply. Return its own strong ETag. No body/query; missing or invalid authority is never fabricated.
+         */
         readonly get: operations["get_purchases_id"];
         readonly put?: never;
         readonly post?: never;
@@ -1368,7 +1371,7 @@ export interface paths {
         readonly head?: never;
         /**
          * Edit purchase
-         * @description Non-idempotent mutations must use Idempotency-Key and CSRF; domain service validates invariants and commits projections in same SQLite transaction.
+         * @description Correct only supplied descriptive header fields using the original Purchase proof, active completed session and exact Origin/CSRF/version/key. Never change currency after any allocation, including zero paid amounts, or rewrite posted financial lines/inventory. Equal fields keep counters but retain a no-op receipt. Actual source, dependent approved search/analytics, revisions, immutable audit and original response commit atomically; unknown results require explicit identical-key/body/proof reconciliation, never automatic rebase/replay. No query, unknown/duplicate fields, invalid UTF-8 or implicit normalization.
          */
         readonly patch: operations["patch_purchases_id"];
         readonly trace?: never;
@@ -1381,14 +1384,14 @@ export interface paths {
             readonly cookie?: never;
         };
         /**
-         * GET /purchases/{id}/lines
-         * @description Lists use stable ID ordering, or (occurred_at,id) for events, with opaque scoped cursors.
+         * List purchase allocations
+         * @description Complete actual Purchase-owned independent allocation rows in live stable-ID order, including zero-paid history. Require the actual Purchase/counter, validate each row's retained owner/Item/Unit authority and lookahead, and sign independent owner/collection/principal/epoch/size scope for 15 minutes. No body/list ETag or filters beyond limit/cursor; required null ends pagination, not a frozen snapshot or implicit spend total.
          */
         readonly get: operations["get_purchases_id_lines"];
         readonly put?: never;
         /**
          * Purchase line
-         * @description Non-idempotent mutations must use Idempotency-Key and CSRF; domain service validates invariants and commits projections in same SQLite transaction.
+         * @description Append an independent immutable allocation using the original Purchase proof and completed-session/Origin/CSRF/version/key boundary. Validate actual Item/Unit authority, explicit nullable allocation, whole safe minor/base integers and financial-basis/currency compatibility in the same transaction as the new Line revision one, Purchase aggregate, dependent approved search/analytics, audit/current/outbox and frozen Line response. The response ETag is independent, not Purchase-proof-plus-one. Do not receive inventory, create an asset, infer a per-unit price or overwrite posted allocations. Original-key retries retain the original body/proof after later changes; never automatically replay or rebase. No query, unknown/duplicate fields, invalid UTF-8 or lossy float parsing.
          */
         readonly post: operations["post_purchases_id_lines"];
         readonly delete?: never;
@@ -3302,15 +3305,16 @@ export interface components {
             readonly locale: "zh-Hant" | "en";
             readonly timezone: string;
         };
+        /** @description A purchase header with its own aggregate revision and explicit currency, exact merchant/receipt text and purchase instant. Allocated spend belongs to independent PurchaseLine rows, never a second header total. Normalize valid instants to UTC without inventing a date or losing subsecond precision. Header corrections and allocation additions advance this aggregate atomically with immutable audit, dependent publication and original replies; they never imply physical receipt. */
         readonly Purchase: {
             readonly currency: string;
             readonly id: string;
             readonly merchant_name: string;
-            /** Format: date-time */
-            readonly purchased_at: string;
+            readonly purchased_at: string & unknown;
             readonly receipt_note: string;
             readonly revision: number;
         };
+        /** @description An independent retained financial allocation. paid_minor is the complete allocated amount, including allocated tax/shipping once, not a per-unit price or an amount to multiply by quantity_base. Currency comes only from its Purchase; quantities use its Item's retained base measurement. Zero-paid rows remain financial references. Preserve immutable ownership/history and independent revision; do not infer receipt, conversion, asset eligibility or a counter from the Purchase proof. */
         readonly PurchaseLine: {
             readonly id: string;
             readonly item_id: string;
@@ -3321,34 +3325,44 @@ export interface components {
             readonly quantity_base: number;
             readonly revision: number;
         };
+        /** @description One complete live stable-ID page of actual independent allocations for the selected Purchase, including zero-paid lines; required null ends pagination. No list ETag, frozen snapshot or cross-unit/currency total. */
         readonly PurchaseLineList: {
             readonly data: readonly components["schemas"]["PurchaseLine"][];
-            readonly next_cursor?: string | null;
+            readonly next_cursor: string | null;
         };
+        /** @description Append one immutable allocation against the original Purchase revision. Explicit null item_unit_id means no individual Unit allocation; a supplied Unit must belong to the same Item and quantity_base must be one. Quantity-tracked Items require null; unallocated individual bulk purchase counts remain explicit. paid_minor is the entire nonnegative safe minor-unit amount in the Purchase currency, never a unit price. Validate actual Item/Unit counters, tracking and asset currency/manual-basis compatibility transactionally; preserve retained zero-valued references. This command does not receive stock, create/move Units, change measurement or silently enable an asset. New Line identity/revision, Purchase aggregate, dependent source/search/analytics publication, immutable audit and original response commit atomically. Omitted note defaults to empty without client default insertion. */
         readonly PurchaseLineWrite: {
             readonly item_id: string;
-            readonly item_unit_id?: string | null;
+            readonly item_unit_id: string | null;
+            /** @default  */
             readonly note?: string;
             readonly paid_minor: number;
             readonly quantity_base: number;
-        };
+        } & ({
+            readonly item_unit_id?: null;
+        } | {
+            readonly item_unit_id?: string;
+            /** @constant */
+            readonly quantity_base?: 1;
+        });
+        /** @description One complete live stable-ID page with required null continuation at the end, not a frozen snapshot, list ETag or mixed-currency total. */
         readonly PurchaseList: {
             readonly data: readonly components["schemas"]["Purchase"][];
-            readonly next_cursor?: string | null;
+            readonly next_cursor: string | null;
         };
-        /** @description Audited descriptive correction only; currency cannot change after allocations exist. */
+        /** @description Audited descriptive correction only; currency cannot change after allocations exist, even when every paid amount is zero. Preserve exact omitted-versus-supplied text, the original Purchase revision, immutable audit and dependent approved search/analytics publication. A value-equal correction is a no-op receipt without counter changes. Never edit posted allocation amounts, owners, quantities, physical inventory or asset bases through this header patch. */
         readonly PurchasePatch: {
             readonly currency?: string;
             readonly merchant_name?: string;
-            /** Format: date-time */
-            readonly purchased_at?: string;
+            readonly purchased_at?: string & unknown;
             readonly receipt_note?: string;
         };
+        /** @description Create only the purchase header. The server assigns a new independent identity/revision and defaults omitted receipt_note to empty; clients need not insert defaults. No totals, lines, stock, Unit, media or asset accounting is created implicitly. Money is allocated later in explicitly reviewed PurchaseLine commands. */
         readonly PurchaseWrite: {
             readonly currency: string;
             readonly merchant_name: string;
-            /** Format: date-time */
-            readonly purchased_at: string;
+            readonly purchased_at: string & unknown;
+            /** @default  */
             readonly receipt_note?: string;
         };
         readonly QRLabel: {
@@ -6493,8 +6507,6 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
-                    readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
                 content: {
@@ -7530,7 +7542,8 @@ export interface operations {
                 readonly location_id?: string;
                 readonly merchant?: string;
                 readonly scope?: "direct" | "subtree";
-                readonly status?: string;
+                /** @description Current Item metadata status, not Unit lifecycle or payment status. */
+                readonly status?: "active" | "archived";
                 readonly to?: string;
             };
             readonly header?: never;
@@ -7544,8 +7557,6 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
-                    readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
                 content: {
@@ -7569,6 +7580,7 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -7587,7 +7599,7 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Strong quoted revision of the returned Purchase; safe-integer upper bounds remain a runtime check. */
                     readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
@@ -7624,7 +7636,7 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Strong quoted revision of the returned Purchase; safe-integer upper bounds remain a runtime check. */
                     readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
@@ -7649,8 +7661,9 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Original reviewed Purchase aggregate revision; a strong positive safe integer, not an allocation proof. */
                 readonly "If-Match": string;
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -7671,7 +7684,7 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Strong quoted revision of the returned Purchase, not an allocation revision; safe-integer upper bounds remain a runtime check. */
                     readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
@@ -7711,8 +7724,6 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
-                    readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
                 content: {
@@ -7736,8 +7747,9 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Original reviewed Purchase aggregate revision, not the Item or Unit revision and never a Line response ETag. Validate the positive safe integer transactionally. */
                 readonly "If-Match": string;
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -7758,7 +7770,7 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Strong quoted independent PurchaseLine revision, not Purchase-proof-plus-one; safe-integer upper bounds remain a runtime check. */
                     readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };

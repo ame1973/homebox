@@ -386,6 +386,52 @@ void [holdingSDKCalls, implicitSDKLocation, unprovenSDKUnit, emptySDKUnitPatch, 
   ambiguousSDKDisposal, financialSDKDisposal, looseSDKStockProof, stockAsSDKItem, overriddenSDKStockProof, convertedSDKStock, incompleteSDKTransfer,
   reasonlessSDKAdjust, filteredSDKUnits, searchedSDKStock]
 
+type PurchaseCreateHeaders = operations['post_purchases']['parameters']['header']
+type PurchaseEditHeaders = operations['patch_purchases_id']['parameters']['header']
+type PurchaseLineHeaders = operations['post_purchases_id_lines']['parameters']['header']
+type PurchaseQuery = NonNullable<operations['get_purchases']['parameters']['query']>
+type PurchaseLineQuery = NonNullable<operations['get_purchases_id_lines']['parameters']['query']>
+const purchaseHeaders = { ...authHeaders } satisfies PurchaseCreateHeaders
+const purchaseProof = { ...authHeaders, 'If-Match': '"7"' } satisfies PurchaseEditHeaders & PurchaseLineHeaders
+const purchaseHeader = { merchant_name: '  Merchant é  ', purchased_at: '2026-11-06T00:00:00Z', currency: 'JPY' } satisfies components['schemas']['PurchaseWrite']
+const purchaseReceiptClear = { receipt_note: '' } satisfies components['schemas']['PurchasePatch']
+const unallocatedPurchaseLine = { item_id: 'item', item_unit_id: null, quantity_base: 1500, paid_minor: 0 } satisfies components['schemas']['PurchaseLineWrite']
+const allocatedPurchaseLine = { item_id: 'item', item_unit_id: 'unit', quantity_base: 1, paid_minor: 120000 } satisfies components['schemas']['PurchaseLineWrite']
+const completePurchasePage = { data: [], next_cursor: null } satisfies components['schemas']['PurchaseList']
+const completePurchaseLinePage = { data: [], next_cursor: null } satisfies components['schemas']['PurchaseLineList']
+const filteredPurchases = { from: '2026-01-01', to: '2026-11-06', currency: 'JPY', category_id: 'category', location_id: 'location', scope: 'direct', status: 'active', merchant: 'Exact merchant', limit: 50, cursor: 'opaque' } satisfies PurchaseQuery
+// @ts-expect-error Purchase writes require exact Origin independently of CSRF.
+const originlessPurchase: PurchaseCreateHeaders = { 'X-CSRF-Token': 'csrf', 'Idempotency-Key': 'purchase-key', 'X-HomeBox-Client-Version': '0.1.0-dev' }
+// @ts-expect-error Descriptive corrections require the original Purchase proof.
+const unprovenPurchase: PurchaseEditHeaders = { ...authHeaders }
+// @ts-expect-error Allocation creation uses the original Purchase proof too.
+const unprovenPurchaseLine: PurchaseLineHeaders = { ...authHeaders }
+// @ts-expect-error A new header has no unrelated Item or parent proof.
+const unrelatedPurchaseProof: PurchaseCreateHeaders = { ...authHeaders, 'If-Match': '"3"' }
+// @ts-expect-error Header metadata never counts the same paid amount a second time.
+const headerPurchaseAmount: components['schemas']['PurchaseWrite'] = { ...purchaseHeader, paid_minor: 120000 }
+// @ts-expect-error Nullable Unit allocation intent is explicit, not an omitted default.
+const implicitPurchaseAllocation: components['schemas']['PurchaseLineWrite'] = { item_id: 'item', quantity_base: 1, paid_minor: 0 }
+// @ts-expect-error One named physical Unit cannot silently represent a bulk price multiplier.
+const bulkUnitPurchaseLine: components['schemas']['PurchaseLineWrite'] = { item_id: 'item', item_unit_id: 'unit', quantity_base: 2, paid_minor: 120000 }
+// @ts-expect-error The complete minor-unit amount is a JSON number, not decimal display text.
+const textPurchaseAmount: components['schemas']['PurchaseLineWrite'] = { ...unallocatedPurchaseLine, paid_minor: '1200' }
+// @ts-expect-error Receipt text is nonnullable; empty clears it explicitly.
+const nullPurchaseReceipt: components['schemas']['PurchasePatch'] = { receipt_note: null }
+// @ts-expect-error Purchase pages explicitly continue or terminate.
+const incompletePurchasePage: components['schemas']['PurchaseList'] = { data: [] }
+// @ts-expect-error Allocation pages explicitly continue or terminate too.
+const incompletePurchaseLinePage: components['schemas']['PurchaseLineList'] = { data: [] }
+// @ts-expect-error The Purchase owner comes from the path, not the allocation body.
+const reassignedPurchaseLine: components['schemas']['PurchaseLineWrite'] = { ...unallocatedPurchaseLine, purchase_id: 'other' }
+// @ts-expect-error Purchase status filters describe current Item metadata, not Unit lifecycle.
+const lifecyclePurchaseQuery: PurchaseQuery = { status: 'disposed' }
+// @ts-expect-error The selected Purchase line collection accepts only paging fields.
+const filteredPurchaseLines: PurchaseLineQuery = { currency: 'JPY' }
+void [purchaseHeaders, purchaseProof, purchaseHeader, purchaseReceiptClear, unallocatedPurchaseLine, allocatedPurchaseLine, completePurchasePage, completePurchaseLinePage,
+  filteredPurchases, originlessPurchase, unprovenPurchase, unprovenPurchaseLine, unrelatedPurchaseProof, headerPurchaseAmount, implicitPurchaseAllocation,
+  bulkUnitPurchaseLine, textPurchaseAmount, nullPurchaseReceipt, incompletePurchasePage, incompletePurchaseLinePage, reassignedPurchaseLine, lifecyclePurchaseQuery, filteredPurchaseLines]
+
 void [ownedSDKCalls, unprovenOwnedBarcode, unprovenOwnedAlias, unprovenOwnedAttribute, ownerlessBarcodePatch, ownerlessAliasDelete, emptyOwnedAttributePatch,
   missingOwnedAttributeValue, normalizedOwnedInput, reassignedOwnedInput, unprovenTagSet, nullTagSet, filteredOwnedRead]
 
