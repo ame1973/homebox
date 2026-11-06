@@ -1,6 +1,6 @@
 # Purchases and Financial Allocations
 
-**Availability:** the root OpenAPI contract, generated browser types and executable wire/type tests cover the seven purchase operations below. The private Go `Purchases` service implements all seven service operations: authorized header detail/creation/audited descriptive correction, immutable unbacked allocation, complete global filtered headers, Item-associated headers and Purchase-owned independent Lines. Retained loaders, migrations 0013/0014, a pinned finite ISO currency policy, signed live continuations and atomic final-source publication are implemented and tested. HTTP handlers, stateless runtime adapters and reviewed operating screens are not implemented yet. Existing asset profiles deliberately require the unfinished asset financial producer before another allocation; see the integration boundary below. These are implementation rules, not instructions for working purchase endpoints. Existing [catalog](catalog.md) and [physical Unit/Stock](holdings.md) operations remain functional without purchase entry or an AI worker.
+**Availability:** all seven Go/HTTP purchase operations below are implemented and tested: authorized header detail/creation/audited descriptive correction, immutable unbacked allocation, complete global filtered headers, Item-associated headers and Purchase-owned independent Lines. The routes use the existing completed-session/Origin/CSRF/client-version/idempotency/admission boundary, strict input readers and real SQL authorization. Retained loaders, migrations 0013/0014, pinned finite ISO currency policy, signed live continuations and atomic publication remain authoritative. All seven operations have verified-TLS/cookie-jar coverage; compiled-server/socket replies are separately validated against executable contracts. Stateless purchase browser adapters and reviewed operating screens are not implemented yet. Existing asset profiles deliberately require the unfinished asset financial producer before another allocation; see the integration boundary below. Existing [catalog](catalog.md) and [physical Unit/Stock](holdings.md) workflows remain functional without purchase entry or an AI worker.
 
 ## Header, allocation and physical receipt
 
@@ -14,7 +14,7 @@ A zero-paid allocation is still real financial history. It prevents naive Item m
 
 All paths are relative to `/api/v1` and require a completed active administrator session. All responses are `Cache-Control: no-store`.
 
-| Operation | Original concurrency proof | Contract result |
+| Operation | Original concurrency proof | Successful result |
 | --- | --- | --- |
 | `GET /purchases` | None; scoped live continuation | Complete `PurchaseList` page |
 | `POST /purchases` | No `If-Match` | New `Purchase`, revision one and its ETag |
@@ -26,7 +26,49 @@ All paths are relative to `/api/v1` and require a completed active administrator
 
 Line creation uses the Purchase revision as `If-Match`, not an Item/Unit/Line ETag. It also requires the separately reviewed Item revision in `item_revision`; otherwise a concurrent first-allocation measurement/tracking change could reinterpret the same base integer while the Purchase proof stayed unchanged. Either stale proof fails rather than rebasing. The command advances both real Purchase and Item aggregates, but not unchanged physical Unit or existing immutable Line counters. The returned Line counter is independent, not Purchase-proof-plus-one; a caller wanting current resources must read them again. Lists have no ETag and never claim frozen-snapshot isolation.
 
-Protected writes require exact same-origin `Origin`, CSRF, supported application version and an original idempotency key. Proofs are canonical strong quoted positive safe integers. Body parsing must reject duplicate/unknown/case-mismatched fields, invalid UTF-8/surrogates and lossy numeric coercion. JSON writes have a 128 KiB limit and no query. Lists have a 16 KiB raw-query budget and no body; detail has neither body nor query. See [transport and authentication](http-authentication.md) for the existing shared security boundary; it does not imply purchase handlers exist.
+Protected writes require exact same-origin `Origin`, CSRF, supported application version and an original idempotency key. Proofs are canonical strong quoted positive safe integers. Strict body readers reject duplicate/unknown/case-mismatched fields, invalid UTF-8/surrogates and lossy numeric coercion. JSON writes have a 128 KiB limit and no query. Lists have a 16 KiB raw-query budget and no body; detail has neither body nor query. All seven routes use the existing [transport and authentication](http-authentication.md) boundary, then recheck authorization in SQL; a session revoked during body reading cannot commit a purchase command.
+
+### Calling the implemented APIs
+
+Complete setup, mandatory password change and a fresh login first. Keep the cookie private and obtain a CSRF token for the current session. A same-origin API caller supplies `Content-Type: application/json`, the exact configured `Origin`, `X-CSRF-Token`, a supported `X-HomeBox-Client-Version` and a caller-owned `Idempotency-Key` on each write. Do not put credentials or financial commands in URLs, logs or persistent replay queues. There is no purchase operating screen yet.
+
+For example, `POST /purchases` accepts this complete header without an `If-Match`, amount or implicit stock receipt:
+
+```json
+{
+  "merchant_name": "Example merchant",
+  "purchased_at": "2026-11-06T10:00:00+08:00",
+  "currency": "JPY",
+  "receipt_note": "Allocated tax and shipping are included in each line."
+}
+```
+
+Before allocation, review the actual Purchase and Item, including its tracking/measurement tuple. If their original revisions are respectively 12 and 7, `POST /purchases/{id}/lines` uses `If-Match: "12"` and this body for a quantity Item measured in base grams:
+
+```json
+{
+  "item_id": "the-reviewed-item-id",
+  "item_revision": 7,
+  "item_unit_id": null,
+  "quantity_base": 1500,
+  "paid_minor": 120000,
+  "note": "The entire JPY allocation, not a per-gram price."
+}
+```
+
+Substitute real reviewed IDs/revisions; do not copy sample proofs as current authority. A named Unit instead requires its actual owned ID and quantity one. The returned Line ETag is its own revision, not a new Purchase or Item proof. Read those aggregates again before a different command. For descriptive correction, send only changed allowed header fields with the original Purchase If-Match; `{"receipt_note":""}` explicitly clears the note.
+
+Read all pages of the selected collection until `next_cursor` is null. Keep every original filter/owner/page size with its continuation; never reuse global, Item-associated or Line cursors across scopes. Responses do not set a session cookie, and list responses do not supply ETags.
+
+| Safe conflict code | Meaning and recovery |
+| --- | --- |
+| `REVISION_CONFLICT` | The reviewed Purchase or Item changed. Refresh and explicitly review; never silently rebase. |
+| `PURCHASE_CURRENCY_LOCKED` | An actual currency change is forbidden after any allocation, even zero-paid history. |
+| `PURCHASE_CURRENCY_CONFLICT` | New money needs a supported finite-minor-unit code compatible with the financial source; never relabel or convert an existing amount to bypass it. |
+| `ASSET_COST_BASIS_CONFLICT` | A manual asset acquisition basis cannot also receive a purchase allocation. |
+| `ASSET_LIFECYCLE_REQUIRED` | The separate asset financial producer is still required; do not bypass it with an unbacked proposal. |
+
+These are static codes, not permission to render arbitrary server messages/details. An uncertain result requires explicit original-key/body/proof reconciliation; later source changes do not authorize a second write. There is no Purchase DELETE or posted-Line PATCH/DELETE API. Financial adjustment/void remains a separate unfinished workflow.
 
 ## Exact values and explicit allocation
 
@@ -93,4 +135,15 @@ Go tests cover retained loaders/backfill/publication and the actual authorized G
 
 These checks also exercise complete retained collections above 200 rows at page sizes one/fifty/one hundred, maximum Unicode/control IDs and independent counters, actual command-fed source and live continuation after genuine correction/allocation. Same-Line category/status/placement fixtures distinguish named Units from siblings, current positive Stock from retained zero and disposed Units from readable financial history. Civil-date cases cover UTC/Taipei boundaries, short/long/repeated New York days, Samoa's skipped date and a nonexistent Brazilian midnight. Scope/size/filter/timezone/principal/epoch/signature failures, malformed settings/source/lookahead/related authority, indexed owner queries, late session changes and deferred COMMIT all withhold failed prefixes without read-side publication.
 
-These checks do not establish actual HTTP/SDK/UI behavior, asset acquisition/adjustment math, receipts/media, the complete offline replica, physical phones or production NAS acceptance. Those remain separate implementation/testing gates, not dropped product scope. Existing offline `purchase`/`purchase_line` payloads and all original operation identities are preserved; tightening HTTP boundaries and adding real Go commands/collections do not enable the complete 22-entity sync protocol.
+HTTP tests exercise all seven actual routes through the existing normal protected boundary and through verified TLS/cookie jars, including mandatory-change/revoked sessions, transport/Origin/CSRF/version/key/method/path/body/query limits and safe errors. Body-time callbacks genuinely change the Item measurement, Purchase currency/metadata or session before the authoritative transaction; stale dual proofs and late revocation cannot commit. Default-50 tests finish all three actual collections above one page without disabling admission, and explicit original keys return frozen replies after later changes/fresh login rather than creating another allocation. The three real JSON readers have bounded media/chunked/read-failure/exact-integer/nullable/UTF fuzz coverage; the shared browser boundary recognizes only static documented conflict codes.
+
+Compiled-server/socket conformance additionally drives genuine setup/login/password rotation, all seven purchase operations, complete selected pages and original-key reconciliation on a disposable private database, validating 39 actual responses against the root executable schemas. It checks independent resource ETags, no list ETags/domain cookies, exact whole-allocation amounts and no implicit Stock/Unit mutation, then performs graceful shutdown and the actual CLI integrity check. This is native loopback HTTP evidence, not browser SDK or physical NAS acceptance; the separate TLS tests verify certificates rather than disabling verification.
+
+```sh
+go -C server test ./internal/httpapi -run '^TestPurchase' -count=1
+go -C server test ./internal/httpapi -run '^$' -fuzz FuzzPurchasesJSON -fuzztime=3s -parallel=2
+make check
+make test-go-pure
+```
+
+These automated checks do not establish purchase runtime SDK/UI behavior, asset acquisition/adjustment math, receipts/media, the complete offline replica, physical phones or production NAS acceptance. Those remain separate implementation/testing gates, not dropped product scope. Existing offline `purchase`/`purchase_line` payloads and all original operation identities are preserved; strict HTTP boundaries and real Go commands/collections do not enable the complete 22-entity sync protocol.
