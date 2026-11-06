@@ -98,32 +98,40 @@ func loadPurchaseLine(ctx context.Context, query queryer, id string) (PurchaseLi
 // Retained reads validate representation and actual ownership, not today's new
 // allocation policy. Never repair old counts or infer asset financial eligibility.
 func validatePurchaseLineAuthority(ctx context.Context, query queryer, value PurchaseLine) error {
-	if _, err := loadPurchase(ctx, query, value.PurchaseID); err != nil {
+	_, err := loadPurchaseLineAuthority(ctx, query, value)
+	return err
+}
+
+// Return the same validated parent for financial readers, without fetching a
+// second header or duplicating the actual Item/Unit ownership checks.
+func loadPurchaseLineAuthority(ctx context.Context, query queryer, value PurchaseLine) (Purchase, error) {
+	purchase, err := loadPurchase(ctx, query, value.PurchaseID)
+	if err != nil {
 		if errors.Is(err, ErrNotFound) {
-			return ErrDomainState
+			return Purchase{}, ErrDomainState
 		}
-		return err
+		return Purchase{}, err
 	}
 	item, err := loadItem(ctx, query, value.ItemID)
 	if errors.Is(err, ErrNotFound) {
-		return ErrDomainState
+		return Purchase{}, ErrDomainState
 	}
 	if err != nil {
-		return err
+		return Purchase{}, err
 	}
 	if value.ItemUnitID != nil {
 		unit, err := loadUnit(ctx, query, *value.ItemUnitID)
 		if errors.Is(err, ErrNotFound) {
-			return ErrDomainState
+			return Purchase{}, ErrDomainState
 		}
 		if err != nil {
-			return err
+			return Purchase{}, err
 		}
 		if item.TrackingMode != "individual" || unit.ItemID != item.ID {
-			return ErrDomainState
+			return Purchase{}, ErrDomainState
 		}
 	}
-	return nil
+	return purchase, nil
 }
 
 // Code spelling is not an ISO registry/exponent or cross-domain currency check.

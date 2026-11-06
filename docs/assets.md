@@ -1,6 +1,6 @@
 # Assets, Usage and Cost Accounting
 
-**Availability: tested persistence foundation and executable contracts.** Migration 0015, private retained Asset/Usage/Cost/Disposal loaders and final-state publication are implemented. The eleven operations below have executable root schemas and generated browser types, but no public Asset financial service, HTTP route, runtime adapter or operating screen is implemented yet. Passing schema/type tests is not financial transaction, browser or device acceptance. Existing [physical Unit workflows](holdings.md) and [purchase workflows](purchases.md) remain functional. The purchase service deliberately rejects new allocations to an existing asset profile until its dedicated financial producer can update Asset authority/current/outbox atomically.
+**Availability: tested persistence, private Go reads/calculations and executable contracts.** Migration 0015, retained Asset/Usage/Cost/Disposal loaders, final-state publication and the authorized Go `Assets.Get`, `Assets.GetDisposal` and `Assets.CostSummary` services are implemented. The eleven operations below have executable root schemas and generated browser types, but no public Asset HTTP route, runtime browser adapter or operating screen is implemented yet; financial writes and signed collections also remain unfinished. Passing private service/schema/type tests is not public financial transaction, browser or device acceptance. Existing [physical Unit workflows](holdings.md) and [purchase workflows](purchases.md) remain functional. The purchase service deliberately rejects new allocations to an existing asset profile until its dedicated financial producer can update Asset authority/current/outbox atomically.
 
 ## Domain boundaries
 
@@ -16,7 +16,7 @@ Retained source is not a new-input proposal. Complete reads preserve bounded upp
 
 ## Contracted operations
 
-Paths are relative to `/api/v1`. **These are not available HTTP endpoints yet.**
+Paths are relative to `/api/v1`. **These are not available HTTP endpoints yet.** The matching private Go `Assets.Get`, `Assets.GetDisposal` and `Assets.CostSummary` methods are implemented; financial writers and signed collection methods are not.
 
 | Method | Path | Original preconditions | Returned resource |
 | --- | --- | --- | --- |
@@ -121,7 +121,7 @@ The contract defines current posted financial totals, not formal accounting depr
 
 Never subtract both proceeds and residual in one net figure. Calendar days are not 24-hour durations: DST, repeated/skipped dates and exact chronological comparisons require runtime tests. A supplied service date does not imply purchase, retirement or disposal dates. Ratios are finite numerical cost allocations in declared minor units, not independently posted/rounded financial amounts. Integers and aggregate arithmetic must remain exact within the safe range; overflow fails closed instead of rounding or returning a partial result.
 
-Example: JPY 120,000 acquisition + 5,000 repair − 20,000 actual sale = 105,000 realized-basis net; with 730 inclusive service days and 250 uses, approximately 143.84 JPY/day and exactly 420 JPY/use. Before an actual sale, realized-basis net is 125,000; an assumed residual of 20,000 belongs only to the separately labeled 105,000 projected figure. These formulas are specified, not yet an implemented calculation service.
+Example: JPY 120,000 acquisition + 5,000 repair − 20,000 actual sale = 105,000 realized-basis net; with 730 inclusive service days and 250 uses, approximately 143.84 JPY/day and exactly 420 JPY/use. Before an actual sale, realized-basis net is 125,000; an assumed residual of 20,000 belongs only to the separately labeled 105,000 projected figure. These formulas are implemented by the private Go calculation service; no public summary HTTP route or browser screen is available yet.
 
 ## Transport, lists and retained data
 
@@ -131,6 +131,21 @@ Example: JPY 120,000 acquisition + 5,000 repair − 20,000 actual sale = 105,000
 - Global filters preserve category, Item active/archived status, profile currency, actual nondisposed Unit placement and direct/subtree scope. Purchase merchant/date criteria must match one purchase naming the **exact Unit**, not sibling or unallocated Item history. Civil dates use home timezone; cursors bind normalized criteria/timezone and principal/epoch/owner/size as appropriate. They are live pages, not frozen sync manifests.
 - Retained responses expose complete source with independent resource ETags; lists/calculations have no ETag. Private provenance/keys/revision proofs do not enter offline payloads. All four original asset/usage/cost/disposal offline shapes and the full 22-entity envelope stay unchanged.
 - Source, immutable events, counters, current/frozen projections, derived invalidation, audit and original response must commit atomically. Equal usage/cost fields under a **fresh key** append another event; only exact original-key replay deduplicates them. Eligible equal profile/lifecycle state can be a receipt-only no-op after its original proofs are checked. Exact original-key reconciliation happens before new eligibility; no background queue, automatic retry/rebase/reconnect replay or installation of historical replies as current data is permitted.
+
+## Private Go reads and calculation
+
+The `Assets` service implements actual `Get`, `GetDisposal` and `CostSummary` reads through the existing completed-session transaction boundary. It does not expose the SQL handle, create a profile, post financial history, add an HTTP route or update a frozen response into current authority. A missing Asset/disposal is not a synthesized zero/default resource. Final authorization, session-activity write and COMMIT failures withhold the complete result and roll back normal read activity.
+
+`CostSummary` completes all actual source for the selected Unit in one transaction:
+
+- Sum each exact-Unit Purchase Line's whole paid amount once, independently of its retained quantity. Validate real Line/Purchase/Item/Unit counters and ownership. Never borrow sibling/unallocated Item spend, header totals, cached projections or Stock. An explicit purchase basis with a fully read empty allocation collection totals zero; missing authority is not evidence of an empty collection. Manual fallback rejects any actual exact-Unit allocation, even zero-paid history.
+- Validate every owned cost/usage representation and actual correction graph, matching currency and usage interpretation with the profile. Preserve readable unknown uppercase currency and historical correction provenance; new-money registry eligibility is not imposed retroactively. Signed extra costs use exact complete accumulation, including cancellation beyond intermediate int64 range. Published money and every chronological usage prefix must remain safe; unsafe results fail rather than wrap/round or return a prefix.
+- Group equal **nanosecond** instants after exact UTC interpretation, including equivalent offset spellings. Validate every chronological usage step and final sum, not arbitrary event-ID order or only the lifetime result. Do not truncate to whole seconds/milliseconds or silently paginate history at 50/100 rows.
+- Read actual disposal proceeds independently of residual. Preserve negative realized/projected net; return required null fields for absent residual/service and zero usage. Convert only already-safe totals to finite per-day/per-use ratios; these are allocations, not posted money.
+- Interpret `1 + days_between` as an inclusive proleptic Gregorian **home-date-label range** after exact start/end/retirement comparisons. A skipped calendar label remains in that range; a repeated label does not add another day. Use no elapsed 24-hour division, nonexistent local-midnight normalization or saturated long `time.Duration`. Before service gives null. A historical backward dateline jump that reverses the civil date range fails closed instead of clamping a nonpositive divisor. The supported tests include years 0001–9999 and home-year boundary crossings.
+- A supplied `as_of` retains nanosecond precision in canonical UTC; omission uses the server clock. Only the day denominator is bounded by it. Complete current posted money/usage/proceeds remain included, even when their declared dates are later. Resolve the actual `preferences.timezone` setting (UTC only when absent), validate same-transaction catalog `source_revision` including real zero, and never install a calculation as an Asset write proof.
+
+Tests cover large complete histories, exact signed cancellation, zero/manual/purchase conflicts, cross-currency/usage incompatibility, negative/unsafe prefixes, actual correction cycles, missing own/related counters, corrupt scans, late SQLite iterator failures, configured timezone/revision failures and final authorization/deferred-COMMIT rollback. These are real private Go/SQLite service checks, not public HTTP or hardware acceptance. Financial writers/profile before-image audit, signed collections and purchase integration remain gated.
 
 ## Retained persistence foundation
 
@@ -150,4 +165,4 @@ The native CLI has been driven on disposable fresh and certified schema-14 datab
 
 Executable negative contracts cover complete bounded resources, explicit proof/null intent, machine-discriminated bases/corrections/disposal, exact money/count/instant inputs, body/query/admission, full live pages and unchanged offline envelopes. Strict generated-type fixtures also exercise the real typed transport, including required null without actual type-marker objects.
 
-Still required: public authoritative financial services with exact profile before-image audit, calculation/basis/currency/usage eligibility and lifecycle/concurrency rules, signed reads, real HTTP/TLS/fuzz conformance, stateless runtime adapters, reviewed responsive screens, allocation/disposal adjustment/void integration, analytics and device/operator acceptance. The implemented persistence/source/materialization tests do not establish those remaining gates. No hardware, CI, live financial endpoint or completed-product claim follows from this document.
+Still required: authoritative financial writers with exact profile before-image audit and new-input basis/currency/usage/lifecycle/concurrency rules, signed collection reads, public HTTP/TLS/fuzz conformance, stateless runtime browser adapters, reviewed responsive screens, allocation/disposal adjustment/void integration, analytics and device/operator acceptance. Implemented private reads/calculations and persistence/source/materialization tests do not establish those remaining gates. No hardware, CI, live financial endpoint or completed-product claim follows from this document.
