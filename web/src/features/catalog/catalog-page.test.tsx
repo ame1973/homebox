@@ -199,6 +199,7 @@ it('restores metadata and deletes only through separate explicit reviewed comman
   await user.click(screen.getByRole('button', { name: text.restore }))
   await confirm(text.confirmRestore)
   expect(api.patchItem).toHaveBeenCalledWith(item.id, { status: 'active' }, expect.objectContaining({ expectedRevision: 2 }))
+  await waitFor(() => expect(screen.getByRole('button', { name: text.archive })).toBeEnabled())
   await waitFor(() => expect(screen.getByRole('button', { name: text.delete })).toBeEnabled())
   await user.click(screen.getByRole('button', { name: text.delete }))
   expect(screen.getByRole('alertdialog')).toHaveTextContent(text.deleteHelp)

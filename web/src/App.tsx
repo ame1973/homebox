@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef } from 'react'
 import { Link, NavLink, Route, Routes, useLocation } from 'react-router'
-import { MapPin, Package, Settings, UserRound } from 'lucide-react'
+import { MapPin, Package, ReceiptText, Settings, UserRound } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ThemeMenu } from '@/components/theme-menu'
 import { AppErrorBoundary } from '@/components/app-error-boundary'
@@ -12,6 +12,7 @@ const SettingsPage = lazy(() => import('@/features/taxonomy/settings-page'))
 const CatalogPage = lazy(() => import('@/features/catalog/catalog-page'))
 const OwnedPage = lazy(() => import('@/features/catalog/owned-page'))
 const HoldingPage = lazy(() => import('@/features/holdings/holding-page'))
+const PurchasePage = lazy(() => import('@/features/purchases/purchase-page'))
 const UnitAlias = lazy(() => import('@/features/holdings/holding-page').then((module) => ({ default: module.UnitAlias })))
 const LocationsPage = lazy(() => import('@/features/locations/locations-page'))
 const LocationAlias = lazy(() => import('@/features/locations/locations-page').then((module) => ({ default: module.LocationAlias })))
@@ -34,6 +35,7 @@ export default function App() {
         <nav aria-label={messages.app.navigation} className="flex max-w-full flex-wrap items-center gap-2">
           <Button variant="outline" asChild className="min-h-11 h-auto gap-2 whitespace-normal text-base aria-[current=page]:border-primary aria-[current=page]:bg-muted"><NavLink to="/locations"><MapPin className="size-4" aria-hidden="true" />{messages.locations.nav}</NavLink></Button>
           <Button variant="outline" asChild className="min-h-11 h-auto gap-2 whitespace-normal text-base aria-[current=page]:border-primary aria-[current=page]:bg-muted"><NavLink to="/items"><Package className="size-4" aria-hidden="true" />{messages.catalog.nav}</NavLink></Button>
+          <Button variant="outline" asChild className="min-h-11 h-auto gap-2 whitespace-normal text-base aria-[current=page]:border-primary aria-[current=page]:bg-muted"><NavLink to="/purchases"><ReceiptText className="size-4" aria-hidden="true" />{messages.purchases.nav}</NavLink></Button>
           <Button variant="outline" asChild className="min-h-11 gap-2 text-base"><Link to="/login"><UserRound className="size-4" aria-hidden="true" />{messages.app.account}</Link></Button>
           <Button variant="outline" asChild className="min-h-11 h-auto gap-2 whitespace-normal text-base aria-[current=page]:border-primary aria-[current=page]:bg-muted"><NavLink to="/settings"><Settings className="size-4" aria-hidden="true" />{messages.settings.nav}</NavLink></Button>
           <ThemeMenu />
@@ -77,6 +79,14 @@ export default function App() {
               <Route path="/units/:id/move" element={<HoldingPage key={location.key} mode="move-unit" />} />
               <Route path="/units/:id/status" element={<HoldingPage key={location.key} mode="status-unit" />} />
               {(['receive', 'consume', 'transfer', 'adjust'] as const).map((action) => <Route key={action} path={`/items/:id/stock/${action}`} element={<HoldingPage key={location.key} mode="stock" action={action} />} />)}
+              <Route path="/purchases" element={<PurchasePage key={location.key} mode="list" />} />
+              <Route path="/purchases/new" element={<PurchasePage key={location.key} mode="create" />} />
+              <Route path="/purchases/:id/view" element={<PurchasePage key={location.key} mode="detail" />} />
+              <Route path="/purchases/:id/edit" element={<PurchasePage key={location.key} mode="edit" />} />
+              <Route path="/purchases/:id/allocate" element={<PurchasePage key={location.key} mode="select-item" />} />
+              <Route path="/purchases/:id/allocate/:itemID" element={<PurchasePage key={location.key} mode="allocate" />} />
+              <Route path="/purchases/:id" element={<PurchasePage key={location.key} mode="detail" />} />
+              <Route path="/items/:id/purchases" element={<PurchasePage key={location.key} mode="item" />} />
               <Route path="/u/:id" element={<UnitAlias />} />
               <Route path="/l/:id" element={<LocationAlias />} />
               <Route path="*" element={

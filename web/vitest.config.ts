@@ -3,6 +3,8 @@ import vite from './vite.config.ts'
 
 export default mergeConfig(vite, defineConfig({
   test: {
+    // Bound shared-host CPU use without relaxing deadlines or file isolation.
+    maxWorkers: 2,
     environment: 'jsdom',
     environmentOptions: { jsdom: { url: 'http://localhost/' } },
     include: ['src/**/*.test.{ts,tsx}'],

@@ -12,6 +12,7 @@ import { ApiError } from '@/lib/api/client'
 import { catalogListRoute, catalogNavigationState, catalogOwnedKinds, catalogOwnedRoute, catalogQuery, catalogReturnPath, catalogRoute } from '@/lib/catalog-navigation'
 import { messages } from '@/lib/messages'
 import { itemHoldingsRoute } from '@/lib/holding-navigation'
+import { itemPurchasesRoute } from '@/lib/purchase-navigation'
 import { useOnline } from '@/lib/use-online'
 import { clearSessionQueries } from '@/features/auth/use-auth-action'
 import { readCategoryTree } from '@/features/taxonomy/model'
@@ -137,6 +138,7 @@ export default function CatalogPage({ mode }: { mode: Mode }) {
                   <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">{text.identifier}：{subject.id}<br />{text.version}：{subject.revision}</p>
                   <nav aria-label={messages.owned.navigation} className="flex flex-wrap gap-2">{catalogOwnedKinds.map((kind) => <Button key={kind} asChild variant="outline" className={control}><Link to={catalogOwnedRoute(subject.id, kind)} state={navigationState}>{messages.owned.collections[kind]}</Link></Button>)}</nav>
                   <Button asChild variant="outline" className={control}><Link to={itemHoldingsRoute(subject.id)} state={navigationState}>{subject.tracking_mode === 'individual' ? messages.holdings.units : messages.holdings.stock}</Link></Button>
+                  <Button asChild variant="outline" className={control}><Link to={itemPurchasesRoute(subject.id)} state={navigationState}>{messages.purchases.itemPurchases}</Link></Button>
                   <CatalogActions item={subject} operation={operation} online={online} canWrite={canWrite} />
                 </section>}
                 <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{text.future}</p>

@@ -7,7 +7,8 @@ import { messages } from '@/lib/messages'
 import type { useReviewedMutation } from '@/lib/use-reviewed-mutation'
 
 export type ReviewOperation = Pick<ReturnType<typeof useReviewedMutation>, 'command' | 'phase' | 'open' | 'error' | 'confirmed' | 'dismiss' | 'confirm' | 'abort' | 'restoreFocus' | 'reopen'>
-export const mutationControl = 'min-h-12 h-auto max-w-full whitespace-normal py-3 text-base! leading-normal transition-colors'
+// Slot merges action classes after Button's cn call; keep wrapping explicit.
+export const mutationControl = 'min-h-12 h-auto max-w-full whitespace-normal! py-3 text-base! leading-normal transition-colors'
 const text = messages.mutations
 
 // Feature composition owns the reviewed body/effects. This shared frame preserves

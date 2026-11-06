@@ -1,6 +1,6 @@
 # Catalog Item Rules
 
-**Implementation status:** responsive reviewed catalog metadata list/detail/create/edit/archive/restore/delete screens, authoritative Go/SQLite transactions, complete filtered/signed live pages, six item HTTP operations and typed stateless adapters, and final-state item/unit approved-search publication are implemented and tested. Related barcode/alias/attribute/Tag maintenance is available through the [owned catalog screens](catalog-links.md), and separate reviewed [Unit/Stock operating routes](holdings.md) are linked from item detail; purchase/photo-assisted creation, ranked search, bulk/import/export interfaces, settings writers and complete sync workflows remain in development. Core catalog CRUD requires no AI worker.
+**Implementation status:** responsive reviewed catalog metadata list/detail/create/edit/archive/restore/delete screens, authoritative Go/SQLite transactions, complete filtered/signed live pages, six item HTTP operations and typed stateless adapters, and final-state item/unit approved-search publication are implemented and tested. Related barcode/alias/attribute/Tag maintenance is available through the [owned catalog screens](catalog-links.md), and separate reviewed [Unit/Stock operating routes](holdings.md) and [Item-associated purchases/allocation screens](purchases.md) are linked from item detail; photo-assisted creation, ranked search, bulk/import/export interfaces, settings writers and complete sync workflows remain in development. Core catalog CRUD requires no AI worker.
 
 ## Catalog metadata and holdings
 

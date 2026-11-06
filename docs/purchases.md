@@ -1,6 +1,42 @@
 # Purchases and Financial Allocations
 
-**Availability:** all seven Go/HTTP purchase operations below are implemented and tested: authorized header detail/creation/audited descriptive correction, immutable unbacked allocation, complete global filtered headers, Item-associated headers and Purchase-owned independent Lines. The routes use the existing completed-session/Origin/CSRF/client-version/idempotency/admission boundary, strict input readers and real SQL authorization. Retained loaders, migrations 0013/0014, pinned finite ISO currency policy, signed live continuations and atomic publication remain authoritative. All seven operations have verified-TLS/cookie-jar coverage; compiled-server/socket replies are separately validated against executable contracts. All seven stateless purchase browser adapters are implemented with strict runtime/type validation, original whole Purchase/Item contexts, independent ETags and no automatic replay. Complete bracketed source reads, exact form models and volatile foreground commands are also implemented and tested. Reviewed purchase operating screens are not implemented yet. Existing asset profiles deliberately require the unfinished asset financial producer before another allocation; see the integration boundary below. Existing [catalog](catalog.md) and [physical Unit/Stock](holdings.md) workflows remain functional without purchase entry or an AI worker.
+**Availability:** all seven Go/HTTP purchase operations below are implemented and tested: authorized header detail/creation/audited descriptive correction, immutable unbacked allocation, complete global filtered headers, Item-associated headers and Purchase-owned independent Lines. The routes use the existing completed-session/Origin/CSRF/client-version/idempotency/admission boundary, strict input readers and real SQL authorization. Retained loaders, migrations 0013/0014, pinned finite ISO currency policy, signed live continuations and atomic publication remain authoritative. All seven operations have verified-TLS/cookie-jar coverage; compiled-server/socket replies are separately validated against executable contracts. All seven stateless purchase browser adapters are implemented with strict runtime/type validation, original whole Purchase/Item contexts, independent ETags and no automatic replay. Complete bracketed source reads, exact form models and volatile foreground commands are also implemented and tested. Reviewed responsive purchase operating screens use that state for all seven operations, with complete selected collections, exact raw input, explicit adoption/confirmation and original-key reconciliation. Asset-backed financial integration, financial adjustment/void and receipt/media remain unfinished. Existing asset profiles deliberately require the unfinished asset financial producer before another allocation; see the integration boundary below. Existing [catalog](catalog.md) and [physical Unit/Stock](holdings.md) workflows remain functional without purchase entry or an AI worker.
+
+## Browser routes and usage
+
+Complete administrator setup, mandatory password change and a fresh login first. Open **Purchases** in the main navigation, or **This item's purchases** from a catalog Item. Phone, tablet and desktop share all routes and capabilities below. These are browser routes, not `/api/v1` endpoints:
+
+| Browser route | Purpose |
+| --- | --- |
+| `/purchases` | One actual global live page with every contracted server filter and explicit previous/first/next navigation |
+| `/purchases/new` | Reviewed header creation without an invented amount, date or currency |
+| `/purchases/PURCHASE_ID` | Exact header and complete independently versioned Line collection |
+| `/purchases/PURCHASE_ID/edit` | Changed-only descriptive correction under the original complete source context |
+| `/purchases/PURCHASE_ID/allocate` | Select one Item from the actual paged, fully filtered catalog |
+| `/purchases/PURCHASE_ID/allocate/ITEM_ID` | Review the whole original Purchase/Item interpretation and append one explicit allocation |
+| `/items/ITEM_ID/purchases` | Complete distinct associated headers bracketed by matching Item reads |
+
+An imported Purchase ID equal to `new` (case-insensitively) uses `/purchases/ID/view` for detail, keeping the original identity. Imported Item IDs such as `new` or `tree` remain independent allocation targets. Only actual implemented paths and validated filter/cursor/optional Item context survive login, including mandatory password-change transitions. Draft money, counts, bodies, original keys and credentials never travel in route state or URLs.
+
+### Create a header and allocate actual money
+
+1. Choose **Add purchase**. Enter the exact merchant name (the multiline editor and exact-name filter retain valid line breaks), a full RFC3339 instant with an explicit offset, the explicit uppercase currency code and optional receipt note. For example, `2026-11-07T10:00:00.123456789+08:00` retains all nine fractional digits; the form is deliberately not a precision-losing `datetime-local` picker. No device timezone or current date is guessed. Review and confirm; this creates only the header.
+2. Open **Add financial allocation** and select one actual catalog Item. Item discovery uses real server filters and signed pages, not a partial dropdown presented as the entire catalog. The allocation screen then completes the selected Item/individual-Unit source interval inside matching Purchase reads. Quantity Items do not cause a Stock query. From an Item-associated header, the selected Item context can go directly to this screen; current authority is still read again.
+3. Explicitly choose **No named Unit** or an actual owned individual Unit. A quantity Item requires the no-Unit choice. A named Unit requires an explicitly entered base quantity of one. No option, quantity, zero payment or existing Unit is silently selected on the user's behalf.
+4. Enter the positive whole `quantity_base` in the displayed original base unit and the whole nonnegative `paid_minor` in the header currency. The money field and review are labeled **integer minor units for the entire allocation**, not a per-unit price. Enter `0` explicitly for zero-paid history. No money is multiplied by count, no display-unit conversion/FX occurs, and the UI does not guess historical exponents with `Intl.NumberFormat` currency defaults. Retained unknown uppercase codes remain visible as exact raw minor units; new-money eligibility is checked by the server's pinned policy.
+5. Review the exact amount/count, explicit Unit/null choice, complete original measurement and separate Purchase/Item revisions, then confirm. Selected Unit metadata is context, not another Unit `If-Match`. The returned Line has its own independent revision. Success invalidates reads and opens current detail; it never installs a frozen reply as current source, receives Stock, creates/moves a Unit or opts into assets.
+
+Detail completes every owned Line page before showing its count; Item-associated lists complete every distinct-header page. Global discovery shows only the current page count, not a fictional transaction total. Lines retain exact independent IDs/revisions, raw quantities, header-currency minor amounts, literal notes and safe Item/Unit links. Different base units are not totaled, and a header has no second monetary total. A missing owner is not an empty collection. Posted Lines have no edit/delete controls.
+
+### Correction, conflicts and interruption
+
+Choose **Correct purchase** for merchant, exact instant, currency or receipt-note changes. Unchanged fields are omitted, an unchanged form stays local, and an explicit empty note clears it. Equivalent instant spelling is sent as explicit intent and the server retains its original spelling for a no-op. Complete Line context locks currency after any allocation, including zero-paid history; another label is not a substitute for conversion or financial adjustment.
+
+New editors wait for their first current read rather than adopting stale cached source. Later refetches keep raw drafts. A changed header/Item/selected Unit blocks a new confirmation until the user compares current data and explicitly keeps edited fields or discards the draft. Changed currency/tracking/measurement requires an explicit whole-interpretation acknowledgement first; raw money/count text is retained without conversion, including invalid values. A removed Unit remains visibly unavailable until explicitly reselected or changed to no Unit, never silently null. Every new command still receives authoritative server validation.
+
+Offline, initialized inputs stay volatile in the mounted page, but new writes are disabled and reconnect never submits. Back/link/reload guards protect dirty forms; review focus starts on visible static content and Escape cancels/closes rather than confirming. Long light/dark reviews use one keyboard-accessible outer scroller and wrapping action labels at 200% text. Source-read time is explicitly labeled as device time, not a frozen financial watermark.
+
+If a sent result is uncertain, fields lock and **Reopen original request** retains the original exact key/body/proofs. Read-only reconciliation may show newer data or fail; it never changes that command. **Explicitly retry original request** remains available even after current source disappears and returns only the original result without another allocation. Authentication loss clears volatile financial context and returns through only the validated route/filter scope. Asset basis/currency/unfinished-producer guards remain real conflicts with static safe explanations, not fake success or implicit physical operations.
 
 ## Header, allocation and physical receipt
 
@@ -30,7 +66,7 @@ Protected writes require exact same-origin `Origin`, CSRF, supported application
 
 ### Calling the implemented APIs
 
-Complete setup, mandatory password change and a fresh login first. Keep the cookie private and obtain a CSRF token for the current session. A same-origin API caller supplies `Content-Type: application/json`, the exact configured `Origin`, `X-CSRF-Token`, a supported `X-HomeBox-Client-Version` and a caller-owned `Idempotency-Key` on each write. Do not put credentials or financial commands in URLs, logs or persistent replay queues. The stateless browser SDK is available below; there is no purchase operating screen yet.
+Complete setup, mandatory password change and a fresh login first. Keep the cookie private and obtain a CSRF token for the current session. A same-origin API caller supplies `Content-Type: application/json`, the exact configured `Origin`, `X-CSRF-Token`, a supported `X-HomeBox-Client-Version` and a caller-owned `Idempotency-Key` on each write. Do not put credentials or financial commands in URLs, logs or persistent replay queues. The stateless browser SDK and reviewed operating screens are available; callers outside those screens must preserve the same original-context protocol.
 
 For example, `POST /purchases` accepts this complete header without an `If-Match`, amount or implicit stock receipt:
 
@@ -129,7 +165,7 @@ The global purchase collection retains all documented filters: `from`, `to`, `cu
 
 ## Stateless browser SDK
 
-`web/src/lib/api/purchases.ts` exposes the same seven operations; it is a library boundary, not a purchase operating screen or persistent draft queue:
+`web/src/lib/api/purchases.ts` exposes the same seven operations. The responsive screens compose this stateless boundary; it is not a persistent draft queue:
 
 | Adapter | Caller-owned context |
 | --- | --- |
@@ -163,7 +199,7 @@ The shared typed client preserves literal-null request fields using the installe
 
 ## Foreground review state
 
-The source/form/command modules under `web/src/features/purchases/` prepare the real operating screens; they are not an already shipped purchase page or persistent offline draft implementation.
+The source/form/command modules under `web/src/features/purchases/` drive the real responsive operating screens. They are volatile foreground state, not a persistent offline draft implementation.
 
 - `readPurchaseDetail` completes the selected Purchase's actual independent Lines between matching full header reads. Any source/revision/ownership/page failure withholds the whole result. The complete Line set establishes whether currency is locked, including zero-paid history; it never becomes a mixed-unit count or a second monetary total.
 - `readItemPurchases` completes distinct associated headers between matching full Item reads without loading every header's Lines or unrelated Items. These are live discovery resources, not a frozen dataset or a replacement for a fresh bracketed detail before correction.
@@ -177,7 +213,7 @@ Allocation defaults leave nullable choice, count and money blank. Even no named 
 
 The shared `usePurchaseMutation` controller requires foreground review/explicit single-flight confirmation, aborts on interruption and retains uncertain original context for explicit same-key reconciliation. Refetch, cache eviction, dismissal and reconnect cannot create another command or financial write; session loss clears volatile command context rather than forwarding bodies/amounts through login. A CSRF failure before sending is not a committed uncertain write. Confirmed/sent-failed purchase commands invalidate only purchase/catalog/holding read roots, never installing a frozen reply as current state. Related catalog/owned/taxonomy/location/holding changes invalidate purchase scopes in return because original Item interpretation or same-Line current-placement selection may have changed. Unrelated account/taxonomy/location data is not overwritten by a purchase result.
 
-These modules have runtime/strict-type and private actual-Go browser evidence, including genuine source changes inside read intervals, explicit whole-interpretation adoption, all three writers and original-key reconciliation after a committed lost reply. Responsive purchase routes, enlarged keyboard-accessible reviews and their operating-screen acceptance remain the next implementation gate; existing physical/catalog screens stay functional.
+These modules have runtime/strict-type and private actual-Go browser evidence, including genuine source changes inside read intervals, explicit whole-interpretation adoption, all three writers and original-key reconciliation after a committed lost reply. The responsive routes above compose the same modules with complete collection views, native exact-text/count controls, explicit foreground reviews and no generated primitive changes. Existing physical/catalog screens stay functional; asset finance, adjustment/void and media remain separate gates.
 
 ## Verification and remaining work
 
@@ -204,7 +240,10 @@ Private actual-SDK/Go browser workflows exercise every adapter, complete signed 
 npm --prefix web test -- --coverage.enabled=false src/lib/api/purchases.test.ts
 npm --prefix web test -- --coverage.enabled=false src/features/purchases
 npm --prefix web run test:e2e -- tests/e2e/purchases-api.spec.ts
+npm --prefix web run test:e2e -- tests/e2e/purchases.spec.ts
 make check-web
 ```
 
-These automated checks do not establish reviewed purchase UI behavior, asset acquisition/adjustment math, receipts/media, the complete offline replica, physical phones or production NAS acceptance. Those remain separate implementation/testing gates, not dropped product scope. Existing offline `purchase`/`purchase_line` payloads and all original operation identities are preserved; strict HTTP boundaries and real Go commands/collections do not enable the complete 22-entity sync protocol.
+The real operating-screen suite separately drives header creation/descriptive correction, fully filtered explicit pages, actual Item/Unit selection, whole-allocation money, zero-paid locks, genuine first-allocation proof conflicts, explicit complete-interpretation adoption and committed malformed-reply reconciliation after later source changes. It checks dirty/Back/Escape/focus, offline no-replay, safe real-login scope returns and enlarged light/dark wrapping/accessibility. Retained 205-header/Line collections, imported `new` identity and all three actual asset financial guards use a private offline Node SQLite baseline with real source/counters/current payloads, closed before the real Go CLI validates/provisions/serves it. No fictional HTTP receipts, reset endpoints or weaker production admission are introduced; Node remains development-only.
+
+These automated checks do not establish asset acquisition/adjustment math, receipts/media, the complete offline replica, physical phones or production NAS acceptance. Those remain separate implementation/testing gates, not dropped product scope. Existing offline `purchase`/`purchase_line` payloads and all original operation identities are preserved; strict HTTP boundaries and real Go commands/collections do not enable the complete 22-entity sync protocol.

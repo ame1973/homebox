@@ -3,9 +3,11 @@ import { Controller, useForm } from 'react-hook-form'
 import { Button } from '@/components/ui/button'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { mutationControl as control } from '@/components/mutation-review'
 import { itemPageQuerySchema, type ItemPageQuery } from '@/lib/api/catalog'
+import { purchasePageQuerySchema } from '@/lib/api/purchases'
 import type { LocationTree } from '@/features/locations/tree'
 import type { CategoryTree } from '@/features/taxonomy/model'
 import { messages } from '@/lib/messages'
@@ -13,8 +15,8 @@ import { CatalogHierarchyPicker } from './hierarchy-picker'
 
 const text = messages.catalog
 type Values = Record<'q' | 'from' | 'to' | 'currency' | 'merchant' | 'category_id' | 'location_id' | 'scope' | 'status' | 'limit', string>
-export function CatalogFilters({ query, categories, locations, disabled, onApply }: {
-  query: ItemPageQuery; categories: CategoryTree; locations: LocationTree; disabled: boolean; onApply: (query: ItemPageQuery) => void
+export function CatalogFilters({ query, categories, locations, disabled, onApply, domain = 'catalog' }: {
+  query: ItemPageQuery; categories: CategoryTree; locations: LocationTree; disabled: boolean; onApply: (query: ItemPageQuery) => void; domain?: 'catalog' | 'purchases'
 }) {
   const prefix = useId()
   const advanced = useRef<HTMLDetailsElement>(null)
@@ -24,7 +26,7 @@ export function CatalogFilters({ query, categories, locations, disabled, onApply
     if (disabled) return
     const candidate: Record<string, string | number> = Object.fromEntries(Object.entries(values).filter(([, value]) => value !== ''))
     candidate.limit = /^[1-9][0-9]{0,2}$/.test(values.limit) ? Number(values.limit) : Number.NaN
-    const result = itemPageQuerySchema.safeParse(candidate)
+    const result = (domain === 'purchases' ? purchasePageQuerySchema : itemPageQuerySchema).safeParse(candidate)
     form.clearErrors()
     if (!result.success) {
       if (advanced.current) advanced.current.open = true
@@ -37,12 +39,12 @@ export function CatalogFilters({ query, categories, locations, disabled, onApply
   function field(name: keyof typeof labels) {
     return <Controller key={name} name={name} control={form.control} render={({ field, fieldState }) => <Field data-invalid={fieldState.invalid}>
       <FieldLabel htmlFor={`${prefix}-${name}`} className="text-base">{labels[name]}</FieldLabel>
-      <Input {...field} id={`${prefix}-${name}`} type={name === 'from' || name === 'to' ? 'date' : name === 'q' ? 'search' : 'text'} inputMode={name === 'limit' ? 'numeric' : undefined} autoComplete="off" aria-invalid={fieldState.invalid} className="h-auto min-h-12 min-w-0 py-3 text-base md:text-base" />
+      {name === 'merchant' ? <Textarea {...field} id={`${prefix}-${name}`} rows={2} maxLength={600} autoComplete="off" aria-invalid={fieldState.invalid} className="min-h-20 text-base md:text-base" /> : <Input {...field} id={`${prefix}-${name}`} type={name === 'from' || name === 'to' ? 'date' : name === 'q' ? 'search' : 'text'} inputMode={name === 'limit' ? 'numeric' : undefined} autoComplete="off" aria-invalid={fieldState.invalid} className="h-auto min-h-12 min-w-0 py-3 text-base md:text-base" />}
       <FieldError errors={[fieldState.error]} />
     </Field>} />
   }
   return <form noValidate onSubmit={(event) => { void form.handleSubmit(apply)(event) }} className="min-w-0 space-y-5 rounded-lg border p-5">
-    {field('q')}
+    {domain === 'catalog' && field('q')}
     <details ref={advanced}><summary className="min-h-12 cursor-pointer py-3 font-medium focus-visible:outline-2 focus-visible:outline-ring">{text.advanced}</summary>
       <div className="grid min-w-0 gap-5 py-4 md:grid-cols-2">
         {(['from', 'to', 'currency', 'merchant'] as const).map(field)}
@@ -59,7 +61,7 @@ export function CatalogFilters({ query, categories, locations, disabled, onApply
         {field('limit')}
       </div>
     </details>
-    <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{text.filterHelp}</p>
+    <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{domain === 'purchases' ? messages.purchases.filterHelp : text.filterHelp}</p>
     <div className="flex flex-wrap gap-2"><Button type="submit" variant="outline" disabled={disabled} className={control}>{text.apply}</Button><Button type="button" variant="outline" disabled={disabled} className={control} onClick={() => onApply({})}>{text.reset}</Button></div>
   </form>
 }
