@@ -221,7 +221,7 @@ func TestHoldingReadAdmissionMissingOwnersAndCorruptLookaheadNeverExposePrefixes
 			t.Fatal("invalid Stock page size escaped", err)
 		}
 	}
-	for _, filter := range []StockFilters{{From: "2026-02-30"}, {To: "0000-01-01"}, {From: "2026-11-06", To: "2026-11-05"}, {Currency: "twd"}, {CategoryID: strings.Repeat("x", 129)}, {LocationID: string([]byte{0xff})}, {Scope: "other"}, {Status: "stored"}, {Merchant: strings.Repeat("界", 301)}} {
+	for _, filter := range []StockFilters{{From: "2026-02-30"}, {To: "0000-01-01"}, {From: "2026-11-06", To: "2026-11-05"}, {Currency: "twd"}, {ItemID: strings.Repeat("界", 129)}, {ItemID: string([]byte{0xff})}, {CategoryID: strings.Repeat("x", 129)}, {LocationID: string([]byte{0xff})}, {Scope: "other"}, {Status: "stored"}, {Merchant: strings.Repeat("界", 301)}} {
 		if page, err := inventory.PageStock(t.Context(), fixture.token, "", 1, filter); !errors.Is(err, ErrDomainInput) || page.Data != nil || page.NextCursor != nil {
 			t.Fatal("invalid Stock criteria released a prefix", err)
 		}

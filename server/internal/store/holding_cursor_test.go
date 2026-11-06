@@ -20,7 +20,8 @@ func readStockPurposeTest(t *testing.T, filters StockFilters, zone string) strin
 	encoded, err := json.Marshal(struct {
 		Filters  ItemFilters `json:"filters"`
 		Timezone string      `json:"timezone"`
-	}{normalized, zone})
+		ItemID   string      `json:"item_id,omitempty"`
+	}{normalized, zone, filters.ItemID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,6 +47,14 @@ func TestHoldingReadStockCursorPreservesMaximumControlUnicodePairsWithinItsOwnLa
 	}
 	if next, err := inventory.PageStock(t.Context(), fixture.token, *page.NextCursor, 1, StockFilters{}); err != nil || len(next.Data) != 1 || next.Data[0].ItemID != itemID || next.Data[0].LocationID != strings.Repeat("\x02", 128) {
 		t.Fatal("Stock continuation compared an escaped JSON string instead of the real SQL tuple", err)
+	}
+	selected := StockFilters{ItemID: itemID}
+	filtered, err := inventory.PageStock(t.Context(), fixture.token, "", 1, selected)
+	if err != nil || filtered.NextCursor == nil || len(*filtered.NextCursor) <= 2048 || len(*filtered.NextCursor) > 4096 {
+		t.Fatal("Item filter enlarged or truncated the full composite continuation", err)
+	}
+	if next, err := inventory.PageStock(t.Context(), fixture.token, *filtered.NextCursor, 1, selected); err != nil || len(next.Data) != 1 || next.Data[0].ItemID != itemID {
+		t.Fatal("Item selection did not retain full control-code-point identity", err)
 	}
 	if _, err := decodeMetadataCursor(fixture.auth, readStockPurposeTest(t, StockFilters{}, "UTC"), *page.NextCursor, value.AdminID, value.Epoch, 1, fixture.auth.now()); !errors.Is(err, ErrInvalidCursor) {
 		t.Fatal("the existing single-ID codec silently acquired a larger/composite identity policy", err)
@@ -87,6 +96,7 @@ func TestHoldingReadStockCursorsBindEveryEffectiveFilterTimezoneAndPageSizeWitho
 	for _, mutate := range []func(*StockFilters){
 		func(v *StockFilters) { v.From = "2026-11-04" }, func(v *StockFilters) { v.To = "2026-11-07" }, func(v *StockFilters) { v.Currency = "USD" },
 		func(v *StockFilters) { v.CategoryID = "other" }, func(v *StockFilters) { v.LocationID = "other" }, func(v *StockFilters) { v.Scope = "direct" },
+		func(v *StockFilters) { v.ItemID = "other" },
 		func(v *StockFilters) { v.Status = "archived" }, func(v *StockFilters) { v.Merchant = "privatemerchant" },
 	} {
 		changed := filters

@@ -796,7 +796,7 @@ export interface paths {
         };
         /**
          * Inventory
-         * @description Complete live quantity-balance pages in (item_id,location_id) order, including retained zero balances. Apply every filter before slicing the page. Status is the owning Item metadata status; location scope selects the actual balance location, not every balance of an Item found elsewhere. Category and location scope default to subtree. Dates are inclusive home-timezone civil dates of the same associated purchase that must match currency/exact merchant, not movement timestamps. Signed cursors bind normalized filters, resolved home timezone, principal, epoch and page size; composite positions allow 4096 bytes. Never sum different measurement tuples or claim a list ETag/frozen snapshot.
+         * @description Complete live quantity-balance pages in (item_id,location_id) order, including retained zero balances. Apply every filter before slicing the page; optional item_id selects exactly that Item without scanning unrelated balances. Status is the owning Item metadata status; location scope selects the actual balance location, not every balance of an Item found elsewhere. Category and location scope default to subtree and never widen item_id. Dates are inclusive home-timezone civil dates of the same associated purchase that must match currency/exact merchant, not movement timestamps. Signed cursors bind normalized filters including optional item_id, resolved home timezone, principal, epoch and page size; composite positions allow 4096 bytes. Never sum different measurement tuples or claim a list ETag/frozen snapshot.
          */
         readonly get: operations["get_inventory"];
         readonly put?: never;
@@ -5905,6 +5905,8 @@ export interface operations {
                 readonly currency?: string;
                 readonly cursor?: string;
                 readonly from?: string;
+                /** @description Exact catalog Item identity, independent of category/location scope. An unmatched identity or an Item without balances returns an empty collection, not proof that the Item exists. Bind this criterion into signed continuations and apply it before slicing or validating unrelated balances. */
+                readonly item_id?: string;
                 readonly limit?: number;
                 readonly location_id?: string;
                 readonly merchant?: string;

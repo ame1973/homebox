@@ -208,7 +208,7 @@ class HoldingsContractTests(unittest.TestCase):
         operation = API["paths"]["/inventory"]["get"]
         params = {entry["name"]: entry["schema"] for entry in operation["parameters"]}
         self.assertEqual(
-            {"from", "to", "currency", "category_id", "location_id", "scope", "status", "merchant", "limit", "cursor"},
+            {"from", "to", "currency", "item_id", "category_id", "location_id", "scope", "status", "merchant", "limit", "cursor"},
             set(params),
         )
         self.assertEqual(["active", "archived"], params["status"]["enum"])
@@ -219,6 +219,22 @@ class HoldingsContractTests(unittest.TestCase):
         for path in ["/items", "/locations/tree", "/categories", "/tags", "/items/{id}/units"]:
             other = {entry["name"]: entry["schema"] for entry in API["paths"][path]["get"]["parameters"]}
             self.assertEqual(2048, other["cursor"]["maxLength"])
+
+    def test_inventory_item_selection_is_bounded_exact_optional_and_not_a_catalog_filter(self):
+        operation = API["paths"]["/inventory"]["get"]
+        params = {entry["name"]: entry for entry in operation["parameters"]}
+        self.assertFalse(params["item_id"]["required"])
+        selection = Draft202012Validator(params["item_id"]["schema"])
+        for identity in ["new", "tree", "  品項 +?# é  ", "😀" * 128, "\x00" * 128]:
+            selection.validate(identity)
+        for identity in ["", "😀" * 129, None, 1, [], {}]:
+            with self.subTest(identity=identity), self.assertRaises(ValidationError):
+                selection.validate(identity)
+        self.assertIn("before slicing", operation["description"])
+        self.assertIn("never widen item_id", operation["description"])
+        self.assertIn("not proof that the Item exists", params["item_id"]["description"])
+        for path in ["/items", "/items/{id}/units", "/categories", "/tags", "/locations/tree"]:
+            self.assertNotIn("item_id", {entry["name"] for entry in API["paths"][path]["get"]["parameters"]})
 
     def test_original_item_and_unit_write_proofs_remain_distinct_from_response_row_revisions(self):
         for path, method, scope, response_scope, body_limit in WRITES:

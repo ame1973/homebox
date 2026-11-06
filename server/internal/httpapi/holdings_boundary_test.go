@@ -201,15 +201,21 @@ func TestHoldingErrorsAreStaticAllowlistedAndNeverExposeStorageOrChangeCookies(t
 }
 
 func TestHoldingStockQueryBudgetsPreserveEveryExactFieldAndIndependentCursorWidth(t *testing.T) {
-	values := url.Values{"from": {"2026-11-05"}, "to": {"2026-11-06"}, "currency": {"TWD"}, "category_id": {"category"}, "location_id": {"location"}, "scope": {"direct"}, "status": {"archived"}, "merchant": {"  Exact é  "}, "limit": {"100"}, "cursor": {strings.Repeat("x", 4096)}}
+	values := url.Values{"item_id": {"物品 +?# é"}, "from": {"2026-11-05"}, "to": {"2026-11-06"}, "currency": {"TWD"}, "category_id": {"category"}, "location_id": {"location"}, "scope": {"direct"}, "status": {"archived"}, "merchant": {"  Exact é  "}, "limit": {"100"}, "cursor": {strings.Repeat("x", 4096)}}
 	cursor, size, filters, ok := stockListQuery(httptest.NewRecorder(), apiRequest(http.MethodGet, "/api/v1/inventory?"+values.Encode(), ""), "request")
-	if !ok || len(cursor) != 4096 || size != 100 || filters.Merchant != "  Exact é  " || filters.From != "2026-11-05" || filters.To != "2026-11-06" || filters.Currency != "TWD" || filters.CategoryID != "category" || filters.LocationID != "location" || filters.Scope != "direct" || filters.Status != "archived" {
+	if !ok || filters.ItemID != "物品 +?# é" || len(cursor) != 4096 || size != 100 || filters.Merchant != "  Exact é  " || filters.From != "2026-11-05" || filters.To != "2026-11-06" || filters.Currency != "TWD" || filters.CategoryID != "category" || filters.LocationID != "location" || filters.Scope != "direct" || filters.Status != "archived" {
 		t.Fatal("inventory query lost exact filters, page size or its composite budget")
+	}
+	for _, id := range []string{"new", "tree", strings.Repeat("😀", 128), strings.Repeat("\x00", 128)} {
+		_, _, selected, ok := stockListQuery(httptest.NewRecorder(), apiRequest(http.MethodGet, "/api/v1/inventory?item_id="+url.QueryEscape(id), ""), "request")
+		if !ok || selected.ItemID != id {
+			t.Fatal("Item query repaired or rejected a full retained identity")
+		}
 	}
 	if cursor, size, _, ok := stockListQuery(httptest.NewRecorder(), apiRequest(http.MethodGet, "/api/v1/inventory", ""), "request"); !ok || cursor != "" || size != 50 {
 		t.Fatal("inventory default live page changed")
 	}
-	for _, query := range []string{"q=uncontracted", "unknown=1", "limit=0", "limit=101", "limit=1&limit=2", "cursor=", "cursor=" + strings.Repeat("x", 4097), "merchant=", "category_id=", "from=2026", "to=%ff", "currency=TW", "scope=invalid-value", "%zz=1", "cursor=" + strings.Repeat("x", 16<<10)} {
+	for _, query := range []string{"q=uncontracted", "unknown=1", "limit=0", "limit=101", "limit=1&limit=2", "cursor=", "cursor=" + strings.Repeat("x", 4097), "merchant=", "category_id=", "item_id=", "item_id=x&item_id=y", "item_id=%ff", "item_id=" + url.QueryEscape(strings.Repeat("😀", 129)), "from=2026", "to=%ff", "currency=TW", "scope=invalid-value", "%zz=1", "cursor=" + strings.Repeat("x", 16<<10)} {
 		w := httptest.NewRecorder()
 		if _, _, _, ok := stockListQuery(w, apiRequest(http.MethodGet, "/api/v1/inventory?"+query, ""), "request"); ok || w.Code != 400 {
 			t.Fatal("invalid query escaped inventory admission", query, w.Code)

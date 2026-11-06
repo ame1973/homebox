@@ -95,7 +95,7 @@ describe('twelve explicit holding transports', () => {
       expect(url.searchParams.get('cursor')).toBe('opaque?x=1&limit=99+#')
       expect(url.searchParams.getAll('limit')).toEqual(['1'])
     }
-    const query = { from: '0001-01-01', to: '9999-12-31', currency: 'TWD', category_id: 'category', location_id: 'location', scope: 'direct', status: 'archived', merchant: '  Exact é 😀  ', limit: 100, cursor: 'x'.repeat(4096) } as const
+    const query = { item_id: '物品 +?# é', from: '0001-01-01', to: '9999-12-31', currency: 'TWD', category_id: 'category', location_id: 'location', scope: 'direct', status: 'archived', merchant: '  Exact é 😀  ', limit: 100, cursor: 'x'.repeat(4096) } as const
     await api.fetchStockPage(query, signal())
     const request = fetchMock.mock.lastCall?.[0] as Request
     const url = new URL(request.url)
@@ -205,7 +205,7 @@ describe('strict holding input boundaries', () => {
       await expect(api.fetchStockPage(query as never, signal())).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
       await expect(api.fetchItemUnitsPage(item.id, query as never, signal())).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
     }
-    for (const query of [{ from: '0000-01-01' }, { from: '2026-02-30' }, { from: '2026-11-06', to: '2026-11-05' }, { currency: 'twd' }, { status: 'stored' }, { scope: 'other' }, { merchant: '' }, { q: 'uncontracted' }, { cursor: 'x'.repeat(4097) }]) await expect(api.fetchStockPage(query as never, signal())).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
+    for (const query of [{ from: '0000-01-01' }, { from: '2026-02-30' }, { from: '2026-11-06', to: '2026-11-05' }, { currency: 'twd' }, { status: 'stored' }, { scope: 'other' }, { merchant: '' }, { item_id: '' }, { item_id: null }, { item_id: '😀'.repeat(129) }, { item_id: '\uD800' }, { q: 'uncontracted' }, { cursor: 'x'.repeat(4097) }]) await expect(api.fetchStockPage(query as never, signal())).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
     await expect(api.fetchItemUnitsPage(item.id, { cursor: 'x'.repeat(2049) }, signal())).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -277,6 +277,22 @@ describe('strict holding replies and caller-owned proof scopes', () => {
     await expect(api.transferStock({ ...receive, source_location_id: 'source' }, stockContext())).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
     fetchMock.mockResolvedValueOnce(reply(stock, '"2"'))
     await expect(api.adjustStock({ ...receive, quantity_base: 0, reason: 'Counted' }, stockContext())).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+  })
+
+  it('requires every Item-scoped Stock row to match the exact selected identity rather than filtering a page locally', async () => {
+    const api = await import('./holdings')
+    const page = { data: [stock], next_cursor: null }
+    fetchMock.mockResolvedValueOnce(reply(page))
+    expect(await api.fetchStockPage({ item_id: quantity.id }, signal())).toEqual(page)
+    const request = fetchMock.mock.calls[0]?.[0] as Request
+    expect(new URL(request.url).searchParams.get('item_id')).toBe(quantity.id)
+    fetchMock.mockResolvedValueOnce(reply({ ...page, data: [{ ...stock, item_id: 'another' }] }))
+    await expect(api.fetchStockPage({ item_id: quantity.id }, signal())).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+    for (const id of ['new', 'tree', '😀'.repeat(128), '\0'.repeat(128)]) {
+      fetchMock.mockResolvedValueOnce(reply({ data: [], next_cursor: null }))
+      expect(await api.fetchStockPage({ item_id: id }, signal())).toEqual({ data: [], next_cursor: null })
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(6)
   })
 
   it('preserves full retained Unit text, null/empty states and maximum canonical-pair components', async () => {

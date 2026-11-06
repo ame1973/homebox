@@ -55,13 +55,20 @@ func exerciseHoldingsHTTP(t *testing.T, call func(string, string, string, string
 	if stock.QuantityBase != 1001 || stock.Revision != 2 {
 		t.Fatal("transfer returned an Item proof or wrong target")
 	}
-	first := ownedPageReply(t, call(http.MethodGet, "/api/v1/inventory?limit=1", "", "", ""))
+	selectedStock := "/api/v1/inventory?item_id=" + url.QueryEscape(quantity.ID)
+	first := ownedPageReply(t, call(http.MethodGet, selectedStock+"&limit=1", "", "", ""))
 	if len(first.Data) != 1 || first.NextCursor == nil {
 		t.Fatal("Stock first page did not sign a complete tuple continuation")
 	}
-	last := ownedPageReply(t, call(http.MethodGet, "/api/v1/inventory?limit=1&cursor="+url.QueryEscape(*first.NextCursor), "", "", ""))
+	last := ownedPageReply(t, call(http.MethodGet, selectedStock+"&limit=1&cursor="+url.QueryEscape(*first.NextCursor), "", "", ""))
 	if len(last.Data) != 1 || last.NextCursor != nil {
 		t.Fatal("Stock continuation truncated or repeated a balance")
+	}
+	for _, scope := range []string{"/api/v1/inventory?limit=1", "/api/v1/inventory?limit=1&item_id=" + url.QueryEscape(individual.ID)} {
+		expectError(t, call(http.MethodGet, scope+"&cursor="+url.QueryEscape(*first.NextCursor), "", "", ""), 400, "INVALID_CURSOR")
+	}
+	if empty := ownedPageReply(t, call(http.MethodGet, "/api/v1/inventory?item_id="+url.QueryEscape(individual.ID), "", "", "")); len(empty.Data) != 0 || empty.NextCursor != nil {
+		t.Fatal("Item stock filtering returned another Item's balances")
 	}
 	balances := make(map[string]int64)
 	for _, row := range append(first.Data, last.Data...) {

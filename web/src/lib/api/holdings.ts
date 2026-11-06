@@ -52,7 +52,7 @@ export const stockAdjustSchema: z.ZodType<components['schemas']['StockAdjustInpu
 })
 export const stockPageQuerySchema: z.ZodType<StockPageQuery> = z.strictObject({
   ...pageQuerySchema.shape, cursor: text(1, 4096).optional(), from: civilDateSchema.optional(), to: civilDateSchema.optional(),
-  currency: z.string().regex(/^[A-Z]{3}(?![\s\S])/).optional(), category_id: idSchema.optional(), location_id: idSchema.optional(),
+  item_id: idSchema.optional(), currency: z.string().regex(/^[A-Z]{3}(?![\s\S])/).optional(), category_id: idSchema.optional(), location_id: idSchema.optional(),
   scope: z.enum(['direct', 'subtree']).optional(), status: z.enum(['active', 'archived']).optional(), merchant: text(1, 300).optional(),
 }).refine((query) => query.from === undefined || query.to === undefined || query.from <= query.to)
 const unitsPageSchema: z.ZodType<UnitsPage> = z.strictObject({ data: z.array(unitSchema).max(100), next_cursor: text(1, 2048).nullable() })
@@ -82,7 +82,8 @@ export async function fetchStockPage(query: StockPageQuery, signal: AbortSignal)
   const values = input(stockPageQuerySchema, query)
   return requestData(signal, (signal) => apiClient.GET('/inventory', { signal, params: { query: values } }), stockPageSchema, 8_000,
     (page, response) => validLivePage(page, response, values) &&
-      page.data.every((stock) => values.location_id === undefined || values.scope !== 'direct' || stock.location_id === values.location_id))
+      page.data.every((stock) => (values.item_id === undefined || stock.item_id === values.item_id) &&
+        (values.location_id === undefined || values.scope !== 'direct' || stock.location_id === values.location_id)))
 }
 
 export async function createUnit(itemID: string, body: components['schemas']['UnitCreate'], context: UnitCreateContext): Promise<Unit> {

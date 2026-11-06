@@ -311,7 +311,7 @@ void [reviewedHoldingItem, reviewedHoldingUnit, unitWithUnknownLocation, unitWit
 
 type StockReadQuery = NonNullable<operations['get_inventory']['parameters']['query']>
 const unfilteredStockRead = {} satisfies StockReadQuery
-const filteredStockRead = { from: '2026-11-05', to: '2026-11-06', currency: 'TWD', category_id: 'category', location_id: 'location', scope: 'subtree', status: 'archived', merchant: 'Exact merchant', limit: 50, cursor: 'opaque' } satisfies StockReadQuery
+const filteredStockRead = { item_id: 'item', from: '2026-11-05', to: '2026-11-06', currency: 'TWD', category_id: 'category', location_id: 'location', scope: 'subtree', status: 'archived', merchant: 'Exact merchant', limit: 50, cursor: 'opaque' } satisfies StockReadQuery
 // @ts-expect-error Inventory status describes Item metadata, not an individual Unit lifecycle.
 const lifecycleStockRead: StockReadQuery = { status: 'stored' }
 // @ts-expect-error Inventory has no catalog q parameter or implicit text-search mode.
@@ -320,6 +320,14 @@ const searchedStockRead: StockReadQuery = { q: 'uncontracted' }
 const textStockReadSize: StockReadQuery = { limit: '50' }
 // @ts-expect-error An omitted category filter is distinct from a null query field.
 const nullStockReadCategory: StockReadQuery = { category_id: null }
+const itemScopedStockRead = { item_id: 'item', limit: 1 } satisfies StockReadQuery
+// @ts-expect-error Item selection is exact string identity, not an array of matches.
+const multipleStockItemIDs: StockReadQuery = { item_id: ['item', 'other'] }
+// @ts-expect-error An omitted Item criterion is distinct from a null query value.
+const nullStockItemID: StockReadQuery = { item_id: null }
+// @ts-expect-error The additive inventory criterion does not widen catalog queries.
+const catalogItemIDFilter = fetchCatalogPage({ item_id: 'item' }, new AbortController().signal)
+void [itemScopedStockRead, multipleStockItemIDs, nullStockItemID, catalogItemIDFilter]
 void [unfilteredStockRead, filteredStockRead, lifecycleStockRead, searchedStockRead, textStockReadSize, nullStockReadCategory]
 
 declare const holdingSDK: typeof import('../src/lib/api/holdings')

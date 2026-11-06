@@ -29,7 +29,8 @@ func stockListQuery(w http.ResponseWriter, r *http.Request, requestID string) (s
 		destination *string
 		min, max    int
 	}{
-		"from": {&filters.From, 10, 10}, "to": {&filters.To, 10, 10}, "currency": {&filters.Currency, 3, 3},
+		"item_id": {&filters.ItemID, 1, 128},
+		"from":    {&filters.From, 10, 10}, "to": {&filters.To, 10, 10}, "currency": {&filters.Currency, 3, 3},
 		"category_id": {&filters.CategoryID, 1, 128}, "location_id": {&filters.LocationID, 1, 128}, "scope": {&filters.Scope, 1, 7},
 		"status": {&filters.Status, 1, 8}, "merchant": {&filters.Merchant, 1, 300},
 	}

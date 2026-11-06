@@ -17,6 +17,7 @@ type StockList = metadataList[Stock]
 // StockFilters deliberately excludes catalog text search. Dates/currency/merchant
 // refer to one associated purchase; location scope applies to each actual balance.
 type StockFilters struct {
+	ItemID     string `json:"item_id,omitempty"`
 	From       string `json:"from"`
 	To         string `json:"to"`
 	Currency   string `json:"currency"`
@@ -68,7 +69,7 @@ func (inventory *Inventory) PageUnits(ctx context.Context, token, itemID, cursor
 }
 
 func (inventory *Inventory) PageStock(ctx context.Context, token, cursor string, limit int, filters StockFilters) (StockList, error) {
-	if limit < 1 || limit > 100 || len(cursor) > stockCursorBytes {
+	if limit < 1 || limit > 100 || len(cursor) > stockCursorBytes || filters.ItemID != "" && !validDomainID(filters.ItemID) {
 		return StockList{}, ErrDomainInput
 	}
 	// Reuse the catalog's strict civil-date/Unicode/default policy without adding
@@ -83,22 +84,24 @@ func (inventory *Inventory) PageStock(ctx context.Context, token, cursor string,
 		if err != nil {
 			return StockList{}, err
 		}
+		// Omit an absent Item filter to preserve existing unfiltered cursor MACs.
 		scope, err := json.Marshal(struct {
 			Filters  ItemFilters `json:"filters"`
 			Timezone string      `json:"timezone"`
-		}{normalized, zoneName})
+			ItemID   string      `json:"item_id,omitempty"`
+		}{normalized, zoneName, filters.ItemID})
 		if err != nil {
 			return StockList{}, err
 		}
 		return readMetadataIdentityPageTx(ctx, tx, inventory.auth, token, cursor, limit, stockCursorPurpose+":"+authDigest(string(scope)), stockCursorBytes,
 			func(id string) bool { return validProjectionIdentity("stock", id) },
 			func(ctx context.Context, tx *sql.Tx, after string, size int) (metadataPage[Stock], error) {
-				return listFilteredStock(ctx, tx, after, size, normalized, from, to, zone)
+				return listFilteredStock(ctx, tx, after, size, normalized, filters.ItemID, from, to, zone)
 			})
 	})
 }
 
-func listFilteredStock(ctx context.Context, tx *sql.Tx, after string, limit int, filters ItemFilters, from, to int, zone *time.Location) (metadataPage[Stock], error) {
+func listFilteredStock(ctx context.Context, tx *sql.Tx, after string, limit int, filters ItemFilters, itemID string, from, to int, zone *time.Location) (metadataPage[Stock], error) {
 	afterItem, afterLocation := "", ""
 	if after != "" {
 		parts, valid := projectionPairParts(after)
@@ -108,6 +111,10 @@ func listFilteredStock(ctx context.Context, tx *sql.Tx, after string, limit int,
 		afterItem, afterLocation = parts[0], parts[1]
 	}
 	clauses, args := []string{"(b.item_id,b.location_id)>(?,?)"}, []any{filters.CategoryID, filters.LocationID, afterItem, afterLocation}
+	if itemID != "" {
+		clauses = append(clauses, "b.item_id=?")
+		args = append(args, itemID)
+	}
 	if filters.CategoryID != "" {
 		ids := "SELECT id FROM filter_categories"
 		if filters.Scope == "direct" {
