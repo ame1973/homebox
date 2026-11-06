@@ -172,7 +172,9 @@ class HoldingsContractTests(unittest.TestCase):
         for name, row, path in [("UnitList", UNIT, "/items/{id}/units"), ("StockList", STOCK, "/inventory")]:
             validator(name).validate({"data": [], "next_cursor": None})
             validator(name).validate({"data": [deepcopy(row) for _ in range(100)], "next_cursor": "opaque"})
-            for body in [{"data": []}, {"data": [], "next_cursor": ""}, {"data": [], "next_cursor": "x" * 2049},
+            cursor_bound = 4096 if name == "StockList" else 2048
+            validator(name).validate({"data": [], "next_cursor": "x" * cursor_bound})
+            for body in [{"data": []}, {"data": [], "next_cursor": ""}, {"data": [], "next_cursor": "x" * (cursor_bound + 1)},
                          {"data": [deepcopy(row) for _ in range(101)], "next_cursor": None},
                          {"data": [], "next_cursor": None, "total_quantity_base": 1}]:
                 with self.subTest(schema=name, body=body), self.assertRaises(ValidationError):
@@ -181,12 +183,28 @@ class HoldingsContractTests(unittest.TestCase):
             params = {entry["name"]: entry for entry in operation["parameters"]}
             self.assertEqual(50, params["limit"]["schema"]["default"])
             self.assertEqual(100, params["limit"]["schema"]["maximum"])
-            self.assertEqual(2048, params["cursor"]["schema"]["maxLength"])
+            self.assertEqual(cursor_bound, params["cursor"]["schema"]["maxLength"])
             self.assertEqual(0, operation["x-max-body-bytes"])
             self.assertEqual(16384, operation["x-max-query-bytes"])
             self.assertNotIn("ETag", operation["responses"]["200"]["headers"])
         # These two strengthened pages do not silently change other live lists.
         validator("TagList").validate({"data": []})
+
+    def test_inventory_filter_scope_and_composite_cursor_budget_do_not_change_other_collections(self):
+        operation = API["paths"]["/inventory"]["get"]
+        params = {entry["name"]: entry["schema"] for entry in operation["parameters"]}
+        self.assertEqual(
+            {"from", "to", "currency", "category_id", "location_id", "scope", "status", "merchant", "limit", "cursor"},
+            set(params),
+        )
+        self.assertEqual(["active", "archived"], params["status"]["enum"])
+        self.assertEqual("subtree", params["scope"]["default"])
+        self.assertIn("same associated purchase", operation["description"])
+        self.assertIn("actual balance location", operation["description"])
+        self.assertEqual(4096, params["cursor"]["maxLength"])
+        for path in ["/items", "/locations/tree", "/categories", "/tags", "/items/{id}/units"]:
+            other = {entry["name"]: entry["schema"] for entry in API["paths"][path]["get"]["parameters"]}
+            self.assertEqual(2048, other["cursor"]["maxLength"])
 
     def test_original_item_and_unit_write_proofs_remain_distinct_from_response_row_revisions(self):
         for path, method, scope, response_scope, body_limit in WRITES:

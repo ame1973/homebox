@@ -299,6 +299,19 @@ void [reviewedHoldingItem, reviewedHoldingUnit, unitWithUnknownLocation, unitWit
   nullUnitMove, textHoldingQuantity, incompleteStockTransfer, reasonlessStockAdjustment, implicitStockConversion, incompleteStockMeasurement,
   unprovenHoldingCreation, unprovenHoldingEdit, unprovenStockMutation, originlessHoldingEdit, incompleteUnitPage, incompleteStockPage, unversionedUnitDeletion]
 
+type StockReadQuery = NonNullable<operations['get_inventory']['parameters']['query']>
+const unfilteredStockRead = {} satisfies StockReadQuery
+const filteredStockRead = { from: '2026-11-05', to: '2026-11-06', currency: 'TWD', category_id: 'category', location_id: 'location', scope: 'subtree', status: 'archived', merchant: 'Exact merchant', limit: 50, cursor: 'opaque' } satisfies StockReadQuery
+// @ts-expect-error Inventory status describes Item metadata, not an individual Unit lifecycle.
+const lifecycleStockRead: StockReadQuery = { status: 'stored' }
+// @ts-expect-error Inventory has no catalog q parameter or implicit text-search mode.
+const searchedStockRead: StockReadQuery = { q: 'uncontracted' }
+// @ts-expect-error Query adapters must preserve a numeric page size.
+const textStockReadSize: StockReadQuery = { limit: '50' }
+// @ts-expect-error An omitted category filter is distinct from a null query field.
+const nullStockReadCategory: StockReadQuery = { category_id: null }
+void [unfilteredStockRead, filteredStockRead, lifecycleStockRead, searchedStockRead, textStockReadSize, nullStockReadCategory]
+
 void [ownedSDKCalls, unprovenOwnedBarcode, unprovenOwnedAlias, unprovenOwnedAttribute, ownerlessBarcodePatch, ownerlessAliasDelete, emptyOwnedAttributePatch,
   missingOwnedAttributeValue, normalizedOwnedInput, reassignedOwnedInput, unprovenTagSet, nullTagSet, filteredOwnedRead]
 

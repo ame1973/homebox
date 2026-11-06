@@ -2780,7 +2780,7 @@ paths:
         schema:
           type: string
           minLength: 1
-          maxLength: 2048
+          maxLength: 4096
       - name: scope
         in: query
         required: false
@@ -2793,9 +2793,9 @@ paths:
         in: query
         required: false
         schema:
-          type: string
-          minLength: 1
-          maxLength: 32
+          enum:
+          - active
+          - archived
       - name: merchant
         in: query
         required: false
@@ -2803,8 +2803,7 @@ paths:
           type: string
           minLength: 1
           maxLength: 300
-      description: Lists use stable ID ordering, or (occurred_at,id) for events, with
-        opaque scoped cursors.
+      description: Complete live quantity-balance pages in (item_id,location_id) order, including retained zero balances. Apply every filter before slicing the page. Status is the owning Item metadata status; location scope selects the actual balance location, not every balance of an Item found elsewhere. Category and location scope default to subtree. Dates are inclusive home-timezone civil dates of the same associated purchase that must match currency/exact merchant, not movement timestamps. Signed cursors bind normalized filters, resolved home timezone, principal, epoch and page size; composite positions allow 4096 bytes. Never sum different measurement tuples or claim a list ETag/frozen snapshot.
   /stock/receive:
     post:
       operationId: post_stock_receive
@@ -13195,8 +13194,13 @@ components:
           maxItems: 100
           items:
             $ref: '#/components/schemas/Stock'
-        next_cursor: *holdingCursor
-      description: One complete live page in stable (item_id,location_id) order, including retained zero balances. Required null terminates pagination; no collection ETag or mixed-base-unit total.
+        next_cursor:
+          type:
+          - string
+          - 'null'
+          minLength: 1
+          maxLength: 4096
+      description: One complete live page in stable (item_id,location_id) order, including retained zero balances. Required null terminates pagination; no collection ETag or mixed-base-unit total. Composite continuations allow 4096 ASCII bytes to preserve two complete bounded Unicode identities without truncation or changing other collection cursors.
     Media:
       type: object
       additionalProperties: false

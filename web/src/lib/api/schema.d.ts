@@ -796,7 +796,7 @@ export interface paths {
         };
         /**
          * Inventory
-         * @description Lists use stable ID ordering, or (occurred_at,id) for events, with opaque scoped cursors.
+         * @description Complete live quantity-balance pages in (item_id,location_id) order, including retained zero balances. Apply every filter before slicing the page. Status is the owning Item metadata status; location scope selects the actual balance location, not every balance of an Item found elsewhere. Category and location scope default to subtree. Dates are inclusive home-timezone civil dates of the same associated purchase that must match currency/exact merchant, not movement timestamps. Signed cursors bind normalized filters, resolved home timezone, principal, epoch and page size; composite positions allow 4096 bytes. Never sum different measurement tuples or claim a list ETag/frozen snapshot.
          */
         readonly get: operations["get_inventory"];
         readonly put?: never;
@@ -3524,7 +3524,7 @@ export interface components {
             readonly quantity_base: number;
             readonly source_location_id: string;
         };
-        /** @description One complete live page in stable (item_id,location_id) order, including retained zero balances. Required null terminates pagination; no collection ETag or mixed-base-unit total. */
+        /** @description One complete live page in stable (item_id,location_id) order, including retained zero balances. Required null terminates pagination; no collection ETag or mixed-base-unit total. Composite continuations allow 4096 ASCII bytes to preserve two complete bounded Unicode identities without truncation or changing other collection cursors. */
         readonly StockList: {
             readonly data: readonly components["schemas"]["Stock"][];
             readonly next_cursor: string | null;
@@ -5900,7 +5900,7 @@ export interface operations {
                 readonly location_id?: string;
                 readonly merchant?: string;
                 readonly scope?: "direct" | "subtree";
-                readonly status?: string;
+                readonly status?: "active" | "archived";
                 readonly to?: string;
             };
             readonly header?: never;

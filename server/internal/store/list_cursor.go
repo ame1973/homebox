@@ -75,6 +75,17 @@ func readMetadataPage[T any](ctx context.Context, a *Auth, token, cursor string,
 func readMetadataPageTx[T any](ctx context.Context, tx *sql.Tx, a *Auth, token, cursor string, limit int, purpose string,
 	list func(context.Context, *sql.Tx, string, int) (metadataPage[T], error),
 ) (metadataList[T], error) {
+	return readMetadataIdentityPageTx(ctx, tx, a, token, cursor, limit, purpose, 2048, validDomainID, list)
+}
+
+// Composite Stock positions need their original component bounds and a larger
+// token budget. Existing single-ID purposes retain the exact old wire spelling.
+func readMetadataIdentityPageTx[T any](ctx context.Context, tx *sql.Tx, a *Auth, token, cursor string, limit int, purpose string,
+	maxCursorBytes int, validIdentity func(string) bool, list func(context.Context, *sql.Tx, string, int) (metadataPage[T], error),
+) (metadataList[T], error) {
+	if limit < 1 || limit > 100 || len(cursor) > maxCursorBytes {
+		return metadataList[T]{}, ErrDomainInput
+	}
 	now := a.now().UTC()
 	session, err := a.loadSession(ctx, tx, token, now)
 	if err != nil {
@@ -86,7 +97,7 @@ func readMetadataPageTx[T any](ctx context.Context, tx *sql.Tx, a *Auth, token, 
 	}
 	afterID := ""
 	if cursor != "" {
-		value, err := decodeMetadataCursor(a, purpose, cursor, session.Admin.ID, epoch, limit, now)
+		value, err := decodeMetadataIdentityCursor(a, purpose, cursor, session.Admin.ID, epoch, limit, now, maxCursorBytes, validIdentity)
 		if err != nil {
 			return metadataList[T]{}, err
 		}
@@ -98,11 +109,17 @@ func readMetadataPageTx[T any](ctx context.Context, tx *sql.Tx, a *Auth, token, 
 	}
 	result := metadataList[T]{Data: page.Data}
 	if page.NextID != "" {
+		if !validIdentity(page.NextID) {
+			return metadataList[T]{}, ErrDomainState
+		}
 		value := metadataCursor{AdminID: session.Admin.ID, Epoch: epoch, AfterID: page.NextID,
 			Limit: limit, Issued: now.Unix(), Expires: now.Add(metadataCursorLifetime).Unix()}
 		next, err := encodeMetadataCursor(a, purpose, value)
 		if err != nil {
 			return metadataList[T]{}, err
+		}
+		if len(next) > maxCursorBytes {
+			return metadataList[T]{}, ErrDomainState
 		}
 		result.NextCursor = &next
 	}
@@ -124,12 +141,16 @@ func encodeMetadataCursor(a *Auth, purpose string, value metadataCursor) (string
 }
 
 func decodeMetadataCursor(a *Auth, purpose, token, adminID, epoch string, limit int, now time.Time) (metadataCursor, error) {
+	return decodeMetadataIdentityCursor(a, purpose, token, adminID, epoch, limit, now, 2048, validDomainID)
+}
+
+func decodeMetadataIdentityCursor(a *Auth, purpose, token, adminID, epoch string, limit int, now time.Time, maxCursorBytes int, validIdentity func(string) bool) (metadataCursor, error) {
 	var zero metadataCursor
 	if len(a.serverSecret) != 32 {
 		return zero, ErrDomainState
 	}
 	parts := strings.Split(token, ".")
-	if len(parts) != 2 || len(parts[0]) == 0 || len(parts[1]) != 43 || len(token) > 2048 {
+	if len(parts) != 2 || len(parts[0]) == 0 || len(parts[1]) != 43 || len(token) > maxCursorBytes {
 		return zero, ErrInvalidCursor
 	}
 	body, err := base64.RawURLEncoding.Strict().DecodeString(parts[0])
@@ -145,7 +166,7 @@ func decodeMetadataCursor(a *Auth, purpose, token, adminID, epoch string, limit 
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.DisallowUnknownFields()
 	if !json.Valid(body) || decoder.Decode(&value) != nil || value.AdminID != adminID || value.Epoch != epoch || value.Limit != limit ||
-		!validDomainID(value.AfterID) || value.Issued < 0 || value.Expires <= value.Issued ||
+		!validIdentity(value.AfterID) || value.Issued < 0 || value.Expires <= value.Issued ||
 		value.Expires-value.Issued != int64(metadataCursorLifetime/time.Second) || now.Unix() < value.Issued || now.Unix() >= value.Expires {
 		return zero, ErrInvalidCursor
 	}
