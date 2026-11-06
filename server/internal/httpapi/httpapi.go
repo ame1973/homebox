@@ -59,7 +59,11 @@ func New(cfg Config) (http.Handler, error) {
 	if err != nil {
 		return nil, fmt.Errorf("catalog service is required: %w", err)
 	}
-	api := &authAPI{auth: cfg.Auth, locations: locations, taxonomy: taxonomy, catalog: catalog, origin: policy, limiter: newRequestLimiter()}
+	inventory, err := store.NewInventory(cfg.Auth)
+	if err != nil {
+		return nil, fmt.Errorf("inventory service is required: %w", err)
+	}
+	api := &authAPI{auth: cfg.Auth, locations: locations, taxonomy: taxonomy, catalog: catalog, inventory: inventory, origin: policy, limiter: newRequestLimiter()}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestID := rand.Text()
 		w.Header().Set("X-Request-ID", requestID)

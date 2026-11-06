@@ -84,6 +84,8 @@ describe('safe domain error boundary', () => {
     ['CATEGORY_HAS_CHILDREN', 409], ['TAG_NAME_CONFLICT', 409],
     ['INVALID_CATALOG_URL', 400], ['ITEM_HAS_HISTORY', 409],
     ['BARCODE_CONFLICT', 409], ['ALIAS_CONFLICT', 409],
+    ['INVALID_HOLDING_URL', 400], ['TRACKING_MODE_CONFLICT', 409], ['INSUFFICIENT_STOCK', 409],
+    ['QUANTITY_OVERFLOW', 409], ['UNIT_HAS_HISTORY', 409], ['UNIT_DISPOSED', 409], ['ASSET_LIFECYCLE_REQUIRED', 409],
     ['ARBITRARY_PRIVATE_DIAGNOSTIC', 503],
   ] as const)('retains only allowlisted metadata for %s', async (code, status) => {
     const { ApiError, requestData } = await import('./client')

@@ -49,10 +49,19 @@ function mount(path = '/login') {
 }
 
 function field(label: string) { return screen.getByLabelText(new RegExp(`^${label}`)) }
+
+// This scenario checks session transitions, not hundreds of timed keystrokes.
+// Native paste still drives focus/blur/input and represents password-manager use;
+// separate keyboard cases and real-browser workflows retain typing coverage.
+async function pasteField(user: ReturnType<typeof userEvent.setup>, label: string, value: string) {
+  await user.click(field(label))
+  await user.paste(value)
+}
+
 async function login(user: ReturnType<typeof userEvent.setup>) {
   await screen.findByLabelText(new RegExp(`^${text.username}`))
   await user.type(field(text.username), 'owner')
-  await user.type(field(text.password), secret)
+  await pasteField(user, text.password, secret)
   await user.click(screen.getByRole('button', { name: text.login }))
   await screen.findByRole('heading', { name: text.passwordHeading })
 }
@@ -61,10 +70,10 @@ it('provides real setup, fresh login, forced rotation, and authenticated account
   const user = userEvent.setup()
   const { client, router } = mount('/setup')
   await screen.findByLabelText(new RegExp(`^${text.bootstrap}`))
-  await user.type(field(text.bootstrap), 'A'.repeat(43))
+  await pasteField(user, text.bootstrap, 'A'.repeat(43))
   await user.type(field(text.username), 'owner')
-  await user.type(field(text.password), secret)
-  await user.type(field(text.confirmation), secret)
+  await pasteField(user, text.password, secret)
+  await pasteField(user, text.confirmation, secret)
   await user.click(screen.getByRole('button', { name: text.setup }))
   expect(await screen.findByText(text.setupDone)).toBeVisible()
   expect(api.login).not.toHaveBeenCalled()
@@ -74,9 +83,9 @@ it('provides real setup, fresh login, forced rotation, and authenticated account
   expect(screen.getByText(text.mandatory)).toBeVisible()
   expect(screen.getByText('owner', { exact: true })).toBeVisible()
   client.setQueryData(['items', 'old-session'], { private: true })
-  await user.type(field(text.oldPassword), secret)
-  await user.type(field(text.newPassword), replacement)
-  await user.type(field(text.confirmation), replacement)
+  await pasteField(user, text.oldPassword, secret)
+  await pasteField(user, text.newPassword, replacement)
+  await pasteField(user, text.confirmation, replacement)
   await user.click(screen.getByRole('button', { name: text.changePassword }))
   expect(await screen.findByText(text.passwordDone)).toBeVisible()
   expect(router.state.location.pathname).toBe('/login')
