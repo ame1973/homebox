@@ -73,7 +73,7 @@ func normalizeItemFilters(filters ItemFilters) (ItemFilters, int, int, error) {
 		!authString(filters.Merchant, 0, 300) || !authString(filters.Query, 0, 500) {
 		return ItemFilters{}, 0, 0, ErrDomainInput
 	}
-	if filters.Currency != "" && (len(filters.Currency) != 3 || strings.IndexFunc(filters.Currency, func(value rune) bool { return value < 'A' || value > 'Z' }) >= 0) {
+	if filters.Currency != "" && !validCurrencyCode(filters.Currency) {
 		return ItemFilters{}, 0, 0, ErrDomainInput
 	}
 	parseDate := func(value string) (int, error) {

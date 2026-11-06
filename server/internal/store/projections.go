@@ -70,6 +70,18 @@ func (m *mutationTx) projectionPayload(key projectionKey) ([]byte, error) {
 			return nil, err
 		}
 		return json.Marshal(value)
+	case "purchase":
+		value, err := loadPurchase(m.ctx, m.tx, key.id)
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(value.PurchaseData)
+	case "purchase_line":
+		value, err := loadPurchaseLine(m.ctx, m.tx, key.id)
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(value.PurchaseLineData)
 	case "barcode":
 		value, err := loadBarcode(m.ctx, m.tx, key.id)
 		if err != nil {
