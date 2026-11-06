@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { itemCreateSchema, type Item } from '@/lib/api/catalog'
-import { input } from '@/lib/api/domain'
+import { input, parseSafeCount } from '@/lib/api/domain'
 import type { components } from '@/lib/api/schema'
 import { messages } from '@/lib/messages'
 
@@ -14,9 +14,7 @@ export type CatalogValues = z.infer<typeof fields>
 
 // Parse the original decimal text, never round a floating/exponent/grouped value.
 export function parseScaleFactor(value: string): number | undefined {
-  if (!/^[1-9][0-9]{0,15}$/.test(value)) return undefined
-  const number = Number(value)
-  return Number.isSafeInteger(number) ? number : undefined
+  return parseSafeCount(value, 1)
 }
 
 function desiredMetadata(value: CatalogValues) {

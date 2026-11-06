@@ -1,6 +1,6 @@
 # Individual Units and Quantity Stock
 
-**Implementation status:** all twelve Unit/quantity-stock HTTP operations are implemented through the private Go `Inventory` service, with strict JSON/query admission, original proofs, independent resource ETags, completed-session/Origin/CSRF/version/key protection and authoritative transactional revalidation. Unit/Stock source/counter loaders, current/frozen publication and migrations 0010–0012 are tested. All twelve typed stateless browser adapters are implemented with strict runtime/response checks and original proof/measurement contexts. Asset-backed lifecycle producers, public history reads and responsive operating screens are still being built. Existing catalog/owned-metadata screens do not receive stock or create physical units. HTTP/service evidence is not complete-sync, physical-device or browser operating-screen acceptance.
+**Implementation status:** all twelve Unit/quantity-stock HTTP operations are implemented through the private Go `Inventory` service, with strict JSON/query admission, original proofs, independent resource ETags, completed-session/Origin/CSRF/version/key protection and authoritative transactional revalidation. Unit/Stock source/counter loaders, current/frozen publication and migrations 0010–0012 are tested. All twelve typed stateless browser adapters and the complete live read/form/volatile reviewed-command state layer are implemented with strict runtime/response checks and original proof/measurement contexts. Asset-backed lifecycle producers, public history reads and responsive operating screens are still being built. Existing catalog/owned-metadata screens do not receive stock or create physical units. HTTP/service evidence is not complete-sync, physical-device or browser operating-screen acceptance.
 
 ## Distinct physical identities
 
@@ -115,6 +115,23 @@ Resource responses require a matching strong ETag and exact identity/owner/reque
 
 Reads have eight-second deadlines and writes thirty seconds. Caller cancellation discards late success; errors retain only shared allowlisted codes/status/retry metadata/request IDs, never arbitrary server messages, details or causes. No adapter reads credentials from storage, refreshes CSRF/proofs, retries, rebases, queues a mutation or submits on `online`.
 
+## Complete reads and foreground review state
+
+The state layer in `web/src/features/holdings` is implemented and tested; responsive operating screens are still being built. These helpers do not expose a second public endpoint or make the existing metadata screens create physical holdings.
+
+- `readItemHoldings` reads the actual Item, completes only its Unit collection or exact Item-scoped Stock collection, then checks the Item again. It rejects revision/field/owner/measurement inconsistencies, duplicate identities, repeated cursors and cancellation rather than returning a partial prefix. Stock keeps every real zero row. The discriminated result never invents an empty unqueried collection or a frozen/offline snapshot.
+- `readUnitHolding` brackets one Item metadata read with matching independent Unit reads. It checks the same Unit/owner/tracking interpretation without reading all siblings or inventing another Item precondition for a Unit edit.
+- Unit form helpers preserve nullable versus supplied-empty serial intent, exact Unicode/notes, an explicit nullable creation location and changed-only patches. Explicit metadata adoption treats serial text/provided state together, retains active invalid edits and adopts only untouched fields. A disposal kind is never inferred from a Unit's status, because that classification belongs to history; physical lifecycle bodies exclude proceeds, prices and asset dates.
+- Stock forms accept canonical safe decimal **base-count text**, not display-unit floats, grouping, signed values, exponents, whitespace repair or unsafe numbers. The same parser checks positive catalog scale text. Receive/consume/transfer start without a guessed delta; adjustment may show an actual existing absolute count, but an absent row is not prefilled as zero. Inactive location/reason form fields never leak into another operation. No conflict/refetch automatically converts a draft or replaces its measurement/proof interpretation.
+
+`freezeHoldingCommand` validates and clones one volatile original proposal/key for each of the five Unit or four Stock writers. It retains the complete original Item interpretation, independent Unit proof when applicable, actual reviewed balances and selected root-to-leaf location metadata. Full paths must match the selected identity without orphans, cycles, unrelated nodes or fake revisions. New/increased placement requires active ancestry; valid archived outflow, existing equal/lower adjustment and same-location Unit no-ops retain their distinct rules. Disposed Units cannot ordinarily move/reactivate. Financial deletion/lifecycle eligibility remains server-authoritative, not inferred by a browser preview.
+
+`stockPreview` describes each source/target separately, with its actual prior Stock or null for an absent pair and an exact proposed count. It checks source sufficiency and safe target addition, preserves zero depletion, and distinguishes a retained zero from explicit new-zero placement. It never synthesizes a Stock revision/resource, rescales quantities, changes either balance or emits a mixed-unit total. The Go transaction must still validate every current source/path/proof and commit both legs atomically.
+
+`sendHoldingCommand` dispatches only the original typed body, key and Item-versus-Unit proof. It never reads a newer Item, refreshes a balance, adopts a path, guesses financial input or rebases an uncertain command. Explicit reconciliation can therefore return an older frozen receipt after current balances changed or source was deleted.
+
+`useHoldingMutation` reuses the shared foreground controller: review first, explicit single-flight confirmation, caller-visible request-token acquisition, cancel/unknown/session-loss handling and no retry/offline queue/reconnect submission. Confirmed or sent failed writes invalidate only holding, catalog and location dependent reads, never installing the receipt as current state. Catalog/owned/taxonomy mutations also invalidate affected holding reads; location changes invalidate location-dependent catalog/holding scopes. Auth and unrelated taxonomy roots are not refreshed by holding writes. Screen composition must still provide visible reviews, dirty/Back guards, current-versus-original comparisons and explicit draft adoption; those operating screens are not claimed delivered by this state layer.
+
 ## Movement direction, placement and no-op receipts
 
 For quantity commands, the service records one independent immutable inventory event per actual command, with these meanings:
@@ -208,6 +225,7 @@ npm --prefix web run api:generate
 npm --prefix web run api:check
 npm --prefix web run typecheck
 npm --prefix web test -- --coverage.enabled=false src/lib/api/holdings.test.ts
+npm --prefix web test -- --coverage.enabled=false src/features/holdings
 npm --prefix web run test:e2e -- tests/e2e/holdings-api.spec.ts --project=phone
 make check-web
 ```

@@ -87,6 +87,26 @@ it('admits only one active confirmation and invalidates reads without installing
   work.dispose()
 })
 
+it.each([undefined, 'REVISION_CONFLICT', 'NETWORK_ERROR'] as const)('invalidates location-dependent catalog/holding scopes after sent %s without replacing current data', async (code) => {
+  const work = fixture()
+  const keys = [['locations', 'tree'], ['catalog', 'items', { location_id: 'room', scope: 'subtree' }], ['holdings', 'stock', { location_id: 'room' }]] as const
+  const current = { revision: 99, current: true }
+  for (const key of [...keys, ['auth', 'me'], ['taxonomy', 'tags']]) work.client.setQueryData(key, current)
+  if (code) vi.mocked(sendLocationCommand).mockRejectedValueOnce(new ApiError(code, { status: code === 'REVISION_CONFLICT' ? 409 : undefined }))
+  act(() => { work.result.current.review(proposal) })
+  await act(async () => { await work.result.current.confirm() })
+  for (const key of keys) {
+    expect(work.client.getQueryState(key)?.isInvalidated).toBe(true)
+    expect(work.client.getQueryData(key)).toEqual(current)
+  }
+  expect(work.client.getQueryState(['auth', 'me'])?.isInvalidated).toBe(false)
+  expect(work.client.getQueryState(['taxonomy', 'tags'])?.isInvalidated).toBe(false)
+  await act(async () => { window.dispatchEvent(new Event('online')) })
+  expect(sendLocationCommand).toHaveBeenCalledTimes(1)
+  expect(work.result.current.phase).toBe(code === 'NETWORK_ERROR' ? 'uncertain' : code ? 'rejected' : 'idle')
+  work.dispose()
+})
+
 it('keeps a known conflict editable but never changes the rejected request by itself', async () => {
   const work = fixture()
   vi.mocked(sendLocationCommand).mockRejectedValue(new ApiError('REVISION_CONFLICT', { status: 409 }))

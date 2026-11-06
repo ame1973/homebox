@@ -16,7 +16,7 @@ const fields = {
   parent_id: idSchema.nullable(), name: text(1, 200), code: text(1, 100), kind: text(1, 32),
   status: z.enum(['active', 'archived']), sort_order: z.int(), description: text(0, 10000),
 }
-const locationSchema: z.ZodType<Location> = z.strictObject({ id: idSchema, revision: revisionSchema, ...fields })
+export const locationSchema: z.ZodType<Location> = z.strictObject({ id: idSchema, revision: revisionSchema, ...fields })
   .refine((location) => location.parent_id !== location.id)
 export const locationCreateSchema: z.ZodType<components['schemas']['LocationCreate']> = z.strictObject({
   parent_id: fields.parent_id.optional(), name: fields.name, code: fields.code, kind: fields.kind.optional(),

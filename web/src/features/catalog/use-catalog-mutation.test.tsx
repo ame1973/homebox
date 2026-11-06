@@ -14,7 +14,7 @@ const item = { id: 'item', revision: 7, name: 'Original', brand: null, model: ''
   tracking_mode: 'individual', unit_code: 'pcs', base_unit: 'pcs', scale_factor: 1, status: 'active' } as const
 const proposal: CatalogCommandInput = { kind: 'patch', subject: item, body: { name: 'Reviewed' } }
 const reply: CatalogResult = { ...item, name: 'Reviewed', revision: 8 }
-const keys = [['catalog', 'items'], ['catalog', 'item', item.id], ['taxonomy', 'categories'], ['taxonomy', 'tags']] as const
+const keys = [['catalog', 'items'], ['catalog', 'item', item.id], ['taxonomy', 'categories'], ['taxonomy', 'tags'], ['holdings', 'item', item.id]] as const
 beforeEach(() => {
   vi.mocked(fetchCSRF).mockReset().mockResolvedValue('csrf')
   vi.mocked(sendCatalogCommand).mockReset().mockResolvedValue(reply)
@@ -28,7 +28,7 @@ function fixture() {
   return { ...hook, client, onConfirmed, onSessionLost, dispose: () => { hook.unmount(); client.clear() } }
 }
 
-it('reviews without writing and confirms once, invalidating both dependent read scopes without installing an old reply', async () => {
+it('reviews without writing and confirms once, invalidating all dependent read scopes without installing an old reply', async () => {
   const work = fixture()
   work.client.setQueryData(['locations', 'tree'], 'unrelated')
   work.client.setQueryData(['auth', 'me'], 'unrelated')

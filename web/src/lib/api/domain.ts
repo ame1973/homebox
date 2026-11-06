@@ -12,6 +12,14 @@ export const pathIDSchema = idSchema.refine((id) => !['.', '..'].includes(id) &&
 export const pageQuerySchema = z.strictObject({ cursor: text(1, 2048).optional(), limit: z.int().min(1).max(100).optional() })
 export const deleteAckSchema = z.strictObject({ ok: z.literal(true), operation_id: idSchema, revision: revisionSchema })
 
+// Parse original canonical decimal text; never trim, round or coerce a display
+// amount, grouped value, exponent, trailing newline or unsafe integer.
+export function parseSafeCount(value: string, minimum: 0 | 1 = 0): number | undefined {
+  if (typeof value !== 'string' || !/^(?:0|[1-9][0-9]{0,15})(?![\s\S])/.test(value)) return undefined
+  const number = Number(value)
+  return Number.isSafeInteger(number) && number >= minimum ? number : undefined
+}
+
 export function input<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value)
   if (!result.success) throw new ApiError('VALIDATION_ERROR')
