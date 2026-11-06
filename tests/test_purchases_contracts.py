@@ -14,7 +14,7 @@ PURCHASE = {"id": "purchase", "revision": 7, "merchant_name": "  Merchant é  "
 LINE = {"id": "line", "revision": 1, "purchase_id": "purchase", "item_id": "item",
         "item_unit_id": None, "quantity_base": 1500, "paid_minor": 0, "note": ""}
 HEADER = {key: PURCHASE[key] for key in ["merchant_name", "purchased_at", "currency"]}
-ALLOCATION = {key: LINE[key] for key in ["item_id", "item_unit_id", "quantity_base", "paid_minor"]}
+ALLOCATION = {**{key: LINE[key] for key in ["item_id", "item_unit_id", "quantity_base", "paid_minor"]}, "item_revision": 7}
 OPERATIONS = [("/purchases", "get"), ("/purchases", "post"),
               ("/purchases/{id}", "get"), ("/purchases/{id}", "patch"),
               ("/items/{id}/purchases", "get"),
@@ -105,7 +105,17 @@ class PurchasesContractTests(unittest.TestCase):
         description = SCHEMAS["PurchaseLineWrite"]["description"]
         for phrase in ["original Purchase revision", "does not receive stock", "same Item", "asset", "immutable"]:
             self.assertIn(phrase, description)
-        self.assertEqual("purchase-allocation-safe-minor-base-v1", SCHEMAS["PurchaseLineWrite"]["x-runtime-validation"])
+        self.assertEqual("purchase-allocation-item-proof-safe-minor-base-v2", SCHEMAS["PurchaseLineWrite"]["x-runtime-validation"])
+
+    def test_first_allocation_binds_the_reviewed_item_interpretation_separately_from_purchase_proof(self):
+        for revision in [1, MAXIMUM]:
+            validator("PurchaseLineWrite").validate({**ALLOCATION, "item_revision": revision})
+        for revision in [0, -1, True, "1", None, 1.5, MAXIMUM + 1]:
+            with self.subTest(revision=revision), self.assertRaises(ValidationError):
+                validator("PurchaseLineWrite").validate({**ALLOCATION, "item_revision": revision})
+        self.assertIn("original Item revision", SCHEMAS["PurchaseLineWrite"]["description"])
+        self.assertNotIn("item_revision", SCHEMAS["PurchaseLine"]["properties"])
+        self.assertNotIn("item_revision", PROJECTION["$defs"]["purchase_line"]["properties"])
 
     def test_one_explicit_unit_allocation_is_one_unit_not_a_bulk_price_multiplier(self):
         for unit_id in ["new", "tree", "😀" * 128]:

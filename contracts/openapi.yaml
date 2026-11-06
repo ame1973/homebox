@@ -5117,7 +5117,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/PurchaseLineWrite'
-      description: Append an independent immutable allocation using the original Purchase proof and completed-session/Origin/CSRF/version/key boundary. Validate actual Item/Unit authority, explicit nullable allocation, whole safe minor/base integers and financial-basis/currency compatibility in the same transaction as the new Line revision one, Purchase aggregate, dependent approved search/analytics, audit/current/outbox and frozen Line response. The response ETag is independent, not Purchase-proof-plus-one. Do not receive inventory, create an asset, infer a per-unit price or overwrite posted allocations. Original-key retries retain the original body/proof after later changes; never automatically replay or rebase. No query, unknown/duplicate fields, invalid UTF-8 or lossy float parsing.
+      description: Append an independent immutable allocation using the original Purchase proof and completed-session/Origin/CSRF/version/key boundary. Validate the additional original Item body proof and actual Item/Unit authority before interpreting an allocation. Explicit nullable allocation, whole safe minor/base integers and financial-basis/currency compatibility are mandatory. The new Line revision one, Purchase and Item aggregates, dependent approved search/analytics, audit/current/outbox and frozen Line response commit together. The response ETag is independent, not Purchase-proof-plus-one. Do not receive inventory, create an asset, infer a per-unit price or overwrite posted allocations. Original-key retries retain the original body/proof after later changes; never automatically replay or rebase. No query, unknown/duplicate fields, invalid UTF-8 or lossy float parsing.
       x-revision-scope: purchase
       x-response-revision-scope: purchase_line
       x-max-body-bytes: 131072
@@ -13447,6 +13447,7 @@ components:
       additionalProperties: false
       properties:
         item_id: *purchaseID
+        item_revision: *purchaseRevision
         item_unit_id: *purchaseNullableID
         quantity_base: *purchaseQuantity
         paid_minor: *purchaseAmount
@@ -13456,6 +13457,7 @@ components:
           default: ''
       required:
       - item_id
+      - item_revision
       - item_unit_id
       - quantity_base
       - paid_minor
@@ -13467,8 +13469,8 @@ components:
           item_unit_id: *purchaseID
           quantity_base:
             const: 1
-      description: Append one immutable allocation against the original Purchase revision. Explicit null item_unit_id means no individual Unit allocation; a supplied Unit must belong to the same Item and quantity_base must be one. Quantity-tracked Items require null; unallocated individual bulk purchase counts remain explicit. paid_minor is the entire nonnegative safe minor-unit amount in the Purchase currency, never a unit price. Validate actual Item/Unit counters, tracking and asset currency/manual-basis compatibility transactionally; preserve retained zero-valued references. This command does not receive stock, create/move Units, change measurement or silently enable an asset. New Line identity/revision, Purchase aggregate, dependent source/search/analytics publication, immutable audit and original response commit atomically. Omitted note defaults to empty without client default insertion.
-      x-runtime-validation: purchase-allocation-safe-minor-base-v1
+      description: Append one immutable allocation against the original Purchase revision. Required item_revision additionally binds the original Item revision reviewed with its entire tracking/measurement interpretation; it is not the Purchase If-Match or Line reply counter. Reject either stale proof rather than interpreting an old quantity under a concurrently changed Item. Explicit null item_unit_id means no individual Unit allocation; a supplied Unit must belong to the same Item and quantity_base must be one. Quantity-tracked Items require null; unallocated individual bulk purchase counts remain explicit. paid_minor is the entire nonnegative safe minor-unit amount in the Purchase currency, never a unit price. Validate actual Item/Unit counters, tracking and asset currency/manual-basis compatibility transactionally; preserve retained zero-valued references. This command does not receive stock, create/move Units, change measurement or silently enable an asset. New Line identity/revision, Purchase and Item aggregates, dependent source/search/analytics publication, immutable audit and original response commit atomically. Omitted note defaults to empty without client default insertion.
+      x-runtime-validation: purchase-allocation-item-proof-safe-minor-base-v2
     Asset:
       type: object
       additionalProperties: false

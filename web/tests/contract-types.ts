@@ -395,8 +395,8 @@ const purchaseHeaders = { ...authHeaders } satisfies PurchaseCreateHeaders
 const purchaseProof = { ...authHeaders, 'If-Match': '"7"' } satisfies PurchaseEditHeaders & PurchaseLineHeaders
 const purchaseHeader = { merchant_name: '  Merchant é  ', purchased_at: '2026-11-06T00:00:00Z', currency: 'JPY' } satisfies components['schemas']['PurchaseWrite']
 const purchaseReceiptClear = { receipt_note: '' } satisfies components['schemas']['PurchasePatch']
-const unallocatedPurchaseLine = { item_id: 'item', item_unit_id: null, quantity_base: 1500, paid_minor: 0 } satisfies components['schemas']['PurchaseLineWrite']
-const allocatedPurchaseLine = { item_id: 'item', item_unit_id: 'unit', quantity_base: 1, paid_minor: 120000 } satisfies components['schemas']['PurchaseLineWrite']
+const unallocatedPurchaseLine = { item_id: 'item', item_revision: 7, item_unit_id: null, quantity_base: 1500, paid_minor: 0 } satisfies components['schemas']['PurchaseLineWrite']
+const allocatedPurchaseLine = { item_id: 'item', item_revision: 7, item_unit_id: 'unit', quantity_base: 1, paid_minor: 120000 } satisfies components['schemas']['PurchaseLineWrite']
 const completePurchasePage = { data: [], next_cursor: null } satisfies components['schemas']['PurchaseList']
 const completePurchaseLinePage = { data: [], next_cursor: null } satisfies components['schemas']['PurchaseLineList']
 const filteredPurchases = { from: '2026-01-01', to: '2026-11-06', currency: 'JPY', category_id: 'category', location_id: 'location', scope: 'direct', status: 'active', merchant: 'Exact merchant', limit: 50, cursor: 'opaque' } satisfies PurchaseQuery
@@ -411,9 +411,12 @@ const unrelatedPurchaseProof: PurchaseCreateHeaders = { ...authHeaders, 'If-Matc
 // @ts-expect-error Header metadata never counts the same paid amount a second time.
 const headerPurchaseAmount: components['schemas']['PurchaseWrite'] = { ...purchaseHeader, paid_minor: 120000 }
 // @ts-expect-error Nullable Unit allocation intent is explicit, not an omitted default.
-const implicitPurchaseAllocation: components['schemas']['PurchaseLineWrite'] = { item_id: 'item', quantity_base: 1, paid_minor: 0 }
+const implicitPurchaseAllocation: components['schemas']['PurchaseLineWrite'] = { item_id: 'item', item_revision: 7, quantity_base: 1, paid_minor: 0 }
 // @ts-expect-error One named physical Unit cannot silently represent a bulk price multiplier.
-const bulkUnitPurchaseLine: components['schemas']['PurchaseLineWrite'] = { item_id: 'item', item_unit_id: 'unit', quantity_base: 2, paid_minor: 120000 }
+const bulkUnitPurchaseLine: components['schemas']['PurchaseLineWrite'] = { item_id: 'item', item_revision: 7, item_unit_id: 'unit', quantity_base: 2, paid_minor: 120000 }
+// @ts-expect-error The original Purchase proof cannot substitute for the reviewed Item interpretation.
+const unprovenPurchaseItem: components['schemas']['PurchaseLineWrite'] = { item_id: 'item', item_unit_id: null, quantity_base: 1500, paid_minor: 0 }
+void unprovenPurchaseItem
 // @ts-expect-error The complete minor-unit amount is a JSON number, not decimal display text.
 const textPurchaseAmount: components['schemas']['PurchaseLineWrite'] = { ...unallocatedPurchaseLine, paid_minor: '1200' }
 // @ts-expect-error Receipt text is nonnullable; empty clears it explicitly.

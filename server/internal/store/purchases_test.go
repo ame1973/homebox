@@ -16,8 +16,8 @@ type purchaseFixture struct {
 	stockLine PurchaseLine
 }
 
-// Retained source fixture only. Public purchase commands/proofs are a later
-// service increment; real catalog/auth still establish their own authority.
+// Retained source fixture, including historical named-Unit bulk allocation.
+// Real catalog/auth establish authority; command tests create new history separately.
 func purchasesFixture(t *testing.T) purchaseFixture {
 	t.Helper()
 	fixture := holdingsFixture(t)
