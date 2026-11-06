@@ -153,9 +153,10 @@ class PurchasesContractTests(unittest.TestCase):
                             "0000-01-01T00:00:00Z", "10000-01-01T00:00:00Z", "2026-11-06T00:00:00Z\n", None]:
                 with self.subTest(schema=name, instant=instant), self.assertRaises(ValidationError):
                     validator(name).validate({**body, "purchased_at": instant})
-        # Strengthening Purchase must not silently redefine the legacy shared
-        # date-time alias used by unrelated financial/event schema components.
-        self.assertEqual({"type": "string", "format": "date-time"}, SCHEMAS["Usage"]["properties"]["occurred_at"])
+        # Asset finance now explicitly shares the same lossless instant policy;
+        # the underlying legacy aliases used by unrelated schemas stay unchanged.
+        self.assertEqual(SCHEMAS["Purchase"]["properties"]["purchased_at"], SCHEMAS["Usage"]["properties"]["occurred_at"])
+        self.assertEqual({"type": "string", "format": "date-time"}, SCHEMAS["AnalyticsGroups"]["properties"]["as_of"])
 
     def test_live_pages_require_complete_bounded_data_and_explicit_terminal_cursors(self):
         for path, name, resource in PAGES:

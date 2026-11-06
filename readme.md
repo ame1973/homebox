@@ -63,6 +63,8 @@ From item detail, open its real Unit list or location quantity balances. All dev
 
 From **Purchases** at `/purchases`, browse real filtered live pages, create an exact merchant/instant/currency header, correct descriptive fields or select a catalog Item and explicitly allocate whole integer minor-unit money and base quantity. Item detail also links its complete associated purchase list. Every financial write requires original-context review and confirmation; changed currency/measurement needs explicit adoption, zero-paid history locks currency, and uncertain replies retain only an explicitly retryable original command. Purchase entry never receives Stock or creates/moves Units. See [Purchases and Financial Allocations](docs/purchases.md) for all routes, exact input examples, safe return/reconciliation behavior and remaining asset/adjustment/media gates.
 
+Asset finance remains unavailable. [Assets, Usage and Cost Accounting](docs/assets.md) records its executable contract, independent financial/physical proof scopes, immutable correction semantics and realized-versus-projected calculation policy. Generated types/schema tests do not expose a live Asset endpoint or remove the existing purchase integration guard.
+
 ```sh
 make setup-web build-web build
 ./bin/homebox db migrate --database ./data/homebox.sqlite

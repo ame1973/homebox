@@ -520,6 +520,97 @@ void [purchaseSDKCalls, rawNullPurchaseLine, rawNamedPurchaseLine, unrelatedSDKP
   implicitSDKPurchaseUnit, bulkSDKPurchaseUnit, textSDKPurchaseMoney, currencySDKPurchaseLine, searchedSDKPurchases, filteredSDKItemPurchases,
   filteredSDKPurchaseLines, implicitRawPurchaseUnit, bulkRawPurchaseUnit, markedRawPurchaseUnit]
 
+// Asset contracts describe pending services, not a runtime SDK or implemented UI.
+const assetFields = { cost_basis: 'manual' as const, currency: 'JPY', manual_acquisition_minor: 0,
+  in_service_at: null, retired_at: null, estimated_residual_minor: null, usage_unit: 'times' as const }
+const manualAssetInput = { ...assetFields, item_revision: 11, asset_revision: null } satisfies components['schemas']['AssetWrite']
+const purchaseAssetInput = { ...manualAssetInput, cost_basis: 'purchase', manual_acquisition_minor: null } satisfies components['schemas']['AssetWrite']
+const retainedAsset = { ...assetFields, item_unit_id: 'unit', revision: 7 } satisfies components['schemas']['Asset']
+const assetUseInput = { event_type: 'use', delta: 1, usage_unit: 'times', occurred_at: '2026-11-07T00:00:00Z' } satisfies components['schemas']['UsageWrite']
+const assetCorrectionInput = { ...assetUseInput, event_type: 'correction', delta: -1, correction_of: 'use' } satisfies components['schemas']['UsageWrite']
+const assetCostInput = { kind: 'repair', direction: 'expense', amount_minor: 5000, currency: 'JPY', occurred_at: '2026-11-07T00:00:00Z' } satisfies components['schemas']['CostWrite']
+const assetAdjustmentInput = { ...assetCostInput, kind: 'adjustment', direction: 'credit', correction_of: 'cost' } satisfies components['schemas']['CostWrite']
+const assetRetireInput = { retired_at: '2026-11-07T00:00:00Z', unit_revision: 13 } satisfies components['schemas']['UnitRetireInput']
+const assetDisposalInput = { kind: 'sold', disposed_at: '2026-11-07T00:00:00Z', currency: 'JPY', realized_proceeds_minor: 0, unit_revision: 13 } satisfies components['schemas']['DisposalWrite']
+const assetNonSaleInput = { ...assetDisposalInput, kind: 'donated', realized_proceeds_minor: 0 } satisfies components['schemas']['DisposalWrite']
+const assetHeaders = { ...authHeaders, 'If-Match': '"7"' } satisfies operations['put_units_id_asset']['parameters']['header'] & operations['post_units_id_usage']['parameters']['header']
+const assetPages = [
+  { data: [], next_cursor: null } satisfies components['schemas']['AssetList'],
+  { data: [], next_cursor: null } satisfies components['schemas']['UsageList'],
+  { data: [], next_cursor: null } satisfies components['schemas']['CostList'],
+]
+const assetTransportCalls = [
+  purchaseTransport.GET('/assets', { params: { query: { currency: 'JPY', status: 'active', merchant: 'Exact\nmerchant', limit: 50 } } }),
+  purchaseTransport.GET('/units/{id}/asset', { params: { path: { id: 'unit' } } }),
+  purchaseTransport.GET('/units/{id}/usage', { params: { path: { id: 'unit' }, query: { limit: 50 } } }),
+  purchaseTransport.GET('/units/{id}/costs', { params: { path: { id: 'unit' }, query: { limit: 50 } } }),
+  purchaseTransport.GET('/units/{id}/disposal', { params: { path: { id: 'unit' } } }),
+  purchaseTransport.GET('/units/{id}/cost-summary', { params: { path: { id: 'unit' }, query: { as_of: '2026-11-07T00:00:00Z' } } }),
+  purchaseTransport.PUT('/units/{id}/asset', { params: { path: { id: 'unit' }, header: assetHeaders }, body: manualAssetInput }),
+  purchaseTransport.PUT('/units/{id}/asset', { params: { path: { id: 'unit' }, header: assetHeaders }, body: purchaseAssetInput }),
+  purchaseTransport.POST('/units/{id}/usage', { params: { path: { id: 'unit' }, header: assetHeaders }, body: assetUseInput }),
+  purchaseTransport.POST('/units/{id}/usage', { params: { path: { id: 'unit' }, header: assetHeaders }, body: assetCorrectionInput }),
+  purchaseTransport.POST('/units/{id}/costs', { params: { path: { id: 'unit' }, header: assetHeaders }, body: assetCostInput }),
+  purchaseTransport.POST('/units/{id}/costs', { params: { path: { id: 'unit' }, header: assetHeaders }, body: assetAdjustmentInput }),
+  purchaseTransport.POST('/units/{id}/retire', { params: { path: { id: 'unit' }, header: assetHeaders }, body: assetRetireInput }),
+  purchaseTransport.POST('/units/{id}/disposal', { params: { path: { id: 'unit' }, header: assetHeaders }, body: assetDisposalInput }),
+]
+// @ts-expect-error Opt-in/replacement intent is explicit, not an omitted Asset proof.
+const implicitAssetIntent: components['schemas']['AssetWrite'] = { ...assetFields, item_revision: 11 }
+// @ts-expect-error The Unit If-Match does not freeze the owning Item's acquisition interpretation.
+const unprovenAssetItem: components['schemas']['AssetWrite'] = { ...assetFields, asset_revision: null }
+// @ts-expect-error PUT is a complete nullable decision, not a partial profile patch.
+const partialAssetInput: components['schemas']['AssetWrite'] = { cost_basis: 'manual', currency: 'JPY', manual_acquisition_minor: 0, usage_unit: 'times', item_revision: 11, asset_revision: null }
+// @ts-expect-error Manual fallback cannot be null even though the retained response can represent legacy source.
+const nullManualAsset: components['schemas']['AssetWrite'] = { ...manualAssetInput, manual_acquisition_minor: null }
+// @ts-expect-error Purchase basis cannot also contain manual acquisition, including zero.
+const doubleAssetAcquisition: components['schemas']['AssetWrite'] = { ...purchaseAssetInput, manual_acquisition_minor: 0 }
+// @ts-expect-error Profile ownership comes from the actual Unit path.
+const reassignedAssetInput: components['schemas']['AssetWrite'] = { ...manualAssetInput, item_unit_id: 'other' }
+// @ts-expect-error A correction must identify the actual earlier event.
+const unreferencedAssetUsage: components['schemas']['UsageWrite'] = { ...assetUseInput, event_type: 'correction' }
+// @ts-expect-error A new use is not a correction of an existing event.
+const referencedAssetUse: components['schemas']['UsageWrite'] = { ...assetUseInput, correction_of: 'use' }
+// @ts-expect-error An adjustment cannot silently become an unreferenced expense/credit.
+const unreferencedAssetCost: components['schemas']['CostWrite'] = { ...assetCostInput, kind: 'adjustment' }
+// @ts-expect-error A real refund is distinct from an adjustment of an earlier event.
+const referencedAssetRefund: components['schemas']['CostWrite'] = { ...assetCostInput, kind: 'refund', correction_of: 'cost' }
+// @ts-expect-error Retirement also binds the original physical Unit independently of Asset If-Match.
+const unprovenAssetRetire: components['schemas']['UnitRetireInput'] = { retired_at: '2026-11-07T00:00:00Z' }
+// @ts-expect-error Disposal proceeds are explicit even when zero.
+const implicitAssetProceeds: components['schemas']['DisposalWrite'] = { kind: 'sold', disposed_at: '2026-11-07T00:00:00Z', currency: 'JPY', unit_revision: 13 }
+// @ts-expect-error Non-sale decisions cannot disguise proceeds under a donated action.
+const nonSaleAssetProceeds: components['schemas']['DisposalWrite'] = { ...assetDisposalInput, kind: 'donated', realized_proceeds_minor: 1 }
+// @ts-expect-error Unit proof is required and nonnullable for a physical disposal.
+const nullAssetUnitProof: components['schemas']['DisposalWrite'] = { ...assetDisposalInput, unit_revision: null }
+// @ts-expect-error Usage replies require the whole immutable event, not only its identity.
+const partialAssetUsage: components['schemas']['Usage'] = { id: 'use', item_unit_id: 'unit', revision: 1 }
+// @ts-expect-error Cost replies require the whole immutable event too.
+const partialAssetCost: components['schemas']['Cost'] = { id: 'cost', item_unit_id: 'unit', revision: 1 }
+// @ts-expect-error Disposal replies retain the actual decision and proceeds.
+const partialAssetDisposal: components['schemas']['Disposal'] = { item_unit_id: 'unit', revision: 1 }
+// @ts-expect-error Asset pages explicitly terminate or continue.
+const partialAssetPage: components['schemas']['AssetList'] = { data: [] }
+// @ts-expect-error Usage pages explicitly terminate or continue.
+const partialAssetUsagePage: components['schemas']['UsageList'] = { data: [] }
+// @ts-expect-error Cost pages explicitly terminate or continue.
+const partialAssetCostPage: components['schemas']['CostList'] = { data: [] }
+// @ts-expect-error Every financial writer still requires its original If-Match.
+const unprovenAssetHeaders: operations['post_units_id_costs']['parameters']['header'] = { ...authHeaders }
+// @ts-expect-error Actual client requests must preserve the required nullable Asset proof.
+const implicitRawAssetIntent = purchaseTransport.PUT('/units/{id}/asset', { params: { path: { id: 'unit' }, header: assetHeaders }, body: { ...assetFields, item_revision: 11 } })
+// @ts-expect-error The public write marker is type-only, never a wire object.
+const markedRawAssetIntent = purchaseTransport.PUT('/units/{id}/asset', { params: { path: { id: 'unit' }, header: assetHeaders }, body: { ...manualAssetInput, asset_revision: { $write: null } } })
+// @ts-expect-error Direct transport cannot erase correction reference requirements.
+const unreferencedRawAssetCost = purchaseTransport.POST('/units/{id}/costs', { params: { path: { id: 'unit' }, header: assetHeaders }, body: { ...assetCostInput, kind: 'adjustment' } })
+// @ts-expect-error Asset status selects Item metadata, not physical lifecycle.
+const lifecycleAssetFilter: NonNullable<operations['get_assets']['parameters']['query']> = { status: 'disposed' }
+void [manualAssetInput, purchaseAssetInput, retainedAsset, assetUseInput, assetCorrectionInput, assetCostInput, assetAdjustmentInput,
+  assetRetireInput, assetDisposalInput, assetNonSaleInput, assetPages, assetTransportCalls, implicitAssetIntent, unprovenAssetItem, partialAssetInput,
+  nullManualAsset, doubleAssetAcquisition, reassignedAssetInput, unreferencedAssetUsage, referencedAssetUse, unreferencedAssetCost, referencedAssetRefund,
+  unprovenAssetRetire, implicitAssetProceeds, nonSaleAssetProceeds, nullAssetUnitProof, partialAssetUsage, partialAssetCost, partialAssetDisposal,
+  partialAssetPage, partialAssetUsagePage, partialAssetCostPage, unprovenAssetHeaders, implicitRawAssetIntent, markedRawAssetIntent, unreferencedRawAssetCost, lifecycleAssetFilter]
+
 void [purchaseHeaders, purchaseProof, purchaseHeader, purchaseReceiptClear, unallocatedPurchaseLine, allocatedPurchaseLine, completePurchasePage, completePurchaseLinePage,
   filteredPurchases, originlessPurchase, unprovenPurchase, unprovenPurchaseLine, unrelatedPurchaseProof, headerPurchaseAmount, implicitPurchaseAllocation,
   bulkUnitPurchaseLine, textPurchaseAmount, nullPurchaseReceipt, incompletePurchasePage, incompletePurchaseLinePage, reassignedPurchaseLine, lifecyclePurchaseQuery, filteredPurchaseLines]

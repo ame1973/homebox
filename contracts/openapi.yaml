@@ -5208,8 +5208,9 @@ paths:
               schema:
                 type: string
                 minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+                maxLength: 18
+                pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+              description: Quoted independent returned-resource revision; validate the exact safe integer, never an unrelated aggregate plus one.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -5238,6 +5239,9 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
+      description: Read one actual Unit-owned Asset with its independent retained Asset revision/ETag. Require completed transactional authorization and real Unit/Item authority; no profile is 404, not implicit opt-in, a fabricated zero basis or revision one. Retained representation does not prove today's financial eligibility. No read-side publication, body or query parameters.
+      x-max-body-bytes: 0
+      x-max-query-bytes: 0
     put:
       operationId: put_units_id_asset
       summary: Save asset profile
@@ -5259,8 +5263,9 @@ paths:
               schema:
                 type: string
                 minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+                maxLength: 18
+                pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+              description: Quoted independent returned-resource revision; validate the exact safe integer, never an unrelated aggregate plus one.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -5311,10 +5316,9 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+        description: Quoted original Unit aggregate revision, not another resource's counter or a refreshed proof. Required body proofs remain independent.
       - name: X-HomeBox-Client-Version
         in: header
         required: true
@@ -5323,14 +5327,26 @@ paths:
           minLength: 1
           maxLength: 32
         description: Semantic application version. Incompatible writes return 426.
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        description: Exact configured public origin, independent of the session and CSRF proof.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/AssetWrite'
-      description: Non-idempotent mutations must use Idempotency-Key and CSRF; domain
-        service validates invariants and commits projections in same SQLite transaction.
+      description: Require exact Origin, completed session, CSRF/version/original key and the documented original proofs; revalidate authorization and actual source inside SQL after strict 128 KiB JSON reading. Reject duplicate/unknown fields, malformed Unicode, inexact/unsafe integers and query parameters without repair. Source, independent counters, current/frozen outbox, derived invalidation, immutable audit and original response commit atomically. Only exact original-key replay deduplicates append-only usage/cost events; a fresh key records another event even if every field matches. Equal eligible profile/lifecycle state is receipt-only. Preserve exact original body/key/proofs for explicit reconciliation after later changes or fresh login; never auto-rebase/replay, infer physical receipt or install frozen replies as current source. Original Unit If-Match, required original Item item_revision and explicit nullable asset_revision jointly bind opt-in versus replacement and the acquisition interpretation. No matching-number shortcut, concurrent-profile overwrite or acquisition mixing; return the independent Asset revision. Existing retirement date is retained; retirement uses its explicit lifecycle command.
+      x-revision-scope: unit
+      x-response-revision-scope: asset
+      x-max-body-bytes: 131072
+      x-max-query-bytes: 0
+      x-content-type: application/json
   /units/{id}/usage:
     get:
       operationId: get_units_id_usage
@@ -5349,12 +5365,6 @@ paths:
               schema:
                 const: no-store
               description: Protected API data is never cached by the service worker.
-            ETag:
-              schema:
-                type: string
-                minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -5398,8 +5408,9 @@ paths:
           type: string
           minLength: 1
           maxLength: 2048
-      description: Lists use stable ID ordering, or (occurred_at,id) for events, with
-        opaque scoped cursors.
+      description: Read one complete live Asset-owned usage page in stable event-ID order from actual immutable source and retained counters. Validate real profile/Unit/Item ownership, nullable correction references and lookahead before returning any prefix. Bind principal, epoch, owner, collection and size to an independent signed 15-minute 2048-byte cursor. This is not a frozen timeline or current usage total; never guess missing legacy provenance, repair source or apply new-input policy to retained events.
+      x-max-body-bytes: 0
+      x-max-query-bytes: 16384
     post:
       operationId: post_units_id_usage
       summary: Record usage
@@ -5421,8 +5432,9 @@ paths:
               schema:
                 type: string
                 minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+                maxLength: 18
+                pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+              description: Quoted independent returned-resource revision; validate the exact safe integer, never an unrelated aggregate plus one.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -5481,18 +5493,29 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+        description: Quoted original Asset aggregate revision, not another resource's counter or a refreshed proof. Required body proofs remain independent.
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        description: Exact configured public origin, independent of the session and CSRF proof.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/UsageWrite'
-      description: Non-idempotent mutations must use Idempotency-Key and CSRF; domain
-        service validates invariants and commits projections in same SQLite transaction.
+      description: Require exact Origin, completed session, CSRF/version/original key and the documented original proofs; revalidate authorization and actual source inside SQL after strict 128 KiB JSON reading. Reject duplicate/unknown fields, malformed Unicode, inexact/unsafe integers and query parameters without repair. Source, independent counters, current/frozen outbox, derived invalidation, immutable audit and original response commit atomically. Only exact original-key replay deduplicates append-only usage/cost events; a fresh key records another event even if every field matches. Equal eligible profile/lifecycle state is receipt-only. Preserve exact original body/key/proofs for explicit reconciliation after later changes or fresh login; never auto-rebase/replay, infer physical receipt or install frozen replies as current source. Use original Asset If-Match, not Unit or event proof. Append one immutable owned event, validate reference/unit/chronological nonnegative running totals and return a new independent Usage revision one. Preserve original events and retained legacy provenance.
+      x-revision-scope: asset
+      x-response-revision-scope: usage
+      x-max-body-bytes: 131072
+      x-max-query-bytes: 0
+      x-content-type: application/json
   /units/{id}/costs:
     get:
       operationId: get_units_id_costs
@@ -5511,12 +5534,6 @@ paths:
               schema:
                 const: no-store
               description: Protected API data is never cached by the service worker.
-            ETag:
-              schema:
-                type: string
-                minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -5560,8 +5577,9 @@ paths:
           type: string
           minLength: 1
           maxLength: 2048
-      description: Lists use stable ID ordering, or (occurred_at,id) for events, with
-        opaque scoped cursors.
+      description: Read one complete live Asset-owned cost page in stable event-ID order from actual immutable source and retained counters. Validate real profile/Unit/Item ownership, nullable correction references and lookahead before returning any prefix. Bind principal, epoch, owner, collection and size to an independent signed 15-minute 2048-byte cursor. Retain exact amounts, directions and currency representation without repricing or invented legacy provenance; no list ETag, frozen-snapshot claim or read-side publication.
+      x-max-body-bytes: 0
+      x-max-query-bytes: 16384
     post:
       operationId: post_units_id_costs
       summary: Record cost
@@ -5583,8 +5601,9 @@ paths:
               schema:
                 type: string
                 minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+                maxLength: 18
+                pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+              description: Quoted independent returned-resource revision; validate the exact safe integer, never an unrelated aggregate plus one.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -5643,18 +5662,29 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+        description: Quoted original Asset aggregate revision, not another resource's counter or a refreshed proof. Required body proofs remain independent.
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        description: Exact configured public origin, independent of the session and CSRF proof.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/CostWrite'
-      description: Non-idempotent mutations must use Idempotency-Key and CSRF; domain
-        service validates invariants and commits projections in same SQLite transaction.
+      description: Require exact Origin, completed session, CSRF/version/original key and the documented original proofs; revalidate authorization and actual source inside SQL after strict 128 KiB JSON reading. Reject duplicate/unknown fields, malformed Unicode, inexact/unsafe integers and query parameters without repair. Source, independent counters, current/frozen outbox, derived invalidation, immutable audit and original response commit atomically. Only exact original-key replay deduplicates append-only usage/cost events; a fresh key records another event even if every field matches. Equal eligible profile/lifecycle state is receipt-only. Preserve exact original body/key/proofs for explicit reconciliation after later changes or fresh login; never auto-rebase/replay, infer physical receipt or install frozen replies as current source. Use original Asset If-Match, not Unit or event proof. Append one immutable owned cost or referenced adjustment with actual same-currency authority and safe signed totals; return the new independent Cost revision one. Never update posted amounts or clamp negative net cost.
+      x-revision-scope: asset
+      x-response-revision-scope: cost
+      x-max-body-bytes: 131072
+      x-max-query-bytes: 0
+      x-content-type: application/json
   /units/{id}/retire:
     post:
       operationId: post_units_id_retire
@@ -5677,8 +5707,9 @@ paths:
               schema:
                 type: string
                 minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+                maxLength: 18
+                pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+              description: Quoted independent returned-resource revision; validate the exact safe integer, never an unrelated aggregate plus one.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -5737,19 +5768,85 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+        description: Quoted original Asset aggregate revision, not another resource's counter or a refreshed proof. Required body proofs remain independent.
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        description: Exact configured public origin, independent of the session and CSRF proof.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/UnitRetireInput'
-      description: Non-idempotent mutations must use Idempotency-Key and CSRF; domain
-        service validates invariants and commits projections in same SQLite transaction.
+      description: Require exact Origin, completed session, CSRF/version/original key and the documented original proofs; revalidate authorization and actual source inside SQL after strict 128 KiB JSON reading. Reject duplicate/unknown fields, malformed Unicode, inexact/unsafe integers and query parameters without repair. Source, independent counters, current/frozen outbox, derived invalidation, immutable audit and original response commit atomically. Only exact original-key replay deduplicates append-only usage/cost events; a fresh key records another event even if every field matches. Equal eligible profile/lifecycle state is receipt-only. Preserve exact original body/key/proofs for explicit reconciliation after later changes or fresh login; never auto-rebase/replay, infer physical receipt or install frozen replies as current source. Original Asset If-Match and required original Unit unit_revision separately bind financial and physical review. Set explicit retirement and Unit status together while retaining placement, not disposal/proceeds. Return the independent Unit revision, not Asset-proof-plus-one.
+      x-revision-scope: asset
+      x-response-revision-scope: unit
+      x-max-body-bytes: 131072
+      x-max-query-bytes: 0
+      x-content-type: application/json
   /units/{id}/disposal:
+    get:
+      operationId: get_units_id_disposal
+      summary: Recorded disposal
+      tags:
+      - units
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Disposal'
+          headers:
+            Cache-Control:
+              schema:
+                const: no-store
+              description: Protected API data is never cached by the service worker.
+            ETag:
+              schema:
+                type: string
+                minLength: 3
+                maxLength: 18
+                pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+              description: Quoted independent returned-resource revision; validate the exact safe integer, never an unrelated aggregate plus one.
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '413':
+          $ref: '#/components/responses/Error413'
+        '415':
+          $ref: '#/components/responses/Error415'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+      description: Read the complete actual retained disposal for this exact Unit, including explicit kind, currency, proceeds, note and independent Disposal revision/ETag. Validate real profile/Unit/Item authority in the completed authorized transaction. Absence is 404, not guessed zero proceeds, a fabricated event or a reconstructed POST reply. Retained representation is not today's new-disposal eligibility; no body/query or read-side repair/publication.
+      x-max-body-bytes: 0
+      x-max-query-bytes: 0
     post:
       operationId: post_units_id_disposal
       summary: Dispose unit
@@ -5771,8 +5868,9 @@ paths:
               schema:
                 type: string
                 minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+                maxLength: 18
+                pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+              description: Quoted independent returned-resource revision; validate the exact safe integer, never an unrelated aggregate plus one.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -5831,18 +5929,29 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+        description: Quoted original Asset aggregate revision, not another resource's counter or a refreshed proof. Required body proofs remain independent.
+      - name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        description: Exact configured public origin, independent of the session and CSRF proof.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/DisposalWrite'
-      description: Non-idempotent mutations must use Idempotency-Key and CSRF; domain
-        service validates invariants and commits projections in same SQLite transaction.
+      description: Require exact Origin, completed session, CSRF/version/original key and the documented original proofs; revalidate authorization and actual source inside SQL after strict 128 KiB JSON reading. Reject duplicate/unknown fields, malformed Unicode, inexact/unsafe integers and query parameters without repair. Source, independent counters, current/frozen outbox, derived invalidation, immutable audit and original response commit atomically. Only exact original-key replay deduplicates append-only usage/cost events; a fresh key records another event even if every field matches. Equal eligible profile/lifecycle state is receipt-only. Preserve exact original body/key/proofs for explicit reconciliation after later changes or fresh login; never auto-rebase/replay, infer physical receipt or install frozen replies as current source. Original Asset If-Match and required original Unit unit_revision separately bind finance and physical placement/status. Record one explicit terminal disposal and proceeds together with all path/Unit/Asset/Item dependencies; return independent Disposal revision one. Preserve existing records and require a separately audited correction/void workflow instead of overwrite.
+      x-revision-scope: asset
+      x-response-revision-scope: disposal
+      x-max-body-bytes: 131072
+      x-max-query-bytes: 0
+      x-content-type: application/json
   /units/{id}/cost-summary:
     get:
       operationId: get_units_id_cost_summary
@@ -5861,12 +5970,6 @@ paths:
               schema:
                 const: no-store
               description: Protected API data is never cached by the service worker.
-            ETag:
-              schema:
-                type: string
-                minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -5899,10 +6002,15 @@ paths:
         in: query
         required: false
         schema:
-          type: string
-          minLength: 1
-          maxLength: 64
-          format: date-time
+          allOf:
+          - type: string
+            format: date-time
+          - minLength: 20
+            maxLength: 35
+            pattern: ^(?!0000)[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-5][0-9]:[0-5][0-9](\.[0-9]{1,9})?(Z|[+-]([01][0-9]|2[0-3]):[0-5][0-9])(?![\s\S])
+      description: Calculate the complete current posted Asset breakdown from actual profile, exact-Unit purchase allocations, costs, usage and disposal in one completed authorized read transaction. as_of bounds inclusive home-civil service days only, not historical financial reconstruction; expose timezone, day_policy and same-transaction source_revision. Keep actual proceeds and residual projections separate, negative net values intact, null denominators and exact safe integer totals. Never sum a header plus its Lines, sibling/unallocated Item spend, mixed currencies or an unverified cache. Return no resource ETag because clock/timezone-dependent calculation is not an Asset write proof; fail closed on unsafe/incompatible authority.
+      x-max-body-bytes: 0
+      x-max-query-bytes: 16384
   /ai/jobs:
     get:
       operationId: get_ai_jobs
@@ -9861,12 +9969,6 @@ paths:
               schema:
                 const: no-store
               description: Protected API data is never cached by the service worker.
-            ETag:
-              schema:
-                type: string
-                minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -9887,8 +9989,7 @@ paths:
           $ref: '#/components/responses/Error429'
         '503':
           $ref: '#/components/responses/Error503'
-      description: Lists use stable ID ordering, or (occurred_at,id) for events, with
-        opaque scoped cursors.
+      description: Read complete live Asset pages in stable Unit-ID order from actual profile/Unit/Item source and retained independent counters. Apply category, Item active/archived status, profile currency and that exact Unit's nondisposed current placement in direct/subtree scope before slicing. Date and exact stored merchant criteria must match the same purchase with a Line naming the exact Unit, never an unallocated Item Line or sibling Unit. Resolve inclusive from/to civil dates in the configured home timezone, UTC only when absent. Bind effective filters/timezone, principal, epoch and page size into an independent signed 15-minute cursor. These are not frozen snapshots; validate all selected authority and lookahead and withhold failed prefixes. Never infer asset opt-in, publish read-side repair or install retained cache as source.
       parameters:
       - name: limit
         in: query
@@ -9913,6 +10014,7 @@ paths:
           minLength: 10
           maxLength: 10
           format: date
+          pattern: ^(?!0000)[0-9]{4}-[0-9]{2}-[0-9]{2}(?![\s\S])
       - name: to
         in: query
         required: false
@@ -9921,6 +10023,7 @@ paths:
           minLength: 10
           maxLength: 10
           format: date
+          pattern: ^(?!0000)[0-9]{4}-[0-9]{2}-[0-9]{2}(?![\s\S])
       - name: currency
         in: query
         required: false
@@ -9955,9 +10058,9 @@ paths:
         in: query
         required: false
         schema:
-          type: string
-          minLength: 1
-          maxLength: 32
+          enum:
+          - active
+          - archived
       - name: merchant
         in: query
         required: false
@@ -9965,6 +10068,8 @@ paths:
           type: string
           minLength: 1
           maxLength: 300
+      x-max-body-bytes: 0
+      x-max-query-bytes: 16384
   /media/links:
     get:
       operationId: get_media_links
@@ -12552,13 +12657,24 @@ components:
           type:
           - number
           - 'null'
-        as_of: *id004
+        as_of: &assetInstant
+          allOf:
+          - type: string
+            format: date-time
+          - &assetInstantBounds
+            minLength: 20
+            maxLength: 35
+            pattern: ^(?!0000)[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-5][0-9]:[0-5][0-9](\.[0-9]{1,9})?(Z|[+-]([01][0-9]|2[0-3]):[0-5][0-9])(?![\s\S])
         timezone:
           type: string
           minLength: 1
           maxLength: 100
         day_policy:
           const: inclusive_civil_days
+        source_revision:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
       required:
       - unit_id
       - currency
@@ -12579,6 +12695,46 @@ components:
       - as_of
       - timezone
       - day_policy
+      - source_revision
+      allOf:
+      - if:
+          properties:
+            elapsed_days:
+              type: 'null'
+        then:
+          properties:
+            per_day_minor:
+              type: 'null'
+            projected_per_day_minor:
+              type: 'null'
+      - if:
+          properties:
+            total_usage:
+              const: 0
+        then:
+          properties:
+            per_use_minor:
+              type: 'null'
+            projected_per_use_minor:
+              type: 'null'
+      - if:
+          properties:
+            estimated_residual_minor:
+              type: 'null'
+        then:
+          properties:
+            projected_net_cost_minor:
+              type: 'null'
+            projected_per_day_minor:
+              type: 'null'
+            projected_per_use_minor:
+              type: 'null'
+        else:
+          properties:
+            projected_net_cost_minor:
+              type: integer
+      description: Exact integer-minor-unit breakdown of current posted financial source for one Asset, not a historical financial snapshot and not depreciation. Acquisition sums each allocation naming this exact Unit once for purchase basis, or the explicit manual fallback, never both. Extra is expenses minus credits; realized net subtracts actual proceeds, projected net subtracts an explicitly supplied residual, and the two never subtract both proceeds and residual. Preserve negative net values and never clamp them. as_of bounds only elapsed service time, using inclusive civil days in the resolved home timezone through min(as_of,retired_at); before service or without a service date the divisor is null. No usage means null per-use, not zero or division by zero. Monetary totals and usage are complete current posted history; as_of does not undo a later correction or disposal. Ratios are finite numeric minor units per day or declared usage unit, not separately rounded accounting entries. source_revision is the same-transaction catalog data_revision and is not an Asset If-Match. Reject unsafe aggregate arithmetic rather than round or return a partial total.
+      x-runtime-validation: asset-source-safe-arithmetic-civil-days-v1
     Location:
       type: object
       additionalProperties: false
@@ -13475,33 +13631,23 @@ components:
       type: object
       additionalProperties: false
       properties:
-        item_unit_id: *id005
-        revision: *id006
+        item_unit_id: *purchaseID
+        revision: *purchaseRevision
         cost_basis: &id015
           enum:
           - purchase
           - manual
         currency: *id012
-        manual_acquisition_minor:
+        manual_acquisition_minor: &assetNullableAmount
           anyOf:
-          - type: integer
-            minimum: 0
-            maximum: 9007199254740991
+          - *purchaseAmount
           - type: 'null'
-        in_service_at:
+        in_service_at: &assetNullableInstant
           anyOf:
-          - *id004
+          - *assetInstant
           - type: 'null'
-        retired_at:
-          anyOf:
-          - *id004
-          - type: 'null'
-        estimated_residual_minor:
-          anyOf:
-          - type: integer
-            minimum: 0
-            maximum: 9007199254740991
-          - type: 'null'
+        retired_at: *assetNullableInstant
+        estimated_residual_minor: *assetNullableAmount
         usage_unit: *id014
       required:
       - item_unit_id
@@ -13513,81 +13659,72 @@ components:
       - retired_at
       - estimated_residual_minor
       - usage_unit
+      description: One explicit financial profile owned by an actual individual Unit, with an independent Asset aggregate revision. All nullable values are present, including unknown service dates and absent residual. Retained representation is not new-money or acquisition eligibility. Acquisition, usage/cost and lifecycle dependencies must publish this aggregate atomically; the Unit and Asset counters are independent. Retirement does not imply disposal or remove stored placement.
     AssetList:
       type: object
+      additionalProperties: false
       required:
       - data
-      additionalProperties: false
+      - next_cursor
       properties:
         data:
           type: array
+          maxItems: 100
           items:
             $ref: '#/components/schemas/Asset'
         next_cursor:
           type:
           - string
           - 'null'
+          minLength: 1
+          maxLength: 2048
+      description: One complete live stable-Unit-ID page, with required null continuation at the end and no list ETag or mixed-currency total.
     AssetWrite:
       type: object
-      minProperties: 1
       additionalProperties: false
       properties:
+        item_revision: *purchaseRevision
+        asset_revision:
+          anyOf:
+          - *purchaseRevision
+          - type: 'null'
         cost_basis: *id015
         currency: *id012
-        manual_acquisition_minor:
-          anyOf:
-          - type: integer
-            minimum: 0
-            maximum: 9007199254740991
-          - type: 'null'
-        in_service_at:
-          anyOf:
-          - *id004
-          - type: 'null'
-        retired_at:
-          anyOf:
-          - *id004
-          - type: 'null'
-        estimated_residual_minor:
-          anyOf:
-          - type: integer
-            minimum: 0
-            maximum: 9007199254740991
-          - type: 'null'
+        manual_acquisition_minor: *assetNullableAmount
+        in_service_at: *assetNullableInstant
+        retired_at: *assetNullableInstant
+        estimated_residual_minor: *assetNullableAmount
         usage_unit: *id014
       required:
+      - item_revision
+      - asset_revision
       - cost_basis
       - currency
+      - manual_acquisition_minor
+      - in_service_at
+      - retired_at
+      - estimated_residual_minor
       - usage_unit
-      allOf:
-      - if:
-          properties:
-            cost_basis:
-              const: manual
-        then:
-          required:
-          - manual_acquisition_minor
-          properties:
-            manual_acquisition_minor:
-              type: integer
-              minimum: 0
-              maximum: 9007199254740991
-      - if:
-          properties:
-            cost_basis:
-              const: purchase
-        then:
-          properties:
-            manual_acquisition_minor:
-              type: 'null'
+      oneOf:
+      - properties:
+          cost_basis:
+            const: manual
+          manual_acquisition_minor: *purchaseAmount
+      - properties:
+          cost_basis:
+            const: purchase
+          manual_acquisition_minor:
+            type: 'null'
+      description: Complete explicitly reviewed opt-in/replacement against original Unit If-Match and original Item item_revision. Required asset_revision is explicit null only when no profile was reviewed; a number is the original existing Asset proof. Check all supplied scopes and actual profile presence, never interpret coincident Unit/Asset revision numbers as creation intent or silently overwrite a concurrent profile. Preserve all nullable decisions without defaults. Manual acquisition and exact-Unit purchase allocations are exclusive, including zero-valued history; new money requires the pinned finite ISO currency policy. All allocated costs, extra events and proceeds must match currency, and usage_unit cannot relabel retained usage. Financial basis/amount/date changes require immutable audit with exact before/after/input. Retirement changes must use the separate lifecycle command; a replacement retains the reviewed retired_at and cannot revive a disposed Unit. No physical receipt, guessed purchase/service/retirement date, exchange conversion or automatic allocation. Authoritative eligibility and matching real counters remain SQL validation, not schema evidence.
+      x-runtime-validation: asset-original-unit-item-nullable-profile-v1
     Usage:
       type: object
       additionalProperties: false
       properties:
-        id: *id005
-        revision: *id006
-        item_unit_id: *id005
-        delta:
+        id: *purchaseID
+        revision: *purchaseRevision
+        item_unit_id: *purchaseID
+        delta: &assetDelta
           type: integer
           minimum: -9007199254740991
           maximum: 9007199254740991
@@ -13598,88 +13735,85 @@ components:
           enum:
           - use
           - correction
-        occurred_at: *id013
-        note:
-          type: string
-          minLength: 0
-          maxLength: 10000
-        correction_of:
-          anyOf:
-          - *id001
-          - type: 'null'
+        occurred_at: *assetInstant
+        note: *purchaseNote
+        correction_of: *purchaseNullableID
       required:
       - id
       - revision
       - item_unit_id
+      - delta
+      - usage_unit
+      - event_type
+      - occurred_at
+      - note
+      - correction_of
+      description: One independently identified immutable posted usage delta with its exact owner, instant and nullable original-event reference. Retained corrections may lack historical provenance; reads must not invent a reference or apply new-input policy retroactively. Its independent revision is not the Asset or Unit proof.
     UsageList:
       type: object
+      additionalProperties: false
       required:
       - data
-      additionalProperties: false
+      - next_cursor
       properties:
         data:
           type: array
+          maxItems: 100
           items:
             $ref: '#/components/schemas/Usage'
         next_cursor:
           type:
           - string
           - 'null'
+          minLength: 1
+          maxLength: 2048
+      description: One complete live owner-scoped stable-event-ID page with explicit terminal continuation, not a frozen timeline, total or list ETag. occurred_at is exact event data, not a lexical UTC-normalized sorting assumption for retained offset spellings.
     UsageWrite:
       type: object
-      minProperties: 1
       additionalProperties: false
       properties:
-        delta:
-          type: integer
-          minimum: -9007199254740991
-          maximum: 9007199254740991
-          not:
-            const: 0
+        delta: *assetDelta
         usage_unit: *id014
         event_type:
           enum:
           - use
           - correction
-        occurred_at: *id013
+        occurred_at: *assetInstant
         note:
-          type: string
-          minLength: 0
-          maxLength: 10000
-        correction_of:
-          anyOf:
-          - *id001
-          - type: 'null'
+          allOf:
+          - *purchaseNote
+          default: ''
+        correction_of: *purchaseNullableID
       required:
       - delta
       - usage_unit
       - event_type
       - occurred_at
-      allOf:
-      - if:
-          properties:
-            event_type:
-              const: correction
-        then:
-          required:
-          - correction_of
-          properties:
-            correction_of: *id001
-        else:
-          properties:
-            delta:
-              type: integer
-              minimum: 1
-              maximum: 9007199254740991
-            correction_of:
-              type: 'null'
+      oneOf:
+      - properties:
+          event_type:
+            const: use
+          delta:
+            type: integer
+            minimum: 1
+            maximum: 9007199254740991
+          correction_of:
+            type: 'null'
+      - properties:
+          event_type:
+            const: correction
+          correction_of: *purchaseID
+        required:
+        - correction_of
+      description: Append one immutable usage event against the original Asset proof. A use has positive delta and no correction reference; a correction has a nonzero signed delta and references an actual earlier event of the same asset and usage unit. This is not a replacement count or destructive edit. Check every chronological running total and the lifetime sum with exact safe arithmetic so a backdated correction cannot create a negative prefix. Deltas at the same exact instant form one chronological step; random UUID ordering must not determine eligibility. Omitted note defaults to empty and omitted use correction_of to null, never a guessed delta/date. Preserve original event bytes and publish the new event, Asset aggregate, derived invalidation, audit and frozen reply atomically. Schema references do not establish actual ownership, chronology or SQL eligibility.
+      x-runtime-validation: asset-immutable-usage-correction-running-total-v1
     Cost:
       type: object
       additionalProperties: false
       properties:
-        id: *id005
-        revision: *id006
-        item_unit_id: *id005
+        id: *purchaseID
+        revision: *purchaseRevision
+        item_unit_id: *purchaseID
         amount_minor:
           type: integer
           minimum: 1
@@ -13697,36 +13831,42 @@ components:
           enum:
           - expense
           - credit
-        occurred_at: *id013
-        note:
-          type: string
-          minLength: 0
-          maxLength: 10000
-        correction_of:
-          anyOf:
-          - *id001
-          - type: 'null'
+        occurred_at: *assetInstant
+        note: *purchaseNote
+        correction_of: *purchaseNullableID
       required:
       - id
       - revision
       - item_unit_id
+      - amount_minor
+      - currency
+      - kind
+      - direction
+      - occurred_at
+      - note
+      - correction_of
+      description: One immutable complete positive minor-unit magnitude plus explicit expense/credit direction, with independent event identity/revision. Retained uppercase currency and absent correction provenance remain exact representation, not proof of new-money eligibility or an invented replacement event.
     CostList:
       type: object
+      additionalProperties: false
       required:
       - data
-      additionalProperties: false
+      - next_cursor
       properties:
         data:
           type: array
+          maxItems: 100
           items:
             $ref: '#/components/schemas/Cost'
         next_cursor:
           type:
           - string
           - 'null'
+          minLength: 1
+          maxLength: 2048
+      description: One complete live owner-scoped stable-event-ID page with explicit terminal continuation and no list ETag, mixed-currency total or frozen-history claim.
     CostWrite:
       type: object
-      minProperties: 1
       additionalProperties: false
       properties:
         amount_minor:
@@ -13743,27 +13883,43 @@ components:
           - refund
           - adjustment
         direction: *id016
-        occurred_at: *id013
+        occurred_at: *assetInstant
         note:
-          type: string
-          minLength: 0
-          maxLength: 10000
-        correction_of:
-          anyOf:
-          - *id001
-          - type: 'null'
+          allOf:
+          - *purchaseNote
+          default: ''
+        correction_of: *purchaseNullableID
       required:
       - amount_minor
       - currency
       - kind
       - direction
       - occurred_at
+      oneOf:
+      - properties:
+          kind:
+            enum:
+            - maintenance
+            - repair
+            - accessory
+            - fee
+            - refund
+          correction_of:
+            type: 'null'
+      - properties:
+          kind:
+            const: adjustment
+          correction_of: *purchaseID
+        required:
+        - correction_of
+      description: Append an immutable cost event against the original Asset proof. amount_minor is a positive whole allocation magnitude; expense adds and credit subtracts from the signed extra total. New money requires the pinned finite ISO policy and the profile currency. An adjustment must reference an actual earlier event of the same asset and currency; ordinary expense/refund events have no correction reference. Never replace or delete posted source, infer FX, clamp negative net cost, multiply by usage or confuse a refund with disposal proceeds. Omitted note defaults to empty and omitted nonadjustment correction_of to null. Actual references, currencies, safe aggregate arithmetic, audit and atomic publication require the authoritative service.
+      x-runtime-validation: asset-immutable-cost-adjustment-currency-v1
     Disposal:
       type: object
       additionalProperties: false
       properties:
-        item_unit_id: *id005
-        revision: *id006
+        item_unit_id: *purchaseID
+        revision: *purchaseRevision
         kind:
           enum:
           - sold
@@ -13771,24 +13927,24 @@ components:
           - recycled
           - discarded
           - other
-        disposed_at: *id013
-        realized_proceeds_minor:
-          type: integer
-          minimum: 0
-          maximum: 9007199254740991
+        disposed_at: *assetInstant
+        realized_proceeds_minor: *purchaseAmount
         currency: *id012
-        note:
-          type: string
-          minLength: 0
-          maxLength: 10000
+        note: *purchaseNote
       required:
       - item_unit_id
       - revision
+      - kind
+      - disposed_at
+      - realized_proceeds_minor
+      - currency
+      - note
+      description: The complete retained disposal decision for exactly one Unit, with independent Disposal revision, explicit proceeds and exact history. Retained non-sale proceeds remain representation rather than being rewritten to today's input policy. It is neither the Unit/Asset proof nor an inferred retirement or residual estimate.
     DisposalWrite:
       type: object
-      minProperties: 1
       additionalProperties: false
       properties:
+        unit_revision: *purchaseRevision
         kind:
           enum:
           - sold
@@ -13796,20 +13952,34 @@ components:
           - recycled
           - discarded
           - other
-        disposed_at: *id013
-        realized_proceeds_minor:
-          type: integer
-          minimum: 0
-          maximum: 9007199254740991
+        disposed_at: *assetInstant
+        realized_proceeds_minor: *purchaseAmount
         currency: *id012
         note:
-          type: string
-          minLength: 0
-          maxLength: 10000
+          allOf:
+          - *purchaseNote
+          default: ''
       required:
+      - unit_revision
       - disposed_at
       - kind
       - currency
+      - realized_proceeds_minor
+      oneOf:
+      - properties:
+          kind:
+            const: sold
+      - properties:
+          kind:
+            enum:
+            - donated
+            - recycled
+            - discarded
+            - other
+          realized_proceeds_minor:
+            const: 0
+      description: Explicit disposal against original Asset If-Match plus required original Unit unit_revision. The positive Unit proof separately binds physical status/placement; the Asset proof binds reviewed finance. Proceeds are explicit even when zero, match profile currency and obey new-money policy. Non-sale disposal has zero proceeds; retained history is never repaired to this new-input rule. Record the terminal physical action, disposal identity/revision, Asset/Unit/Item/path dependencies, immutable audit and frozen response atomically. Do not guess service/retirement dates, subtract residual as realized proceeds, silently edit an existing disposal or allow ordinary Unit status to bypass this financial command. Corrections/voids require their own audited workflow, not destructive overwrite.
+      x-runtime-validation: asset-original-financial-physical-disposal-v1
     AIJob:
       type: object
       additionalProperties: false
@@ -14292,12 +14462,21 @@ components:
       type: object
       additionalProperties: false
       properties:
-        retired_at: &id020
-          type: string
-          format: date-time
-        note: *id019
+        unit_revision: *purchaseRevision
+        retired_at:
+          allOf:
+          - &id020
+            type: string
+            format: date-time
+          - *assetInstantBounds
+        note:
+          allOf:
+          - *purchaseNote
+          default: ''
       required:
+      - unit_revision
       - retired_at
+      description: Explicit financial retirement against original Asset If-Match and required original Unit unit_revision. Validate the actual service/retirement instants chronologically without lexical offset comparisons. Retain physical placement and do not dispose, infer proceeds, guess service dates or revive a disposed Unit. Return the independently versioned Unit, not Asset-proof-plus-one; source, Asset/Unit/Item/path dependencies, exact immutable audit and original response commit atomically. Repeated equal retirement is a receipt, not a destructive historical rewrite.
     MediaLinkCreate:
       type: object
       additionalProperties: false

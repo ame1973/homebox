@@ -297,7 +297,7 @@ export interface paths {
         };
         /**
          * GET /assets
-         * @description Lists use stable ID ordering, or (occurred_at,id) for events, with opaque scoped cursors.
+         * @description Read complete live Asset pages in stable Unit-ID order from actual profile/Unit/Item source and retained independent counters. Apply category, Item active/archived status, profile currency and that exact Unit's nondisposed current placement in direct/subtree scope before slicing. Date and exact stored merchant criteria must match the same purchase with a Line naming the exact Unit, never an unallocated Item Line or sibling Unit. Resolve inclusive from/to civil dates in the configured home timezone, UTC only when absent. Bind effective filters/timezone, principal, epoch and page size into an independent signed 15-minute cursor. These are not frozen snapshots; validate all selected authority and lookahead and withhold failed prefixes. Never infer asset opt-in, publish read-side repair or install retained cache as source.
          */
         readonly get: operations["get_assets"];
         readonly put?: never;
@@ -1851,11 +1851,14 @@ export interface paths {
             readonly path?: never;
             readonly cookie?: never;
         };
-        /** Asset profile */
+        /**
+         * Asset profile
+         * @description Read one actual Unit-owned Asset with its independent retained Asset revision/ETag. Require completed transactional authorization and real Unit/Item authority; no profile is 404, not implicit opt-in, a fabricated zero basis or revision one. Retained representation does not prove today's financial eligibility. No read-side publication, body or query parameters.
+         */
         readonly get: operations["get_units_id_asset"];
         /**
          * Save asset profile
-         * @description Non-idempotent mutations must use Idempotency-Key and CSRF; domain service validates invariants and commits projections in same SQLite transaction.
+         * @description Require exact Origin, completed session, CSRF/version/original key and the documented original proofs; revalidate authorization and actual source inside SQL after strict 128 KiB JSON reading. Reject duplicate/unknown fields, malformed Unicode, inexact/unsafe integers and query parameters without repair. Source, independent counters, current/frozen outbox, derived invalidation, immutable audit and original response commit atomically. Only exact original-key replay deduplicates append-only usage/cost events; a fresh key records another event even if every field matches. Equal eligible profile/lifecycle state is receipt-only. Preserve exact original body/key/proofs for explicit reconciliation after later changes or fresh login; never auto-rebase/replay, infer physical receipt or install frozen replies as current source. Original Unit If-Match, required original Item item_revision and explicit nullable asset_revision jointly bind opt-in versus replacement and the acquisition interpretation. No matching-number shortcut, concurrent-profile overwrite or acquisition mixing; return the independent Asset revision. Existing retirement date is retained; retirement uses its explicit lifecycle command.
          */
         readonly put: operations["put_units_id_asset"];
         readonly post?: never;
@@ -1872,7 +1875,10 @@ export interface paths {
             readonly path?: never;
             readonly cookie?: never;
         };
-        /** Asset cost summary */
+        /**
+         * Asset cost summary
+         * @description Calculate the complete current posted Asset breakdown from actual profile, exact-Unit purchase allocations, costs, usage and disposal in one completed authorized read transaction. as_of bounds inclusive home-civil service days only, not historical financial reconstruction; expose timezone, day_policy and same-transaction source_revision. Keep actual proceeds and residual projections separate, negative net values intact, null denominators and exact safe integer totals. Never sum a header plus its Lines, sibling/unallocated Item spend, mixed currencies or an unverified cache. Return no resource ETag because clock/timezone-dependent calculation is not an Asset write proof; fail closed on unsafe/incompatible authority.
+         */
         readonly get: operations["get_units_id_cost_summary"];
         readonly put?: never;
         readonly post?: never;
@@ -1891,13 +1897,13 @@ export interface paths {
         };
         /**
          * Cost events
-         * @description Lists use stable ID ordering, or (occurred_at,id) for events, with opaque scoped cursors.
+         * @description Read one complete live Asset-owned cost page in stable event-ID order from actual immutable source and retained counters. Validate real profile/Unit/Item ownership, nullable correction references and lookahead before returning any prefix. Bind principal, epoch, owner, collection and size to an independent signed 15-minute 2048-byte cursor. Retain exact amounts, directions and currency representation without repricing or invented legacy provenance; no list ETag, frozen-snapshot claim or read-side publication.
          */
         readonly get: operations["get_units_id_costs"];
         readonly put?: never;
         /**
          * Record cost
-         * @description Non-idempotent mutations must use Idempotency-Key and CSRF; domain service validates invariants and commits projections in same SQLite transaction.
+         * @description Require exact Origin, completed session, CSRF/version/original key and the documented original proofs; revalidate authorization and actual source inside SQL after strict 128 KiB JSON reading. Reject duplicate/unknown fields, malformed Unicode, inexact/unsafe integers and query parameters without repair. Source, independent counters, current/frozen outbox, derived invalidation, immutable audit and original response commit atomically. Only exact original-key replay deduplicates append-only usage/cost events; a fresh key records another event even if every field matches. Equal eligible profile/lifecycle state is receipt-only. Preserve exact original body/key/proofs for explicit reconciliation after later changes or fresh login; never auto-rebase/replay, infer physical receipt or install frozen replies as current source. Use original Asset If-Match, not Unit or event proof. Append one immutable owned cost or referenced adjustment with actual same-currency authority and safe signed totals; return the new independent Cost revision one. Never update posted amounts or clamp negative net cost.
          */
         readonly post: operations["post_units_id_costs"];
         readonly delete?: never;
@@ -1913,11 +1919,15 @@ export interface paths {
             readonly path?: never;
             readonly cookie?: never;
         };
-        readonly get?: never;
+        /**
+         * Recorded disposal
+         * @description Read the complete actual retained disposal for this exact Unit, including explicit kind, currency, proceeds, note and independent Disposal revision/ETag. Validate real profile/Unit/Item authority in the completed authorized transaction. Absence is 404, not guessed zero proceeds, a fabricated event or a reconstructed POST reply. Retained representation is not today's new-disposal eligibility; no body/query or read-side repair/publication.
+         */
+        readonly get: operations["get_units_id_disposal"];
         readonly put?: never;
         /**
          * Dispose unit
-         * @description Non-idempotent mutations must use Idempotency-Key and CSRF; domain service validates invariants and commits projections in same SQLite transaction.
+         * @description Require exact Origin, completed session, CSRF/version/original key and the documented original proofs; revalidate authorization and actual source inside SQL after strict 128 KiB JSON reading. Reject duplicate/unknown fields, malformed Unicode, inexact/unsafe integers and query parameters without repair. Source, independent counters, current/frozen outbox, derived invalidation, immutable audit and original response commit atomically. Only exact original-key replay deduplicates append-only usage/cost events; a fresh key records another event even if every field matches. Equal eligible profile/lifecycle state is receipt-only. Preserve exact original body/key/proofs for explicit reconciliation after later changes or fresh login; never auto-rebase/replay, infer physical receipt or install frozen replies as current source. Original Asset If-Match and required original Unit unit_revision separately bind finance and physical placement/status. Record one explicit terminal disposal and proceeds together with all path/Unit/Asset/Item dependencies; return independent Disposal revision one. Preserve existing records and require a separately audited correction/void workflow instead of overwrite.
          */
         readonly post: operations["post_units_id_disposal"];
         readonly delete?: never;
@@ -1974,7 +1984,7 @@ export interface paths {
         readonly put?: never;
         /**
          * Retire unit
-         * @description Non-idempotent mutations must use Idempotency-Key and CSRF; domain service validates invariants and commits projections in same SQLite transaction.
+         * @description Require exact Origin, completed session, CSRF/version/original key and the documented original proofs; revalidate authorization and actual source inside SQL after strict 128 KiB JSON reading. Reject duplicate/unknown fields, malformed Unicode, inexact/unsafe integers and query parameters without repair. Source, independent counters, current/frozen outbox, derived invalidation, immutable audit and original response commit atomically. Only exact original-key replay deduplicates append-only usage/cost events; a fresh key records another event even if every field matches. Equal eligible profile/lifecycle state is receipt-only. Preserve exact original body/key/proofs for explicit reconciliation after later changes or fresh login; never auto-rebase/replay, infer physical receipt or install frozen replies as current source. Original Asset If-Match and required original Unit unit_revision separately bind financial and physical review. Set explicit retirement and Unit status together while retaining placement, not disposal/proceeds. Return the independent Unit revision, not Asset-proof-plus-one.
          */
         readonly post: operations["post_units_id_retire"];
         readonly delete?: never;
@@ -2012,13 +2022,13 @@ export interface paths {
         };
         /**
          * Usage events
-         * @description Lists use stable ID ordering, or (occurred_at,id) for events, with opaque scoped cursors.
+         * @description Read one complete live Asset-owned usage page in stable event-ID order from actual immutable source and retained counters. Validate real profile/Unit/Item ownership, nullable correction references and lookahead before returning any prefix. Bind principal, epoch, owner, collection and size to an independent signed 15-minute 2048-byte cursor. This is not a frozen timeline or current usage total; never guess missing legacy provenance, repair source or apply new-input policy to retained events.
          */
         readonly get: operations["get_units_id_usage"];
         readonly put?: never;
         /**
          * Record usage
-         * @description Non-idempotent mutations must use Idempotency-Key and CSRF; domain service validates invariants and commits projections in same SQLite transaction.
+         * @description Require exact Origin, completed session, CSRF/version/original key and the documented original proofs; revalidate authorization and actual source inside SQL after strict 128 KiB JSON reading. Reject duplicate/unknown fields, malformed Unicode, inexact/unsafe integers and query parameters without repair. Source, independent counters, current/frozen outbox, derived invalidation, immutable audit and original response commit atomically. Only exact original-key replay deduplicates append-only usage/cost events; a fresh key records another event even if every field matches. Equal eligible profile/lifecycle state is receipt-only. Preserve exact original body/key/proofs for explicit reconciliation after later changes or fresh login; never auto-rebase/replay, infer physical receipt or install frozen replies as current source. Use original Asset If-Match, not Unit or event proof. Append one immutable owned event, validate reference/unit/chronological nonnegative running totals and return a new independent Usage revision one. Preserve original events and retained legacy provenance.
          */
         readonly post: operations["post_units_id_usage"];
         readonly delete?: never;
@@ -2255,23 +2265,24 @@ export interface components {
             readonly source_revision: number;
             readonly stock_groups: number;
         };
+        /** @description One explicit financial profile owned by an actual individual Unit, with an independent Asset aggregate revision. All nullable values are present, including unknown service dates and absent residual. Retained representation is not new-money or acquisition eligibility. Acquisition, usage/cost and lifecycle dependencies must publish this aggregate atomically; the Unit and Asset counters are independent. Retirement does not imply disposal or remove stored placement. */
         readonly Asset: {
             /** @enum {unknown} */
             readonly cost_basis: "purchase" | "manual";
             readonly currency: string;
             readonly estimated_residual_minor: number | null;
-            readonly in_service_at: string | null;
+            readonly in_service_at: (string & unknown) | null;
             readonly item_unit_id: string;
             readonly manual_acquisition_minor: number | null;
-            readonly retired_at: string | null;
+            readonly retired_at: (string & unknown) | null;
             readonly revision: number;
             /** @enum {unknown} */
             readonly usage_unit: "times" | "minutes" | "cycles";
         };
+        /** @description Exact integer-minor-unit breakdown of current posted financial source for one Asset, not a historical financial snapshot and not depreciation. Acquisition sums each allocation naming this exact Unit once for purchase basis, or the explicit manual fallback, never both. Extra is expenses minus credits; realized net subtracts actual proceeds, projected net subtracts an explicitly supplied residual, and the two never subtract both proceeds and residual. Preserve negative net values and never clamp them. as_of bounds only elapsed service time, using inclusive civil days in the resolved home timezone through min(as_of,retired_at); before service or without a service date the divisor is null. No usage means null per-use, not zero or division by zero. Monetary totals and usage are complete current posted history; as_of does not undo a later correction or disposal. Ratios are finite numeric minor units per day or declared usage unit, not separately rounded accounting entries. source_revision is the same-transaction catalog data_revision and is not an Asset If-Match. Reject unsafe aggregate arithmetic rather than round or return a partial total. */
         readonly AssetCostSummary: {
             readonly acquisition_minor: number;
-            /** Format: date-time */
-            readonly as_of: string;
+            readonly as_of: string & unknown;
             /** @enum {unknown} */
             readonly cost_basis: "purchase" | "manual";
             readonly currency: string;
@@ -2287,27 +2298,40 @@ export interface components {
             readonly projected_per_day_minor: number | null;
             readonly projected_per_use_minor: number | null;
             readonly realized_proceeds_minor: number;
+            readonly source_revision: number;
             readonly timezone: string;
             readonly total_usage: number;
             readonly unit_id: string;
             /** @enum {unknown} */
             readonly usage_unit: "times" | "minutes" | "cycles";
-        };
+        } & (unknown & unknown & unknown);
+        /** @description One complete live stable-Unit-ID page, with required null continuation at the end and no list ETag or mixed-currency total. */
         readonly AssetList: {
             readonly data: readonly components["schemas"]["Asset"][];
-            readonly next_cursor?: string | null;
+            readonly next_cursor: string | null;
         };
+        /** @description Complete explicitly reviewed opt-in/replacement against original Unit If-Match and original Item item_revision. Required asset_revision is explicit null only when no profile was reviewed; a number is the original existing Asset proof. Check all supplied scopes and actual profile presence, never interpret coincident Unit/Asset revision numbers as creation intent or silently overwrite a concurrent profile. Preserve all nullable decisions without defaults. Manual acquisition and exact-Unit purchase allocations are exclusive, including zero-valued history; new money requires the pinned finite ISO currency policy. All allocated costs, extra events and proceeds must match currency, and usage_unit cannot relabel retained usage. Financial basis/amount/date changes require immutable audit with exact before/after/input. Retirement changes must use the separate lifecycle command; a replacement retains the reviewed retired_at and cannot revive a disposed Unit. No physical receipt, guessed purchase/service/retirement date, exchange conversion or automatic allocation. Authoritative eligibility and matching real counters remain SQL validation, not schema evidence. */
         readonly AssetWrite: {
+            readonly asset_revision: number | null;
             /** @enum {unknown} */
             readonly cost_basis: "purchase" | "manual";
             readonly currency: string;
-            readonly estimated_residual_minor?: number | null;
-            readonly in_service_at?: string | null;
-            readonly manual_acquisition_minor?: number | null;
-            readonly retired_at?: string | null;
+            readonly estimated_residual_minor: number | null;
+            readonly in_service_at: (string & unknown) | null;
+            readonly item_revision: number;
+            readonly manual_acquisition_minor: number | null;
+            readonly retired_at: (string & unknown) | null;
             /** @enum {unknown} */
             readonly usage_unit: "times" | "minutes" | "cycles";
-        } & (unknown & unknown);
+        } & ({
+            /** @constant */
+            readonly cost_basis?: "manual";
+            readonly manual_acquisition_minor?: number;
+        } | {
+            /** @constant */
+            readonly cost_basis?: "purchase";
+            readonly manual_acquisition_minor?: null;
+        });
         /** @description Independent item-owned key/value identity. Repeated keys are distinct rows, not implicit overwrites; owner identity is immutable. */
         readonly Attribute: {
             readonly attribute_key: string;
@@ -2441,25 +2465,27 @@ export interface components {
             readonly record: components["schemas"]["OfflineRecord"];
             readonly seq: number;
         };
+        /** @description One immutable complete positive minor-unit magnitude plus explicit expense/credit direction, with independent event identity/revision. Retained uppercase currency and absent correction provenance remain exact representation, not proof of new-money eligibility or an invented replacement event. */
         readonly Cost: {
-            readonly amount_minor?: number;
-            readonly correction_of?: string | null;
-            readonly currency?: string;
+            readonly amount_minor: number;
+            readonly correction_of: string | null;
+            readonly currency: string;
             /** @enum {unknown} */
-            readonly direction?: "expense" | "credit";
+            readonly direction: "expense" | "credit";
             readonly id: string;
             readonly item_unit_id: string;
             /** @enum {unknown} */
-            readonly kind?: "maintenance" | "repair" | "accessory" | "fee" | "refund" | "adjustment";
-            readonly note?: string;
-            /** Format: date-time */
-            readonly occurred_at?: string;
+            readonly kind: "maintenance" | "repair" | "accessory" | "fee" | "refund" | "adjustment";
+            readonly note: string;
+            readonly occurred_at: string & unknown;
             readonly revision: number;
         };
+        /** @description One complete live owner-scoped stable-event-ID page with explicit terminal continuation and no list ETag, mixed-currency total or frozen-history claim. */
         readonly CostList: {
             readonly data: readonly components["schemas"]["Cost"][];
-            readonly next_cursor?: string | null;
+            readonly next_cursor: string | null;
         };
+        /** @description Append an immutable cost event against the original Asset proof. amount_minor is a positive whole allocation magnitude; expense adds and credit subtracts from the signed extra total. New money requires the pinned finite ISO policy and the profile currency. An adjustment must reference an actual earlier event of the same asset and currency; ordinary expense/refund events have no correction reference. Never replace or delete posted source, infer FX, clamp negative net cost, multiply by usage or confuse a refund with disposal proceeds. Omitted note defaults to empty and omitted nonadjustment correction_of to null. Actual references, currencies, safe aggregate arithmetic, audit and atomic publication require the authoritative service. */
         readonly CostWrite: {
             readonly amount_minor: number;
             readonly correction_of?: string | null;
@@ -2468,10 +2494,18 @@ export interface components {
             readonly direction: "expense" | "credit";
             /** @enum {unknown} */
             readonly kind: "maintenance" | "repair" | "accessory" | "fee" | "refund" | "adjustment";
+            /** @default  */
             readonly note?: string;
-            /** Format: date-time */
-            readonly occurred_at: string;
-        };
+            readonly occurred_at: string & unknown;
+        } & ({
+            readonly correction_of?: null;
+            /** @enum {unknown} */
+            readonly kind?: "maintenance" | "repair" | "accessory" | "fee" | "refund";
+        } | {
+            readonly correction_of: string;
+            /** @constant */
+            readonly kind?: "adjustment";
+        });
         /** @description Session-bound, server-keyed request token, issued only to an active session. Keep it in memory and send it on protected writes; it is neither a session credential nor a reauthentication capability. Verification does not replace transactional session authorization. */
         readonly CSRFToken: {
             readonly token: string;
@@ -2486,26 +2520,36 @@ export interface components {
             readonly projection_version: 1;
             readonly server_instance_id: string;
         };
+        /** @description The complete retained disposal decision for exactly one Unit, with independent Disposal revision, explicit proceeds and exact history. Retained non-sale proceeds remain representation rather than being rewritten to today's input policy. It is neither the Unit/Asset proof nor an inferred retirement or residual estimate. */
         readonly Disposal: {
-            readonly currency?: string;
-            /** Format: date-time */
-            readonly disposed_at?: string;
+            readonly currency: string;
+            readonly disposed_at: string & unknown;
             readonly item_unit_id: string;
             /** @enum {unknown} */
-            readonly kind?: "sold" | "donated" | "recycled" | "discarded" | "other";
-            readonly note?: string;
-            readonly realized_proceeds_minor?: number;
+            readonly kind: "sold" | "donated" | "recycled" | "discarded" | "other";
+            readonly note: string;
+            readonly realized_proceeds_minor: number;
             readonly revision: number;
         };
+        /** @description Explicit disposal against original Asset If-Match plus required original Unit unit_revision. The positive Unit proof separately binds physical status/placement; the Asset proof binds reviewed finance. Proceeds are explicit even when zero, match profile currency and obey new-money policy. Non-sale disposal has zero proceeds; retained history is never repaired to this new-input rule. Record the terminal physical action, disposal identity/revision, Asset/Unit/Item/path dependencies, immutable audit and frozen response atomically. Do not guess service/retirement dates, subtract residual as realized proceeds, silently edit an existing disposal or allow ordinary Unit status to bypass this financial command. Corrections/voids require their own audited workflow, not destructive overwrite. */
         readonly DisposalWrite: {
             readonly currency: string;
-            /** Format: date-time */
-            readonly disposed_at: string;
+            readonly disposed_at: string & unknown;
             /** @enum {unknown} */
             readonly kind: "sold" | "donated" | "recycled" | "discarded" | "other";
+            /** @default  */
             readonly note?: string;
-            readonly realized_proceeds_minor?: number;
-        };
+            readonly realized_proceeds_minor: number;
+            readonly unit_revision: number;
+        } & ({
+            /** @constant */
+            readonly kind?: "sold";
+        } | {
+            /** @enum {unknown} */
+            readonly kind?: "donated" | "recycled" | "discarded" | "other";
+            /** @constant */
+            readonly realized_proceeds_minor?: 0;
+        });
         /** @description Advisory validation only. It never authorizes or executes a mutation. */
         readonly DraftValidateInput: {
             readonly base_revisions: {
@@ -3644,10 +3688,12 @@ export interface components {
         readonly UnitMove: {
             readonly target_location_id: string;
         };
+        /** @description Explicit financial retirement against original Asset If-Match and required original Unit unit_revision. Validate the actual service/retirement instants chronologically without lexical offset comparisons. Retain physical placement and do not dispose, infer proceeds, guess service dates or revive a disposed Unit. Return the independently versioned Unit, not Asset-proof-plus-one; source, Asset/Unit/Item/path dependencies, exact immutable audit and original response commit atomically. Repeated equal retirement is a receipt, not a destructive historical rewrite. */
         readonly UnitRetireInput: {
+            /** @default  */
             readonly note?: string;
-            /** Format: date-time */
-            readonly retired_at: string;
+            readonly retired_at: string & unknown;
+            readonly unit_revision: number;
         };
         /** @description Explicit transition against the original Unit revision, not a metadata PATCH or quantity write. Non-asset disposal requires an explicit sold/donated/recycled/discarded kind; it never creates financial proceeds or an asset profile. Asset-backed retirement/disposal must use the separate asset lifecycle commands; server-side guards and immutable events remain mandatory. A disposed Unit cannot be moved or restored through ordinary status changes. Retirement preserves physical placement. Repeating current status is a receipt, not a new inventory event or a correction of historical disposal kind. */
         readonly UnitStatusInput: {
@@ -3666,35 +3712,46 @@ export interface components {
             readonly notes?: string;
             readonly serial_number?: string | null;
         };
+        /** @description One independently identified immutable posted usage delta with its exact owner, instant and nullable original-event reference. Retained corrections may lack historical provenance; reads must not invent a reference or apply new-input policy retroactively. Its independent revision is not the Asset or Unit proof. */
         readonly Usage: {
-            readonly correction_of?: string | null;
-            readonly delta?: number;
+            readonly correction_of: string | null;
+            readonly delta: number;
             /** @enum {unknown} */
-            readonly event_type?: "use" | "correction";
+            readonly event_type: "use" | "correction";
             readonly id: string;
             readonly item_unit_id: string;
-            readonly note?: string;
-            /** Format: date-time */
-            readonly occurred_at?: string;
+            readonly note: string;
+            readonly occurred_at: string & unknown;
             readonly revision: number;
             /** @enum {unknown} */
-            readonly usage_unit?: "times" | "minutes" | "cycles";
+            readonly usage_unit: "times" | "minutes" | "cycles";
         };
+        /** @description One complete live owner-scoped stable-event-ID page with explicit terminal continuation, not a frozen timeline, total or list ETag. occurred_at is exact event data, not a lexical UTC-normalized sorting assumption for retained offset spellings. */
         readonly UsageList: {
             readonly data: readonly components["schemas"]["Usage"][];
-            readonly next_cursor?: string | null;
+            readonly next_cursor: string | null;
         };
+        /** @description Append one immutable usage event against the original Asset proof. A use has positive delta and no correction reference; a correction has a nonzero signed delta and references an actual earlier event of the same asset and usage unit. This is not a replacement count or destructive edit. Check every chronological running total and the lifetime sum with exact safe arithmetic so a backdated correction cannot create a negative prefix. Deltas at the same exact instant form one chronological step; random UUID ordering must not determine eligibility. Omitted note defaults to empty and omitted use correction_of to null, never a guessed delta/date. Preserve original event bytes and publish the new event, Asset aggregate, derived invalidation, audit and frozen reply atomically. Schema references do not establish actual ownership, chronology or SQL eligibility. */
         readonly UsageWrite: {
             readonly correction_of?: string | null;
             readonly delta: number;
             /** @enum {unknown} */
             readonly event_type: "use" | "correction";
+            /** @default  */
             readonly note?: string;
-            /** Format: date-time */
-            readonly occurred_at: string;
+            readonly occurred_at: string & unknown;
             /** @enum {unknown} */
             readonly usage_unit: "times" | "minutes" | "cycles";
-        } & unknown;
+        } & ({
+            readonly correction_of?: null;
+            readonly delta?: number;
+            /** @constant */
+            readonly event_type?: "use";
+        } | {
+            readonly correction_of: string;
+            /** @constant */
+            readonly event_type?: "correction";
+        });
         readonly Version: {
             readonly api_version: string;
             readonly dataset_epoch: string;
@@ -4651,7 +4708,7 @@ export interface operations {
                 readonly location_id?: string;
                 readonly merchant?: string;
                 readonly scope?: "direct" | "subtree";
-                readonly status?: string;
+                readonly status?: "active" | "archived";
                 readonly to?: string;
             };
             readonly header?: never;
@@ -4665,8 +4722,6 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
-                    readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
                 content: {
@@ -8961,7 +9016,7 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Quoted independent returned-resource revision; validate the exact safe integer, never an unrelated aggregate plus one. */
                     readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
@@ -8986,8 +9041,10 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Quoted original Unit aggregate revision, not another resource's counter or a refreshed proof. Required body proofs remain independent. */
                 readonly "If-Match": string;
+                /** @description Exact configured public origin, independent of the session and CSRF proof. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -9008,7 +9065,7 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Quoted independent returned-resource revision; validate the exact safe integer, never an unrelated aggregate plus one. */
                     readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
@@ -9032,7 +9089,7 @@ export interface operations {
     readonly get_units_id_cost_summary: {
         readonly parameters: {
             readonly query?: {
-                readonly as_of?: string;
+                readonly as_of?: string & unknown;
             };
             readonly header?: never;
             readonly path: {
@@ -9047,8 +9104,6 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
-                    readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
                 content: {
@@ -9086,8 +9141,6 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
-                    readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
                 content: {
@@ -9111,8 +9164,10 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Quoted original Asset aggregate revision, not another resource's counter or a refreshed proof. Required body proofs remain independent. */
                 readonly "If-Match": string;
+                /** @description Exact configured public origin, independent of the session and CSRF proof. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -9133,7 +9188,7 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Quoted independent returned-resource revision; validate the exact safe integer, never an unrelated aggregate plus one. */
                     readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
@@ -9154,13 +9209,51 @@ export interface operations {
             readonly 503: components["responses"]["Error503"];
         };
     };
+    readonly get_units_id_disposal: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly id: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Success */
+            readonly 200: {
+                headers: {
+                    /** @description Protected API data is never cached by the service worker. */
+                    readonly "Cache-Control"?: "no-store";
+                    /** @description Quoted independent returned-resource revision; validate the exact safe integer, never an unrelated aggregate plus one. */
+                    readonly ETag?: string;
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["Disposal"];
+                };
+            };
+            readonly 400: components["responses"]["Error400"];
+            readonly 401: components["responses"]["Error401"];
+            readonly 403: components["responses"]["Error403"];
+            readonly 404: components["responses"]["Error404"];
+            readonly 409: components["responses"]["Error409"];
+            readonly 413: components["responses"]["Error413"];
+            readonly 415: components["responses"]["Error415"];
+            readonly 422: components["responses"]["Error422"];
+            readonly 429: components["responses"]["Error429"];
+            readonly 503: components["responses"]["Error503"];
+        };
+    };
     readonly post_units_id_disposal: {
         readonly parameters: {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Quoted original Asset aggregate revision, not another resource's counter or a refreshed proof. Required body proofs remain independent. */
                 readonly "If-Match": string;
+                /** @description Exact configured public origin, independent of the session and CSRF proof. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -9181,7 +9274,7 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Quoted independent returned-resource revision; validate the exact safe integer, never an unrelated aggregate plus one. */
                     readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
@@ -9293,8 +9386,10 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Quoted original Asset aggregate revision, not another resource's counter or a refreshed proof. Required body proofs remain independent. */
                 readonly "If-Match": string;
+                /** @description Exact configured public origin, independent of the session and CSRF proof. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -9315,7 +9410,7 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Quoted independent returned-resource revision; validate the exact safe integer, never an unrelated aggregate plus one. */
                     readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
@@ -9405,8 +9500,6 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
-                    readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
                 content: {
@@ -9430,8 +9523,10 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Quoted original Asset aggregate revision, not another resource's counter or a refreshed proof. Required body proofs remain independent. */
                 readonly "If-Match": string;
+                /** @description Exact configured public origin, independent of the session and CSRF proof. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -9452,7 +9547,7 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Quoted independent returned-resource revision; validate the exact safe integer, never an unrelated aggregate plus one. */
                     readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };

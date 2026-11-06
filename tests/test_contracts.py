@@ -473,9 +473,10 @@ class OpenAPIContractTests(unittest.TestCase):
                 validator("MediaLinkCreate").validate(payload)
 
     def test_manual_and_purchase_asset_bases_are_exclusive(self):
-        base = {"currency": "JPY", "usage_unit": "times"}
+        base = {"currency": "JPY", "usage_unit": "times", "item_revision": 7, "asset_revision": None,
+                "in_service_at": None, "retired_at": None, "estimated_residual_minor": None}
         validator("AssetWrite").validate({**base, "cost_basis": "manual", "manual_acquisition_minor": 120000})
-        validator("AssetWrite").validate({**base, "cost_basis": "purchase"})
+        validator("AssetWrite").validate({**base, "cost_basis": "purchase", "manual_acquisition_minor": None})
         for extra in [{"cost_basis": "manual"}, {"cost_basis": "manual", "manual_acquisition_minor": None},
                       {"cost_basis": "purchase", "manual_acquisition_minor": 120000}]:
             with self.subTest(extra=extra), self.assertRaises(ValidationError):
