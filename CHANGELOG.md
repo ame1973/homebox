@@ -124,6 +124,8 @@
 
 ### Fixed
 
+- Keep private browser-fixture cleanup on startup, exit, signal and shutdown-deadline failures. Wait for actual forced termination rather than treating signal delivery as exit, recognize already signal-terminated processes, remove private files even after process failure, and preserve original plus cleanup errors instead of masking them or silently accepting failed servers. Add twelve real child-process/filesystem checks, including the unchanged ten-second forced-stop deadline, to the frontend gate without changing production limits or runtime dependencies.
+
 - Keep the long account session-transition test within its existing deadline by using realistic focus/paste input for bulk credentials rather than hundreds of timed keystrokes. Preserve every setup/login/rotation/cache/secret assertion, native keyboard and real-browser coverage, lazy-module preload, isolation and production behavior; do not disable checks or enlarge timeouts under concurrent backend load.
 
 - Align shared Unit search publication with the real retained 10,000-code-point asset-code/serial/notes representation instead of an obsolete 128-character code restriction. Rebuild valid wide text from source through Unit and catalog invalidators; reject invalid UTF-8/native-NUL bounds without repairing source, publishing a prefix or copying legacy FTS caches.

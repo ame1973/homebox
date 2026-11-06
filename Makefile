@@ -32,6 +32,7 @@ check-backend: test-contracts test-go
 check-web: test-web
 	npm --prefix web run api:check
 	npm --prefix web run lint
+	npm --prefix web run test:fixtures
 	npm --prefix web run test:build
 	npm --prefix web run build
 

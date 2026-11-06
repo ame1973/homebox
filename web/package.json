@@ -14,6 +14,7 @@
     "lint": "oxlint --deny-warnings",
     "test": "vitest run --coverage",
     "test:build": "node --test tests/build-budget.test.mjs",
+    "test:fixtures": "node --test tests/private-application.test.ts",
     "test:e2e": "playwright test",
     "api:generate": "openapi-typescript ../contracts/openapi.yaml -o src/lib/api/schema.d.ts --alphabetize --immutable --default-non-nullable=false",
     "api:check": "openapi-typescript ../contracts/openapi.yaml -o src/lib/api/schema.d.ts --alphabetize --immutable --default-non-nullable=false --check",

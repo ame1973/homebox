@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { cleanupPrivateApplication } from './private-application.ts'
 
 type Application = { url: string; bootstrapToken: string }
 
@@ -25,6 +26,7 @@ export const test = base.extend<{ application: Application; applicationDatabaseF
     const database = join(directory, 'homebox.sqlite')
     const tokenFile = join(directory, 'bootstrap.token')
     let child: ReturnType<typeof spawn> | undefined
+    let failure: { error: unknown } | undefined
     try {
       execFileSync(homeboxBinary, ['db', 'migrate', '--database', database], { stdio: 'pipe' })
       if (applicationDatabaseFixture) {
@@ -51,16 +53,11 @@ export const test = base.extend<{ application: Application; applicationDatabaseF
         })
       })
       await provideFixture({ url: ready.public_origin, bootstrapToken: readFileSync(tokenFile, 'utf8').trim() })
+    } catch (error) {
+      failure = { error }
+      throw error
     } finally {
-      if (child && child.exitCode === null) {
-        const server = child
-        await new Promise<void>((resolve, reject) => {
-          const timeout = setTimeout(() => { server.kill('SIGKILL'); reject(new Error('Private auth server shutdown timed out')) }, 10_000)
-          server.once('exit', (code) => { clearTimeout(timeout); if (code === 0) resolve(); else reject(new Error('Private auth server shutdown failed')) })
-          server.kill('SIGTERM')
-        })
-      }
-      rmSync(directory, { recursive: true, force: true })
+      await cleanupPrivateApplication(child, directory, failure)
     }
   },
   baseURL: async ({ application }, provideFixture) => { await provideFixture(application.url) },

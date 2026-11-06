@@ -30,11 +30,12 @@ The default Vite proxy targets `http://127.0.0.1:8080`; it does not change Host 
 ## Checks
 
 ```sh
-make check-web                 # Unit tests/coverage, generated types, lint, build budgets
+make check-web                 # Unit/fixture tests, coverage, types, lint, build budgets
 make audit-web                 # Registry-backed audits; requires network access
 make test-e2e                  # Build and drive the actual Go server with Chromium
 npm --prefix web run api:generate
 npm --prefix web run api:check
+npm --prefix web run test:fixtures # Real child-process/private-file cleanup failure checks
 npm --prefix web test -- --coverage.enabled=false src/lib/api/client.test.ts
 npm --prefix web run test:e2e -- --project=phone
 ```
@@ -48,6 +49,8 @@ npm exec --prefix web -- playwright install chromium
 Linux browser system libraries may also be required; the disposable CI runner uses `playwright install --with-deps chromium`. Do not substitute desktop emulation for real iPhone/Android or QNAP evidence.
 
 E2E tests compile the real Go executable, create private disposable databases, migrate them, and serve the production frontend. Connectivity tests use port 4179; account/location/taxonomy/catalog tests use independent ephemeral servers/bootstrap files per test so they do not weaken or share production setup/rate rules. Catalog, holding and purchase SDK tests add their actual browser modules only to private asset copies, not the production build. Already-running services are never reused. Coverage includes 320/390/768/1440 widths and landscape, light/dark axe, keyboard/menu/focus/dialog behavior, reduced motion, 200% text and long paths, failed lazy-chunk recovery, offline failure/reconnect without mutation replay, real setup/rotation/logout, and actual location create/edit/move/archive/restore/delete with stale proofs, reserved-code errors, and protected deep links. Category/tag browser workflows additionally cover real create/rename/reparent/delete, exact-name conflicts, explicit field adoption, login returns, offline non-replay, lost deletion replies, long paths and enlarged light/dark reviews. Malformed-reply cases first let the real password/location mutation commit; location reconciliation verifies an explicit identical-key/body/proof retry, not a second mutation. Adverse responses are intercepted only in their explicit tests. Credential traces/videos/automatic failure images are disabled; manually captured account images contain empty secret fields, and location images contain disposable fixture metadata only.
+
+Private per-test server teardown attempts directory removal even after a startup/shutdown failure. The unchanged ten-second graceful deadline still fails the test if exceeded; forced termination waits for actual process exit rather than merely successful signal delivery. Already signal-terminated/nonzero children are failures, and combined original/cleanup errors remain visible. `test:fixtures` exercises this lifecycle with real disposable Node children and private file sentinels, including an actual ten-second timeout; it does not replace real-Go browser, domain or physical acceptance.
 
 Catalog metadata browser workflows additionally cover actual category assignment/create/partial edit/archive/restore/delete, original keys/proofs, all server-side filters and signed page controls, exact scoped-list returns, real login, manual conflict adoption, offline non-replay, committed malformed deletion acknowledgement reconciliation, and 200% long category/metadata reviews with light/dark axe. Owned maintenance screens add all nine row actions, complete Tag assignment/clearing, exact multiline text, repeated attribute keys, server-authoritative checksum/duplicate rejection, independent proofs, label/member-delta adoption and original-key reconciliation after a genuine deletion. Back/Escape interruption verifies a real committed write is not undone. A private legacy fixture is prepared offline with Node's built-in SQLite, closed and checked by the real Go CLI before serving; 205 memberships are then read/cleared through actual authenticated routes without weakening the production limiter or adding a test endpoint. Native SQLite is development-only and emits Node's experimental-feature advisory under the pinned toolchain. These are emulated browser checks, not physical-device evidence.
 
