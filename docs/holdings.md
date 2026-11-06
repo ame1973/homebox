@@ -1,6 +1,50 @@
 # Individual Units and Quantity Stock
 
-**Implementation status:** all twelve Unit/quantity-stock HTTP operations are implemented through the private Go `Inventory` service, with strict JSON/query admission, original proofs, independent resource ETags, completed-session/Origin/CSRF/version/key protection and authoritative transactional revalidation. Unit/Stock source/counter loaders, current/frozen publication and migrations 0010–0012 are tested. All twelve typed stateless browser adapters and the complete live read/form/volatile reviewed-command state layer are implemented with strict runtime/response checks and original proof/measurement contexts. Asset-backed lifecycle producers, public history reads and responsive operating screens are still being built. Existing catalog/owned-metadata screens do not receive stock or create physical units. HTTP/service evidence is not complete-sync, physical-device or browser operating-screen acceptance.
+**Implementation status:** all twelve Unit/quantity-stock HTTP operations are implemented through the private Go `Inventory` service, with strict JSON/query admission, original proofs, independent resource ETags, completed-session/Origin/CSRF/version/key protection and authoritative transactional revalidation. Unit/Stock source/counter loaders, current/frozen publication and migrations 0010–0012 are tested. All twelve typed stateless browser adapters, complete live read/form/volatile reviewed-command state and responsive foreground Unit/Stock screens are implemented with strict runtime/response checks and original proof/measurement contexts. Asset-backed lifecycle producers and public history reads are still being built. Catalog detail links these separate physical workflows; ordinary catalog/owned-metadata editing never implicitly receives stock or creates a Unit. HTTP/service/browser emulation evidence is not complete-sync, physical-device or production acceptance.
+
+## Browser routes and usage
+
+Sign in, finish the required initial password change, then open an actual catalog Item at `/items/ID`. Its Unit list or quantity-stock link opens the complete physical holdings for that Item. Every viewport shares these browser routes and capabilities; they are not `/api/v1` endpoints:
+
+| Browser route | Purpose |
+| --- | --- |
+| `/items/ID/holdings` | Complete actual Unit collection or position-by-position quantity balances |
+| `/items/ID/units/new` | Explicitly reviewed creation for an individual-tracked Item |
+| `/units/UNIT_ID` | Exact independently versioned Unit detail and guarded record deletion |
+| `/units/UNIT_ID/edit` | Changed-only serial/notes metadata |
+| `/units/UNIT_ID/move` | One Unit's explicitly selected destination |
+| `/units/UNIT_ID/status` | Operational status, non-asset retirement or explicit physical disposal |
+| `/items/ID/stock/receive` | Positive integer base-count receipt |
+| `/items/ID/stock/consume` | Positive integer base-count outflow |
+| `/items/ID/stock/transfer` | Two-leg relocation within one Item |
+| `/items/ID/stock/adjust` | Reasoned absolute nonnegative base count, including explicit new-zero placement |
+| `/u/UNIT_ID` | Protected canonical Unit alias; not a claim of implemented QR printing |
+
+Stock action routes accept only one optional `location=ID` prefill, for the source or target appropriate to that action. They do not accept quantity, price, proof or command data in a URL. Imported `new`/`tree` IDs remain identities, not invented creation aliases. Invalid/duplicate/external return paths are rejected rather than repaired. The validated catalog filter/cursor return survives normal maintenance and a login round-trip; only that safe navigation context travels, never credentials or unsent form data.
+
+### Individual Units
+
+Choose **Add Unit**, explicitly select a known active destination or the unknown-location option, and review its serial/notes and initial status. The server assigns the immutable Unit ID/asset code. The serial-provided checkbox distinguishes null from supplied-empty text; text areas retain exact whitespace, Unicode and newlines rather than silently shortening a legacy value. Creation does not create a purchase, price or asset basis.
+
+Unit detail shows its independent identity/status/placement/proof. Edit only actual metadata changes, move only that Unit rather than its whole container, or choose a supported status. Non-asset retirement retains placement. Disposal requires sold/donated/recycled/discarded; ordinary status never infers proceeds, currency or service dates. Disposed Units cannot ordinarily move/reactivate. Financially backed lifecycle/record deletion remains guarded by the Go service; its separate asset workflow is still pending. Record deletion is a separately emphasized review, not a disposal shortcut, and preserves immutable history/shared media.
+
+### Quantity balances
+
+Every amount entry and review names the Item's exact **base unit** and complete measurement tuple. For `kg/g/1000`, enter `1000` to act on 1,000 grams, not `1` or a fractional display amount. Source, target and proposed leg counts remain separate, with original Item proof versus independent displayed Stock revisions. No mixed-unit total or automatic conversion is presented.
+
+Receive increases an active placement; consume/transfer require actual sufficient positive source. Zero depletion retains the source row. Transfer review shows both source and destination before/after even though the API acknowledgement returns only the target. Absolute adjustment requires an exact reason and can keep/lower a retained archived balance; a missing zero placement still needs an active path. The list's separate adjustment action can create that explicit new-zero placement without pretending a balance already exists. Equal existing counts remain no-op receipts rather than fabricated movements.
+
+Selectors use complete validated location hierarchies, searchable native controls and full ancestry. Unavailable original selections remain visible. Changed selected paths require an explicit recheck; neither the first available location nor a newly renamed/reparented path is silently installed into the proposal.
+
+### Review, conflicts and uncertain outcomes
+
+A write starts with a visible original-context review, then one explicit confirmation. Both proof scopes and request key remain inspectable. A new editor waits for its first current read instead of adopting stale cached data; later refetches retain its raw inputs. Known Item/Unit changes require an explicit current-versus-draft comparison/adoption. Unit row writes keep their independent proof rather than acquiring an extra Item-counter precondition. Quantity adoption retains raw count text; a changed measurement requires explicit whole-interpretation acknowledgement, never a partial tuple or automatic conversion.
+
+A sent timeout/abort/malformed reply may have committed. Stop waiting does not undo it. The page retains and locks that original command, provides read-only current-state checks and an explicit same-key/body/proof retry, even after the current Unit disappeared. A frozen historical reply is never installed as current holdings; successful confirmation is followed by authoritative reads. Expired/conflicting keys cannot silently become new writes.
+
+Dirty Back/navigation/reload has a stay/leave warning; Escape closes an unsent review or stops local pending waiting. Inputs remain volatile, not persistent drafts. An already initialized editor can retain input while offline, but a new offline visit does not invent a current authority from cached data. Reconnection refreshes reads only. Session loss clears private query/mutation/form context and returns to a whitelisted path after login; unsent amounts/secrets do not travel through history state. Long reviews use visible static focus, wrapping text and one keyboard-accessible outer scroller at enlarged text sizes.
+
+QR printing, camera, photos, public history, asset-backed financial producers, offline replica/persistent drafts and full sync remain separate implementation/acceptance gates. No placeholder controls claim those capabilities.
 
 ## Distinct physical identities
 
@@ -14,7 +58,7 @@ Item/Unit/location IDs contain 1–128 Unicode code points. Unit and Stock revis
 
 ## Unit commands
 
-Paths are relative to `/api/v1`. All seven Unit operations below are implemented HTTP routes delegating to `Inventory.GetUnit/PageUnits/CreateUnit/PatchUnit/MoveUnit/SetUnitStatus/DeleteUnit`. SQL and physical policy remain in the private transaction service, not handlers or a second database. The stateless typed adapters below use those routes; foreground operating screens remain separate.
+Paths are relative to `/api/v1`. All seven Unit operations below are implemented HTTP routes delegating to `Inventory.GetUnit/PageUnits/CreateUnit/PatchUnit/MoveUnit/SetUnitStatus/DeleteUnit`. SQL and physical policy remain in the private transaction service, not handlers or a second database. The stateless typed adapters and responsive foreground screens use those same routes and original proof scopes.
 
 | Operation | Original proof | Result |
 | --- | --- | --- |
@@ -117,7 +161,7 @@ Reads have eight-second deadlines and writes thirty seconds. Caller cancellation
 
 ## Complete reads and foreground review state
 
-The state layer in `web/src/features/holdings` is implemented and tested; responsive operating screens are still being built. These helpers do not expose a second public endpoint or make the existing metadata screens create physical holdings.
+The state layer and responsive route composition in `web/src/features/holdings` are implemented and tested. They add no second public endpoint; physical actions remain separate from ordinary catalog metadata edits.
 
 - `readItemHoldings` reads the actual Item, completes only its Unit collection or exact Item-scoped Stock collection, then checks the Item again. It rejects revision/field/owner/measurement inconsistencies, duplicate identities, repeated cursors and cancellation rather than returning a partial prefix. Stock keeps every real zero row. The discriminated result never invents an empty unqueried collection or a frozen/offline snapshot.
 - `readUnitHolding` brackets one Item metadata read with matching independent Unit reads. It checks the same Unit/owner/tracking interpretation without reading all siblings or inventing another Item precondition for a Unit edit.
@@ -130,7 +174,7 @@ The state layer in `web/src/features/holdings` is implemented and tested; respon
 
 `sendHoldingCommand` dispatches only the original typed body, key and Item-versus-Unit proof. It never reads a newer Item, refreshes a balance, adopts a path, guesses financial input or rebases an uncertain command. Explicit reconciliation can therefore return an older frozen receipt after current balances changed or source was deleted.
 
-`useHoldingMutation` reuses the shared foreground controller: review first, explicit single-flight confirmation, caller-visible request-token acquisition, cancel/unknown/session-loss handling and no retry/offline queue/reconnect submission. Confirmed or sent failed writes invalidate only holding, catalog and location dependent reads, never installing the receipt as current state. Catalog/owned/taxonomy mutations also invalidate affected holding reads; location changes invalidate location-dependent catalog/holding scopes. Auth and unrelated taxonomy roots are not refreshed by holding writes. Screen composition must still provide visible reviews, dirty/Back guards, current-versus-original comparisons and explicit draft adoption; those operating screens are not claimed delivered by this state layer.
+`useHoldingMutation` reuses the shared foreground controller: review first, explicit single-flight confirmation, caller-visible request-token acquisition, cancel/unknown/session-loss handling and no retry/offline queue/reconnect submission. Confirmed or sent failed writes invalidate only holding, catalog and location dependent reads, never installing the receipt as current state. Catalog/owned/taxonomy mutations also invalidate affected holding reads; location changes invalidate location-dependent catalog/holding scopes. Auth and unrelated taxonomy roots are not refreshed by holding writes. The responsive screen composition provides visible reviews, dirty/Back guards, current-versus-original comparisons and explicit draft/path/measurement adoption; this does not imply persistent drafts, financial lifecycle or full sync.
 
 ## Movement direction, placement and no-op receipts
 
@@ -242,8 +286,10 @@ Exact Item-selection tests additionally cover maximum Unicode/control identities
 
 The Unit mutation suite drives all five public Go methods, independent original proofs, UUID/code assignment, null/empty/omitted metadata, all initial/operational/retired/disposed rules, explicit physical kinds and real asset/purchase guards. It covers complete source/current/frozen replay, Unit-only approved search, shared-media preservation, immutable history after source deletion, all original fields/operations/proofs, fresh login/epoch/expiry/cancellation, identical/competing concurrent requests and SQL/cascade/authority/counter/FTS/late-auth/deferred-COMMIT failures. Upgrade tests preserve every event value/current/frozen byte, old constraints and rollback the whole rebuild on failure; they reject invalid pre-upgrade live references instead of laundering them. Wide retained Unit search is checked through both Unit and catalog producers, including byte-preserving failure on invalid UTF-8/native-NUL bounds. These are Go/SQLite tests, not browser operating-screen or financial asset-lifecycle acceptance.
 
-HTTP tests drive all twelve operations through real services and verified TLS/cookie jars, exact body/query/proof/header/path/method budgets, default-50 complete collections, independent Item-versus-row ETags, retained zeros, runtime tracking/arithmetic guards and original replies after changed/deleted source/fresh login. Every writer is revoked after middleware/body reading to verify SQL authorization; changed Item/Unit proofs are not rebased. Strict actual JSON readers have bounded fuzz coverage; browser-safe errors discard private details. The compiled CLI/server socket smoke additionally provisions a genuine account/password rotation, validates actual replies against executable root schemas, reconciles original keys, shuts down cleanly and checks private DB integrity. None of this claims a shipped inventory review screen or physical-device acceptance.
+HTTP tests drive all twelve operations through real services and verified TLS/cookie jars, exact body/query/proof/header/path/method budgets, default-50 complete collections, independent Item-versus-row ETags, retained zeros, runtime tracking/arithmetic guards and original replies after changed/deleted source/fresh login. Every writer is revoked after middleware/body reading to verify SQL authorization; changed Item/Unit proofs are not rebased. Strict actual JSON readers have bounded fuzz coverage; browser-safe errors discard private details. The compiled CLI/server socket smoke additionally provisions a genuine account/password rotation, validates actual replies against executable root schemas, reconciles original keys, shuts down cleanly and checks private DB integrity. Those HTTP/socket checks alone are not browser operating-screen or physical-device acceptance.
 
 SDK tests separately drive all twelve adapters with exact one-request transport, original proofs, in-flight snapshot isolation, strict inputs/resources/ETags/owner/measurement/quantity bounds, live-page completeness/uniqueness/cursor rules, no storage/reconnect replay, safe errors and explicit retry. Every adapter has its actual eight/thirty-second deadline checked; caller cancellation rejects late replies and cleans up timers. Strict compile fixtures require explicit nullable creation, nonempty Unit edits, original owner/proof contexts and one complete reviewed Item for stock, excluding loose proofs and caller financial/conversion fields. Private browser bundles import the real SDK under genuine Go setup/password rotation/session protection, exercise every operation, signed pages, stale proofs, retained zeros/no-ops and original frozen receipts after later changes/deletion. Malformed-owner/measurement and lost-reply cases first let the real mutation commit, then verify only an explicit identical-key/body/proof retry reconciles it without duplicating or rebasing effects. No SDK test asset enters the production build; credential artifacts remain disabled.
 
-Still pending are public history reads, asset-backed lifecycle producers, foreground review screens, QR/camera, physical holdings acceptance and complete sync. These are not marked passed by the Go/HTTP/SDK tests above. Existing metadata/auth/screen-browser coverage remains separate evidence. Physical NAS/phone/operator TLS/VPN/off-host recovery gates remain blocked until actually performed.
+Responsive route/component tests additionally exercise complete Item collections, all nine reviewed writers, nullable/partial fields, no-op suppression, original independent proofs, selected paths, manual count/measurement/Unit adoption, missing source, safe login returns, stale-cache initialization, read/session failures, offline input and original-key reconciliation. Real Go screen workflows cover every operation, genuine concurrent changes, altered location labels, changed measurement acknowledgement, archived equal counts/new-zero placement and committed malformed receipt/deletion replies. Back/Escape, actual logout/login/scoped-list returns and 200% long reviews with light/dark axe are separate browser checks; screenshot inspection is not treated as physical-device evidence.
+
+Still pending are public history reads, asset-backed lifecycle producers, QR/camera/media, physical holdings acceptance and complete sync. These are not marked passed by the Go/HTTP/SDK/screen tests above. Physical NAS/phone/operator TLS/VPN/off-host recovery gates remain blocked until actually performed.

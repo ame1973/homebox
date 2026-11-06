@@ -11,6 +11,8 @@ const AccountPage = lazy(() => import('@/features/auth/account-page'))
 const SettingsPage = lazy(() => import('@/features/taxonomy/settings-page'))
 const CatalogPage = lazy(() => import('@/features/catalog/catalog-page'))
 const OwnedPage = lazy(() => import('@/features/catalog/owned-page'))
+const HoldingPage = lazy(() => import('@/features/holdings/holding-page'))
+const UnitAlias = lazy(() => import('@/features/holdings/holding-page').then((module) => ({ default: module.UnitAlias })))
 const LocationsPage = lazy(() => import('@/features/locations/locations-page'))
 const LocationAlias = lazy(() => import('@/features/locations/locations-page').then((module) => ({ default: module.LocationAlias })))
 
@@ -68,6 +70,14 @@ export default function App() {
                 <Route path={`/items/:id/${kind}/:rowID/edit`} element={<OwnedPage key={location.key} kind={kind} mode="edit" />} />
               </Route>)}
               <Route path="/items/:id/tags" element={<OwnedPage key={location.key} kind="tags" mode="list" />} />
+              <Route path="/items/:id/holdings" element={<HoldingPage key={location.key} mode="item" />} />
+              <Route path="/items/:id/units/new" element={<HoldingPage key={location.key} mode="create-unit" />} />
+              <Route path="/units/:id" element={<HoldingPage key={location.key} mode="unit" />} />
+              <Route path="/units/:id/edit" element={<HoldingPage key={location.key} mode="edit-unit" />} />
+              <Route path="/units/:id/move" element={<HoldingPage key={location.key} mode="move-unit" />} />
+              <Route path="/units/:id/status" element={<HoldingPage key={location.key} mode="status-unit" />} />
+              {(['receive', 'consume', 'transfer', 'adjust'] as const).map((action) => <Route key={action} path={`/items/:id/stock/${action}`} element={<HoldingPage key={location.key} mode="stock" action={action} />} />)}
+              <Route path="/u/:id" element={<UnitAlias />} />
               <Route path="/l/:id" element={<LocationAlias />} />
               <Route path="*" element={
                 <section className="space-y-6 py-12">
