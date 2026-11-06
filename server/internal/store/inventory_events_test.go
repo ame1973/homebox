@@ -205,7 +205,7 @@ func TestInventoryImmutableHistoryCannotBeChangedAndOneAuditCanAssociateMultiple
 	changed := requireProjectionReplay(t, fixture.store, func() {
 		_, err := runDomainMutation(t.Context(), fixture.auth, fixture.token, "test-multi-movement-association", "test_inventory_event_association", struct{}{}, func(m *mutationTx) (ActionAck, error) {
 			for range 2 {
-				if err := m.appendStockMovement(fixture.quantity.ID, "retained_test", nil, testPointer("target"), 0, "", ""); err != nil {
+				if err := m.appendInventoryMovement(fixture.quantity.ID, nil, "retained_test", nil, testPointer("target"), 0, "", ""); err != nil {
 					return ActionAck{}, err
 				}
 			}

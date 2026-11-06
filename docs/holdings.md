@@ -1,6 +1,6 @@
 # Individual Units and Quantity Stock
 
-**Implementation status:** bounded root contracts/generated TypeScript types, validated private Unit/Stock source loaders, independent current/frozen materializers and additive migrations 0010/0011 are implemented and tested. The private Go `Inventory` service also implements real receive/consume/transfer/absolute-adjust transactions with immutable inventory events and original Item proofs. Unit detail, complete owner-scoped Unit pages and filter-scoped Stock pages are also implemented through authorized Go services. Unit mutations/lifecycle, public history reads, HTTP handlers, typed runtime adapters and responsive operating screens are still being built. The existing catalog and owned-metadata screens do not receive stock or create physical units. Go transaction evidence is not a claim of those HTTP/UI workflows, complete sync or physical-device acceptance.
+**Implementation status:** the private Go `Inventory` service implements Unit creation/partial editing/movement/guarded status/deletion, quantity receive/consume/transfer/absolute-adjust, Unit detail/complete owner-scoped pages and fully filtered Stock pages. Bounded root contracts/generated types, real source/counter loaders, independent current/frozen publication and migrations 0010–0012 are tested. Asset-backed retirement/disposal, public history reads, HTTP handlers, typed runtime adapters and responsive operating screens are still being built. Existing catalog/owned-metadata screens do not receive stock or create physical units. Go transaction evidence is not HTTP/UI, complete-sync or physical-device acceptance.
 
 ## Distinct physical identities
 
@@ -14,7 +14,7 @@ Item/Unit/location IDs contain 1–128 Unicode code points. Unit and Stock revis
 
 ## Unit commands
 
-Paths are relative to `/api/v1`. These contracts do not imply the handlers already exist.
+Paths are relative to `/api/v1`. The corresponding Go services are `Inventory.CreateUnit`, `PatchUnit`, `MoveUnit`, `SetUnitStatus` and `DeleteUnit`; they share the existing private domain transaction, not a second SQL store or credential mutation path. These contracts/services do not imply HTTP handlers already exist.
 
 | Operation | Original proof | Result |
 | --- | --- | --- |
@@ -34,11 +34,27 @@ Creation requires an explicit `location_id`, including null when no location is 
 }
 ```
 
-Omitted serial/notes/status default to null/empty/`stored`; clients are not required to install those defaults. New Units may start as `stored`, `in_use`, `lent` or `lost`, not already `retired`/`disposed`. A new independent Unit must start at revision one and must not reuse a retained/tombstoned identity.
+Omitted serial/notes/status default to null/empty/`stored`; clients are not required to install those defaults. New Units may start as `stored`, `in_use`, `lent` or `lost`, not already `retired`/`disposed`. A new independent Unit must start at revision one and must not reuse a retained/tombstoned identity. The server assigns a fresh UUID and its `AST-<UUID>` asset code, never a client-selected code or a guessed short sequence; retained imported codes are not rewritten.
 
 Ordinary metadata patches are nonempty and contain only `serial_number` and/or `notes`. Omission leaves a field unchanged; `serial_number: null` clears it, `serial_number: ""` preserves supplied-empty text, and `notes: ""` clears notes. A metadata patch cannot reassign the owner, change the asset code/location/status or post quantities, purchases or costs.
 
-Movement names a required nonnull `target_location_id`; it does not move an entire location container. Moving a container uses the separate location operation and preserves each holding's actual assigned location. Lifecycle input accepts the six declared Unit states plus an optional note, but shape acceptance alone does not authorize retirement/disposal or bypass asset-accounting guards. The authoritative service must coordinate those guards and immutable history. Repeating current status must not invent a second movement.
+Movement names a required nonnull `target_location_id`; it does not move an entire location container. Moving a container uses the separate location operation and preserves each holding's actual assigned location. A Unit may leave a valid archived source path, but new placement requires complete active destination ancestry with real counters; missing/cyclic/deleted authority cannot become a new root. A value-equal destination is a no-op receipt, not a new movement.
+
+Operational status (`stored`, `in_use`, `lent`, `lost`) never guesses an asset in-service date. Non-asset retirement retains physical placement and may be explicitly changed back to an operational state; a retired stored Unit can still move. Non-asset disposal requires one explicit physical action, with no implicit proceeds or currency:
+
+```json
+{
+  "status": "disposed",
+  "disposal_kind": "recycled",
+  "note": "Explicitly reviewed physical removal"
+}
+```
+
+The four accepted kinds are `sold`, `donated`, `recycled` and `discarded`. A kind is required only for `disposed` and forbidden on other states; financial fields are not accepted here. The discriminated root schema/generated type enforces this shape. Actual asset-backed retirement/disposal must instead use the separate asset lifecycle commands, with their dates/proceeds/accounting validation. Ordinary status cannot reactivate a retired asset or bypass an existing asset-disposal record. A disposed Unit cannot move to a different location or return to another lifecycle state through this operation; its last assigned location remains inspectable, while current-inventory membership excludes disposed Units. Exact serial/notes corrections remain metadata, not lifecycle restoration.
+
+Repeating current status preserves an immutable receipt/note but does not increment counters, publish source/search/outbox changes or append another inventory event. Supplying another kind for an already disposed state is not correction/reclassification of its historical event. Every actual Unit mutation advances its independent counter, the Item aggregate and affected location ancestors once, and publishes only that Unit's approved search dependency; its identifiers/notes never leak into Item/sibling text. Original row edits do not acquire an extra Item proof.
+
+Unit deletion removes an unbacked record, not an asset disposal. Any retained purchase line, asset profile, usage/cost or asset-disposal reference blocks it, including zero-valued acquisition. Successful deletion retains independent counters, immutable history and original acknowledgements, tombstones the Unit/search/owned media links and removes derived FTS without deleting shared media or another owner's links. Original creation/deletion keys still reconcile after source removal or a fresh same-principal login. Ordinary source deletion does not authorize erasing its history, resetting identity or changing Item tracking/measurement over retained events.
 
 ## Exact base quantities
 
@@ -67,7 +83,7 @@ For example, an Item proof of `"7"` can validly produce a target Stock with revi
 
 ## Movement direction, placement and no-op receipts
 
-The service records one independent immutable inventory event per actual command, with these meanings:
+For quantity commands, the service records one independent immutable inventory event per actual command, with these meanings:
 
 | Action | `quantity_base` in history | From | To |
 | --- | --- | --- | --- |
@@ -83,6 +99,8 @@ A transfer event is **not** a net Item increase: both endpoints describe the sam
 Receive, transfer destinations and increased/new adjustment placement require every location ancestor to exist, be undeleted, have real bounded authority and be active. Cycles or invalid/missing ancestor authority fail the whole command; an incomplete path is not silently treated as a new root. Consumption, transfer outflow and lower/equal existing adjustments may leave a valid archived path, but cannot increase stock there. Catalog Item archival is metadata-only and does not silently dispose of or freeze readable physical holdings.
 
 Each actual command touches the Item, affected independent Stock rows, affected location ancestor paths and new event once per identity. Shared transfer ancestors are coalesced; unchanged sibling locations/Units and unrelated category/tag/purchase/media/AI rows remain unchanged. Quantity-only mutations do not republish FTS text that did not change. Safe arithmetic, source availability and both complete paths are checked before either transfer leg is written. SQL, publication, safe-counter/sequence, authorization and COMMIT failure return no partial Stock result and retain neither leg nor an original-key claim. Zero balances remain source, not tombstones.
+
+Unit history additionally carries the exact `item_unit_id`. `unit_create` records one physical instance, `unit_move` a conserved magnitude of one, `unit_edit` and `unit_status_*` a zero-count metadata/status change, and `unit_dispose_<kind>` a removal of one. `unit_delete` removes one only if the record was not already disposed, otherwise zero. These are physical-instance counts when a Unit subject is present, not conversions of the Item's optional measurement label. Metadata/history actions are not stock inflows; never sum all action magnitudes as a mixed-unit or net inventory scalar.
 
 ## Read completeness and admission
 
@@ -116,7 +134,11 @@ Migration 0011 adds exact note/reason fields and a deferred audit association to
 
 Legacy movement values, original raw keys, current/frozen bytes, counters and epochs remain unchanged. New columns default to empty notes/reasons and a null association, never an invented mapping. Migration 0011 does not backfill/publish unverified legacy history, guess an instant from an old date-only value or recreate source from a counter. All old/new inventory rows are append-only after upgrade. New events use the same UTC instant as source/current/outbox/audit/receipt; the materializer validates strict RFC3339 spelling, bounded UTF-8/identities/quantities and real independent event authority before publication. Producer context stays server-side; the unchanged eight-field offline event payload has no inner revision, note, reason, audit ID or raw caller key.
 
-Future Unit/lifecycle/batch producers must still validate their own original proof, apply physical/accounting rules, append actual immutable history and stage every required dependency inside the same transaction. The payload builder does not infer or authorize those workflows or generic deletion of zero balances. Public history reads, HTTP dispatch and complete sync remain separate implementation gates.
+Migration 0012 rebuilds only inventory-event storage to remove its live Unit FK while preserving the original nullable Unit ID as immutable historical identity. A Unit's own creation event must not make an explicitly unbacked record forever undeletable. The migration copies every original field/note/reason/audit association and keeps item/location/audit FKs, raw-key uniqueness, indexes, immutability triggers, current/frozen bytes, counters and epoch. Purchase/asset/ownership FKs remain restrictive. Pre-upgrade integrity rejects an already invalid old live reference; dropping the FK must not launder corrupt source. A failed ledger write rolls back the complete table/index/trigger rebuild and retains the verified recovery snapshot. No history is nulled, guessed, republished or erased, and no schema change is made to offline payloads.
+
+Shared Unit search publication uses the same retained asset-code/serial/notes bounds as the Unit source (10,000 code points), not an obsolete 128-character asset-code restriction. Unit and catalog invalidators rebuild from final approved source, preserve exact valid wide/control text and withhold every partial result on invalid UTF-8/bounds or materialization failure. They never copy a poisoned legacy cache or broaden a Unit's private identifiers into its owner/siblings.
+
+Future asset/batch producers must still validate their own original proof, apply physical/accounting rules, append actual immutable history and stage every required dependency inside the same transaction. The payload builder does not infer or authorize those workflows or generic deletion of zero balances. Public history reads, HTTP dispatch and complete sync remain separate implementation gates.
 
 ## Verification and remaining implementation
 
@@ -126,6 +148,7 @@ uv run --frozen python -m unittest discover -s tests -v
 go -C server test -count=1 ./internal/store -run '^TestHolding'
 go -C server test -count=1 ./internal/store -run '^TestInventory'
 go -C server test -count=1 ./internal/store -run '^TestHoldingRead'
+go -C server test -count=1 ./internal/store -run '^TestUnit'
 npm --prefix web run api:generate
 npm --prefix web run api:check
 npm --prefix web run typecheck
@@ -140,4 +163,6 @@ The actual `Inventory` service tests separately drive all four public Go methods
 
 The read-service suite exercises complete multi-page retained Unit/Stock collections, detail/list equality, all lifecycle/null/zero states, source-versus-cache behavior, real quantity writes and mixed measurement rows, actual location/category/status/purchase/date filtering before lookahead, maximum Unicode/control pair continuations, every filter/timezone/size binding and owner/collection isolation. It checks live source removal, same-principal fresh login, expired/malformed/signed-invalid positions, all read authorization gates, SQL/timezone/signing/session/late-expiry/deferred-COMMIT failures and no read-side publication. Root contract and strict generated-type fixtures separately pin the Stock-only cursor budget and Item metadata status without claiming a runtime browser adapter.
 
-Still pending are public history reads, Unit mutations/lifecycle/asset guards, HTTP dispatch/strict JSON/admission conformance, real runtime adapters, foreground review screens, QR/camera, physical holdings acceptance and complete sync. These are not marked passed by the Go service/persistence/schema/type checks above. Existing metadata/auth/browser coverage remains separate evidence. Physical NAS/phone/operator TLS/VPN/off-host recovery gates remain blocked until actually performed.
+The Unit mutation suite drives all five public Go methods, independent original proofs, UUID/code assignment, null/empty/omitted metadata, all initial/operational/retired/disposed rules, explicit physical kinds and real asset/purchase guards. It covers complete source/current/frozen replay, Unit-only approved search, shared-media preservation, immutable history after source deletion, all original fields/operations/proofs, fresh login/epoch/expiry/cancellation, identical/competing concurrent requests and SQL/cascade/authority/counter/FTS/late-auth/deferred-COMMIT failures. Upgrade tests preserve every event value/current/frozen byte, old constraints and rollback the whole rebuild on failure; they reject invalid pre-upgrade live references instead of laundering them. Wide retained Unit search is checked through both Unit and catalog producers, including byte-preserving failure on invalid UTF-8/native-NUL bounds. These are Go/SQLite tests, not a claim of completed holding HTTP/SDK/UI or financial asset lifecycle.
+
+Still pending are public history reads, asset-backed lifecycle producers, HTTP dispatch/strict JSON/admission conformance, real runtime adapters, foreground review screens, QR/camera, physical holdings acceptance and complete sync. These are not marked passed by the Go service/persistence/schema/type checks above. Existing metadata/auth/browser coverage remains separate evidence. Physical NAS/phone/operator TLS/VPN/off-host recovery gates remain blocked until actually performed.

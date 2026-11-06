@@ -56,13 +56,13 @@ func loadInventoryEvent(ctx context.Context, query queryer, id string) (Inventor
 	return value, nil
 }
 
-func (m *mutationTx) appendStockMovement(itemID, action string, from, to *string, quantity int64, note, reason string) error {
+func (m *mutationTx) appendInventoryMovement(itemID string, unitID *string, action string, from, to *string, quantity int64, note, reason string) error {
 	id, err := newDomainID()
 	if err != nil {
 		return err
 	}
-	_, err = m.tx.ExecContext(m.ctx, `INSERT INTO inventory_events(id,item_id,from_location_id,to_location_id,action,quantity_base,occurred_at,note,reason,mutation_event_id)
- VALUES(?,?,?,?,?,?,?,?,?,?)`, id, itemID, from, to, action, quantity, stamp(m.now), note, reason, m.eventID)
+	_, err = m.tx.ExecContext(m.ctx, `INSERT INTO inventory_events(id,item_id,item_unit_id,from_location_id,to_location_id,action,quantity_base,occurred_at,note,reason,mutation_event_id)
+ VALUES(?,?,?,?,?,?,?,?,?,?,?)`, id, itemID, unitID, from, to, action, quantity, stamp(m.now), note, reason, m.eventID)
 	if err != nil {
 		return err
 	}

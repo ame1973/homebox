@@ -104,16 +104,20 @@ func loadStock(ctx context.Context, query queryer, itemID, locationID string) (S
 	return scanStock(query.QueryRowContext(ctx, stockSelect+" WHERE b.item_id=? AND b.location_id=?", itemID, locationID))
 }
 
-func (value Unit) validateDomainResult() error {
-	validStatus := false
-	switch value.Status {
+func validUnitStatus(status string) bool {
+	switch status {
 	case "stored", "in_use", "lent", "lost", "retired", "disposed":
-		validStatus = true
+		return true
+	default:
+		return false
 	}
+}
+
+func (value Unit) validateDomainResult() error {
 	if !validDomainID(value.ID) || !validDomainID(value.ItemID) ||
 		(value.LocationID != nil && !validDomainID(*value.LocationID)) || !authString(value.AssetCode, 1, 10000) ||
 		(value.SerialNumber != nil && !authString(*value.SerialNumber, 0, 10000)) || !authString(value.Notes, 0, 10000) ||
-		!validStatus || value.Revision < 1 || value.Revision > maxSafeInteger {
+		!validUnitStatus(value.Status) || value.Revision < 1 || value.Revision > maxSafeInteger {
 		return ErrDomainState
 	}
 	return nil

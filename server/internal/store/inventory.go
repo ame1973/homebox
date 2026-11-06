@@ -138,7 +138,7 @@ func (m *mutationTx) changeStock(command stockCommand, revision int64) (Stock, e
 	var source, target Stock
 	var targetExists bool
 	if command.sourceID != "" {
-		path, err := stockLocationPath(m.ctx, m.tx, command.sourceID, false)
+		path, err := holdingLocationPath(m.ctx, m.tx, command.sourceID, false)
 		if err != nil {
 			return Stock{}, err
 		}
@@ -161,7 +161,7 @@ func (m *mutationTx) changeStock(command stockCommand, revision int64) (Stock, e
 		}
 		targetExists = err == nil
 		active := command.action != "adjust" || !targetExists || command.quantity > target.QuantityBase
-		path, err := stockLocationPath(m.ctx, m.tx, command.targetID, active)
+		path, err := holdingLocationPath(m.ctx, m.tx, command.targetID, active)
 		if err != nil {
 			return Stock{}, err
 		}
@@ -214,7 +214,7 @@ func (m *mutationTx) changeStock(command stockCommand, revision int64) (Stock, e
 			return Stock{}, err
 		}
 	}
-	if err = m.appendStockMovement(item.ID, command.action, from, to, quantity, command.note, command.reason); err != nil {
+	if err = m.appendInventoryMovement(item.ID, nil, command.action, from, to, quantity, command.note, command.reason); err != nil {
 		return Stock{}, err
 	}
 	return loadStock(m.ctx, m.tx, item.ID, resultLocation)
@@ -237,7 +237,7 @@ func (m *mutationTx) setStock(itemID, locationID string, quantity int64, exists 
 // Validate every ancestor's source and retained authority before touching it.
 // An outflow may leave an archived path; new/increased holdings require active
 // destinations. A deleted/missing ancestor or a cycle is corruption, not a root.
-func stockLocationPath(ctx context.Context, tx *sql.Tx, id string, active bool) ([]string, error) {
+func holdingLocationPath(ctx context.Context, tx *sql.Tx, id string, active bool) ([]string, error) {
 	var path []string
 	seen := make(map[string]bool)
 	for current := id; current != ""; {

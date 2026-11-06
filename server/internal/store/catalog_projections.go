@@ -199,7 +199,7 @@ func (m *mutationTx) materializeSearch(identity string) (searchData, error) {
 		if err != nil {
 			return searchData{}, err
 		}
-		if !validDomainID(itemID) || !authString(assetCode, 1, 128) || !utf8.ValidString(serial.String) || !utf8.ValidString(notes) {
+		if !validDomainID(itemID) || !authString(assetCode, 1, 10000) || !authString(serial.String, 0, 10000) || !authString(notes, 0, 10000) {
 			return searchData{}, ErrDomainState
 		}
 	}

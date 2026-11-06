@@ -1827,7 +1827,10 @@ export interface paths {
         readonly get: operations["get_units_id"];
         readonly put?: never;
         readonly post?: never;
-        /** DELETE /units/{id} */
+        /**
+         * DELETE /units/{id}
+         * @description Explicitly remove an unbacked Unit record against its original independent revision. Reject every retained purchase/asset/usage/cost/disposal reference, including zero-valued acquisition. Retain immutable movement/audit history and its original Unit ID, independent counters and original-key acknowledgement; tombstone the Unit, its search and owned media links without deleting shared media or another owner's links. This is record deletion, not financial disposal or an implicit proceeds correction. Return no success before COMMIT and no ETag on the acknowledgement.
+         */
         readonly delete: operations["delete_units_id"];
         readonly options?: never;
         readonly head?: never;
@@ -3631,11 +3634,17 @@ export interface components {
             /** Format: date-time */
             readonly retired_at: string;
         };
-        /** @description Explicit lifecycle transition against the original Unit revision, not a metadata PATCH or quantity write. Server-side lifecycle/asset guards and immutable events remain mandatory; accepting this shape alone does not authorize bypassing retirement/disposal accounting. Repeating current status is not a new inventory event. */
+        /** @description Explicit transition against the original Unit revision, not a metadata PATCH or quantity write. Non-asset disposal requires an explicit sold/donated/recycled/discarded kind; it never creates financial proceeds or an asset profile. Asset-backed retirement/disposal must use the separate asset lifecycle commands; server-side guards and immutable events remain mandatory. A disposed Unit cannot be moved or restored through ordinary status changes. Retirement preserves physical placement. Repeating current status is a receipt, not a new inventory event or a correction of historical disposal kind. */
         readonly UnitStatusInput: {
             readonly note?: string;
-            /** @enum {string} */
-            readonly status: "stored" | "in_use" | "lent" | "lost" | "retired" | "disposed";
+            /** @enum {unknown} */
+            readonly status: "stored" | "in_use" | "lent" | "lost" | "retired";
+        } | {
+            /** @enum {unknown} */
+            readonly disposal_kind: "sold" | "donated" | "recycled" | "discarded";
+            readonly note?: string;
+            /** @constant */
+            readonly status: "disposed";
         };
         /** @description Nonempty partial metadata only. Omitted fields are unchanged; explicit null clears serial_number, while supplied-empty serial text is retained. Ownership, location, asset code, status, inventory and financial fields cannot be changed here. */
         readonly UnitWrite: {

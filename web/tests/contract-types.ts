@@ -242,6 +242,16 @@ const unitSerialClear = { serial_number: null } satisfies components['schemas'][
 const unitNotesClear = { notes: '' } satisfies components['schemas']['UnitWrite']
 const unitMove = { target_location_id: 'destination' } satisfies components['schemas']['UnitMove']
 const unitStatus = { status: 'lost', note: 'Explicitly reviewed' } satisfies components['schemas']['UnitStatusInput']
+const physicalUnitDisposal = { status: 'disposed', disposal_kind: 'discarded', note: 'Explicit non-asset action' } satisfies components['schemas']['UnitStatusInput']
+// @ts-expect-error Non-asset disposal must explicitly distinguish its physical action.
+const untypedUnitDisposal: components['schemas']['UnitStatusInput'] = { status: 'disposed' }
+// @ts-expect-error An operational state cannot silently reclassify historical disposal.
+const operationalDisposalKind: components['schemas']['UnitStatusInput'] = { status: 'stored', disposal_kind: 'discarded' }
+// @ts-expect-error Financial proceeds require the separate asset lifecycle command.
+const automaticUnitProceeds: components['schemas']['UnitStatusInput'] = { status: 'disposed', disposal_kind: 'sold', realized_proceeds_minor: 1 }
+// @ts-expect-error New physical disposal requires one of the explicit supported actions.
+const unknownUnitDisposal: components['schemas']['UnitStatusInput'] = { status: 'disposed', disposal_kind: 'other' }
+void [physicalUnitDisposal, untypedUnitDisposal, operationalDisposalKind, automaticUnitProceeds, unknownUnitDisposal]
 const holdingUnit = { id: 'unit', revision: 3, item_id: 'item', location_id: null, asset_code: 'AST-001', serial_number: null, notes: '', status: 'stored' } satisfies components['schemas']['Unit']
 const holdingStock = { item_id: 'item', location_id: 'location', revision: 2, quantity_base: 1500, unit_code: 'kg', base_unit: 'g', scale_factor: 1000 } satisfies components['schemas']['Stock']
 const receiveStock = { item_id: 'item', target_location_id: 'location', quantity_base: 1000 } satisfies components['schemas']['StockReceiveInput']

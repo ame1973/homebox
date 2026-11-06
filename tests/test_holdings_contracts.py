@@ -90,7 +90,7 @@ class HoldingsContractTests(unittest.TestCase):
                      {"target_location_id": "x" * 129}, {"target_location_id": "target", "item_id": "other"}]:
             with self.subTest(body=body), self.assertRaises(ValidationError):
                 validator("UnitMove").validate(body)
-        for status in ["stored", "in_use", "lent", "lost", "retired", "disposed"]:
+        for status in ["stored", "in_use", "lent", "lost", "retired"]:
             validator("UnitStatusInput").validate({"status": status, "note": "😀" * 10000})
         for body in [{}, {"status": "archived"}, {"status": None}, {"status": "stored", "note": None},
                      {"status": "stored", "note": "x" * 10001}, {"status": "disposed", "amount_minor": 1}]:
@@ -98,6 +98,20 @@ class HoldingsContractTests(unittest.TestCase):
                 validator("UnitStatusInput").validate(body)
         self.assertIn("guards", SCHEMAS["UnitStatusInput"]["description"])
         self.assertIn("immutable", SCHEMAS["UnitStatusInput"]["description"])
+
+    def test_non_asset_unit_disposal_requires_an_explicit_kind_and_never_implicit_finances(self):
+        for kind in ["sold", "donated", "recycled", "discarded"]:
+            validator("UnitStatusInput").validate({"status": "disposed", "disposal_kind": kind, "note": "😀" * 10000})
+        for body in [
+            {"status": "disposed"}, {"status": "disposed", "disposal_kind": None},
+            {"status": "disposed", "disposal_kind": "other"}, {"status": "stored", "disposal_kind": "discarded"},
+            {"status": "disposed", "disposal_kind": "sold", "realized_proceeds_minor": 1},
+            {"status": "disposed", "disposal_kind": "sold", "currency": "TWD"},
+        ]:
+            with self.subTest(body=body), self.assertRaises(ValidationError):
+                validator("UnitStatusInput").validate(body)
+        self.assertIn("Asset-backed", SCHEMAS["UnitStatusInput"]["description"])
+        self.assertIn("Retirement preserves physical placement", SCHEMAS["UnitStatusInput"]["description"])
 
     def test_stock_responses_use_real_pair_identity_safe_base_counts_and_the_complete_item_measurement(self):
         validator("Stock").validate(STOCK)
