@@ -1,6 +1,6 @@
 # Individual Units and Quantity Stock
 
-**Implementation status:** bounded root contracts/generated TypeScript types, validated private Unit/Stock source loaders, independent current/frozen materializers and additive migration 0010 are implemented and tested. Authoritative unit/stock read/write/lifecycle services, HTTP handlers, typed runtime adapters and responsive operating screens are still being built. The existing catalog and owned-metadata screens do not receive stock or create physical units. Persistence/publication primitives and schema checks are not a claim of those complete workflows or physical-device acceptance.
+**Implementation status:** bounded root contracts/generated TypeScript types, validated private Unit/Stock source loaders, independent current/frozen materializers and additive migrations 0010/0011 are implemented and tested. The private Go `Inventory` service also implements real receive/consume/transfer/absolute-adjust transactions with immutable inventory events and original Item proofs. Unit CRUD/lifecycle, public holding reads, HTTP handlers, typed runtime adapters and responsive operating screens are still being built. The existing catalog and owned-metadata screens do not receive stock or create physical units. Go transaction evidence is not a claim of those HTTP/UI workflows, complete sync or physical-device acceptance.
 
 ## Distinct physical identities
 
@@ -48,6 +48,8 @@ For `kg/g/1000`, `quantity_base: 1500` means 1,500 grams. A display may show 1.5
 
 ## Stock commands and proof scopes
 
+The four quantity commands below are implemented through the private Go `Inventory.Receive`, `Consume`, `Transfer` and `Adjust` methods, using distinct `StockReceive`, `StockConsume`, `StockTransfer` and `StockAdjust` inputs. Construction requires the owning store's `Auth` service; SQL remains private. These are not yet callable HTTP endpoints or browser controls. Their forthcoming HTTP boundary must enforce the additional transport/admission rules below, not bypass them because the service already checks SQL authorization.
+
 All four stock writes require the **original Item aggregate revision**, not the separately displayed Stock revision. Each actual stock mutation advances the relevant Item aggregate and affected Stock identities atomically. This protects the complete Item interpretation and reviewed holdings scope without inventing another precondition header.
 
 | Operation | Required body | Frozen response |
@@ -62,6 +64,25 @@ An optional note contains at most 10,000 exact code points. Adjustment requires 
 Transfer's source and target must differ. The authoritative transaction must check quantity tracking, source sufficiency, an active destination/path and safe target addition before changing either balance. Both legs, the original Item scope, immutable history, independent projections and frozen target response commit or roll back together. Depleting a balance to zero retains that row. The target-only response does not describe a current source balance, authorize mixed-unit sums or permit a partial transfer.
 
 For example, an Item proof of `"7"` can validly produce a target Stock with revision 2: these are different counters. Never validate a Stock result by assuming it is the Item proof plus one, reinterpret its ETag as a newer Item proof, or install a frozen historical response as current source. Re-read authoritative state after confirmation.
+
+## Movement direction, placement and no-op receipts
+
+The service records one independent immutable inventory event per actual command, with these meanings:
+
+| Action | `quantity_base` in history | From | To |
+| --- | --- | --- | --- |
+| `receive` | Positive received quantity | null | Destination |
+| `consume` | Negative consumed quantity | Source | null |
+| `transfer` | Positive transferred magnitude | Source | Destination |
+| `adjust`, increased | Positive actual difference | null | Counted location |
+| `adjust`, decreased | Negative actual difference | Counted location | null |
+| `adjust`, new zero row | Zero, recording explicit first placement | null | Counted location |
+
+A transfer event is **not** a net Item increase: both endpoints describe the same quantity moving within the Item. Do not sum all action magnitudes as a net stock total. An adjustment computes its difference from the actual retained balance; it never accepts a caller's delta. An existing value-equal adjustment emits no movement, Stock/Item/location counter increment or current/outbox/data-revision change. Its immutable original-key receipt still preserves the exact reason and optional note. A missing balance is not an existing zero: explicitly adjusting a previously absent pair to zero creates retained source and a zero-difference placement event. An explicitly recreated pair continues its retained counter rather than resetting history to one.
+
+Receive, transfer destinations and increased/new adjustment placement require every location ancestor to exist, be undeleted, have real bounded authority and be active. Cycles or invalid/missing ancestor authority fail the whole command; an incomplete path is not silently treated as a new root. Consumption, transfer outflow and lower/equal existing adjustments may leave a valid archived path, but cannot increase stock there. Catalog Item archival is metadata-only and does not silently dispose of or freeze readable physical holdings.
+
+Each actual command touches the Item, affected independent Stock rows, affected location ancestor paths and new event once per identity. Shared transfer ancestors are coalesced; unchanged sibling locations/Units and unrelated category/tag/purchase/media/AI rows remain unchanged. Quantity-only mutations do not republish FTS text that did not change. Safe arithmetic, source availability and both complete paths are checked before either transfer leg is written. SQL, publication, safe-counter/sequence, authorization and COMMIT failure return no partial Stock result and retain neither leg nor an original-key claim. Zero balances remain source, not tombstones.
 
 ## Read completeness and admission
 
@@ -85,7 +106,11 @@ Go validates every holding source and retained unit/stock counter after SQL but 
 
 The existing private domain transaction can now materialize explicitly staged Unit/Stock upserts and independent null tombstones from final source. Repeated staging publishes one final version per identity, not intermediate values or historical cache text. Source, staged Item/location/search dependencies, retained counters, current/frozen rows, mutation audit and original response commit together; SQL, safe-counter/sequence exhaustion, late authorization or deferred COMMIT failure withholds the result and restores all state. Reconciliation can return an older frozen Stock after later changes/deletion without installing it as current authority.
 
-Each future producer must still validate its original proof, apply physical/lifecycle rules, append the actual immutable inventory events and explicitly stage every required dependency inside that transaction. The payload builder does not infer a complete receive/transfer/move workflow, create units/stock implicitly, or authorize a generic deletion of zero balances. Core services remain a separate implementation gate.
+Migration 0011 adds exact note/reason fields and a deferred audit association to immutable inventory-event history, plus a note field on the existing immutable mutation audit so equal adjustments lose no context. A new movement gets a fresh independent event ID/counter and a `mutation_event_id` association to the same committed domain receipt. The association is not unique: a future real batch may have multiple movements under one audit. New producers leave the old globally unique raw movement `idempotency_key` null; administrator/epoch scoping remains owned by the existing domain receipt. The same caller key in a new dataset epoch must not collide with a global historical movement key.
+
+Legacy movement values, original raw keys, current/frozen bytes, counters and epochs remain unchanged. New columns default to empty notes/reasons and a null association, never an invented mapping. Migration 0011 does not backfill/publish unverified legacy history, guess an instant from an old date-only value or recreate source from a counter. All old/new inventory rows are append-only after upgrade. New events use the same UTC instant as source/current/outbox/audit/receipt; the materializer validates strict RFC3339 spelling, bounded UTF-8/identities/quantities and real independent event authority before publication. Producer context stays server-side; the unchanged eight-field offline event payload has no inner revision, note, reason, audit ID or raw caller key.
+
+Future Unit/lifecycle/batch producers must still validate their own original proof, apply physical/accounting rules, append actual immutable history and stage every required dependency inside the same transaction. The payload builder does not infer or authorize those workflows or generic deletion of zero balances. Public Unit/Stock/history reads and complete sync remain separate implementation gates.
 
 ## Verification and remaining implementation
 
@@ -93,6 +118,7 @@ Each future producer must still validate its original proof, apply physical/life
 uv run --frozen python -m unittest tests.test_holdings_contracts -v
 uv run --frozen python -m unittest discover -s tests -v
 go -C server test -count=1 ./internal/store -run '^TestHolding'
+go -C server test -count=1 ./internal/store -run '^TestInventory'
 npm --prefix web run api:generate
 npm --prefix web run api:check
 npm --prefix web run typecheck
@@ -103,4 +129,6 @@ Schema checks cover complete bounded Unit/Stock resources, unchanged offline pay
 
 Real SQLite persistence tests separately cover complete retained resources, source-versus-cache reads, actual owner/row authority, mode/measurement/Unicode/NUL bounds, zero balances, full-length canonical pairs and query plans. Fresh/reference/certified-root upgrades preserve source/counters/current/frozen bytes and roll back invalid rows, noncanonical authority and all pending DDL/ledger writes. Private publication fixtures replay exact deltas, coalesce final source and staged owner/location/search scopes, preserve source-only approved text and independent tombstones, and exercise every relevant source/projection/receipt/FTS failure plus late authorization/deferred COMMIT and exhausted counters/sequences. Those fixtures deliberately use test-only operations, not fictional public inventory services or invented physical-event acceptance.
 
-Still pending are authoritative read/write/event/lifecycle services and their complete original-proof/concurrency/physical-policy tests, HTTP dispatch/strict JSON/admission conformance, real runtime adapters, foreground review screens, QR/camera, physical holdings acceptance and complete sync. These are not marked passed by the persistence/schema/type checks above. Existing metadata/auth/browser coverage remains separate evidence. Physical NAS/phone/operator TLS/VPN/off-host recovery gates remain blocked until actually performed.
+The actual `Inventory` service tests separately drive all four public Go methods against real SQLite: original Item proofs versus independent Stock replies, exact signed direction/differences, maximum-safe arithmetic, canonical Unicode pairs, complete active/deep/archived paths, retained zero/new-zero/recreated-pair semantics, complete source/current/frozen delta replay and no-op context. They cover all original request fields, changed-proof/operation conflicts, fresh-login/frozen replies after later source changes/removal, expired claims, cancellation, epoch separation without raw-key collisions, transactional session gates, concurrent identical/competing commands and opposite-transfer conservation. Statement/authority/exhaustion/final-event-corruption/late-auth/deferred-COMMIT failures roll back both legs, all history/projections and the original receipt. Migration tests preserve legacy bytes/authority/publication and roll back all pending holding/event DDL/ledger rows; immutable event/audit triggers and nonunique deferred associations are exercised directly. These are real Go service tests, not HTTP or screen evidence.
+
+Still pending are public holding/history reads and complete filtered pages, Unit CRUD/lifecycle/asset guards, HTTP dispatch/strict JSON/admission conformance, real runtime adapters, foreground review screens, QR/camera, physical holdings acceptance and complete sync. These are not marked passed by the Go service/persistence/schema/type checks above. Existing metadata/auth/browser coverage remains separate evidence. Physical NAS/phone/operator TLS/VPN/off-host recovery gates remain blocked until actually performed.

@@ -13,9 +13,9 @@ import (
 
 const itemCursorPurpose = "items-list-cursor-v1"
 
-// time.Parse also accepts non-RFC spellings; financial date filtering must not
-// silently turn an unsupported legacy instant into a guessed civil date.
-var purchaseInstantSyntax = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?(Z|[+-]([01][0-9]|2[0-3]):[0-5][0-9])$`)
+// time.Parse also accepts non-RFC spellings. Publication and financial date
+// filtering must not silently turn an unsupported legacy value into an instant.
+var domainInstantSyntax = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?(Z|[+-]([01][0-9]|2[0-3]):[0-5][0-9])$`)
 
 // ItemFilters preserves every contracted list filter. Empty optional strings are
 // absent; only query text is trimmed/lowercased, never stored metadata or IDs.
@@ -229,7 +229,7 @@ func itemMatchesPurchase(ctx context.Context, tx *sql.Tx, itemID string, filters
 		if err = rows.Scan(&id, &purchased); err != nil {
 			return false, err
 		}
-		if !validDomainID(id) || !purchaseInstantSyntax.MatchString(purchased) {
+		if !validDomainID(id) || !domainInstantSyntax.MatchString(purchased) {
 			return false, ErrDomainState
 		}
 		instant, err := time.Parse(time.RFC3339Nano, purchased)

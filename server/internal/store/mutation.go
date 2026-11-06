@@ -42,6 +42,7 @@ type mutationTx struct {
 	now     time.Time
 	eventID string
 	reason  string
+	note    string
 	pending map[projectionKey]pendingProjection
 }
 
@@ -117,8 +118,8 @@ func runDomainMutation[T domainResult](ctx context.Context, a *Auth, token, key,
 		if err != nil {
 			return zero, err
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO mutation_events(id,admin_id,dataset_epoch,operation,idempotency_key,occurred_at,reason,result_json)
- VALUES(?,?,?,?,?,?,?,?)`, eventID, session.Admin.ID, epoch, operation, scopedKey, stamp(now), m.reason, string(encoded))
+		_, err = tx.ExecContext(ctx, `INSERT INTO mutation_events(id,admin_id,dataset_epoch,operation,idempotency_key,occurred_at,reason,result_json,note)
+ VALUES(?,?,?,?,?,?,?,?,?)`, eventID, session.Admin.ID, epoch, operation, scopedKey, stamp(now), m.reason, string(encoded), m.note)
 		if err != nil {
 			return zero, err
 		}

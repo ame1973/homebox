@@ -64,6 +64,12 @@ func (m *mutationTx) projectionPayload(key projectionKey) ([]byte, error) {
 			return nil, err
 		}
 		return json.Marshal(value.StockData)
+	case "inventory_event":
+		value, err := loadInventoryEvent(m.ctx, m.tx, key.id)
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(value)
 	case "barcode":
 		value, err := loadBarcode(m.ctx, m.tx, key.id)
 		if err != nil {

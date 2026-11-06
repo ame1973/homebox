@@ -24,6 +24,17 @@ class CIConfigurationTests(unittest.TestCase):
                     self.assertNotIn("${{", step["run"])
                     self.assertFalse(re.search(r"\bdev/", step["run"]))
 
+    def test_backend_checks_keep_the_full_fresh_race_suite_with_a_bounded_runtime(self):
+        makefile = (ROOT / "Makefile").read_text()
+        race_target = re.search(r"(?m)^test-go:\n\t([^\n]+)$", makefile)
+        self.assertIsNotNone(race_target)
+        self.assertEqual(
+            "go -C server test -race -count=1 -timeout=20m ./...",
+            race_target.group(1),
+        )
+        self.assertIn("check-backend: test-contracts test-go", makefile)
+        self.assertIn("CGO_ENABLED=0 go -C server test -count=1 ./...", makefile)
+
     def test_frontend_dependencies_are_exact_and_have_no_lifecycle_scripts(self):
         import json
         package = json.loads((ROOT / "web/package.json").read_text())
