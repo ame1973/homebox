@@ -13,7 +13,7 @@ const test = applicationTest.extend<{}, { applicationWebDirectory: string }>({
     try {
       cpSync(fileURLToPath(new URL('../../dist', import.meta.url)), web, { recursive: true })
       // Build the real SDK privately, never a production test entry or fake API.
-      writeFileSync(entry, `export * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/purchases.ts', import.meta.url)))};\nexport {createItem,fetchItem,patchItem} from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/catalog.ts', import.meta.url)))};\nexport {createUnit,fetchUnit,fetchStockPage} from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/holdings.ts', import.meta.url)))};\n`)
+      writeFileSync(entry, `export * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/purchases.ts', import.meta.url)))};\nexport {createItem,fetchItem,patchItem} from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/catalog.ts', import.meta.url)))};\nexport {createUnit,fetchUnit,fetchStockPage} from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/holdings.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/features/purchases/model.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/features/purchases/form.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/features/purchases/commands.ts', import.meta.url)))};\n`)
       await build({ configFile: false, logLevel: 'silent', build: { outDir: sdk, minify: false, lib: { entry, formats: ['es'], fileName: 'purchase-sdk' } } })
       cpSync(join(sdk, 'purchase-sdk.js'), join(web, 'assets', 'purchase-sdk.js'))
       await provideFixture(web)
@@ -263,3 +263,181 @@ for (const failure of ['nanosecond-loss', 'wrong-currency'] as const) {
     expect(creations).toHaveLength(2); expect(creations[1]).toEqual(creations[0])
   })
 }
+
+test('drives complete purchase review models, exact forms and original commands with explicit whole-interpretation adoption', async ({ page, application }) => {
+  await provision(page, application)
+  const writes = watchDomainWrites(page, ['/api/v1/purchases'])
+  await page.goto('/')
+  const result = await page.evaluate(async () => {
+    const modulePath = '/assets/purchase-sdk.js'
+    const api = await import(modulePath)
+    const csrf = await fetch('/api/v1/auth/csrf', { credentials: 'same-origin', cache: 'no-store' })
+    const csrfToken: string = (await csrf.json()).token
+    const root = () => ({ csrfToken, idempotencyKey: crypto.randomUUID(), signal: new AbortController().signal })
+    const read = () => new AbortController().signal
+    const failureCode = async (work: () => Promise<unknown>) => { try { await work(); return null } catch (error) { return error instanceof Error && 'code' in error ? error.code : 'unexpected' } }
+    const creation = api.freezePurchaseCommand({ kind: 'create-purchase', body: api.purchaseCreateBody({ ...api.purchaseDefaults(), merchant_name: '  Reviewed model é  ', purchased_at: '2026-11-06T12:00:00.123456789+08:00', currency: 'JPY' }) })
+    const purchase = await api.sendPurchaseCommand(creation, csrfToken, read())
+    const item = await api.createItem({ name: 'Original model interpretation', tracking_mode: 'quantity', unit_code: 'kg', base_unit: 'g', scale_factor: 1000 }, root())
+    const original = await api.readPurchaseAllocation(purchase.id, item.id, read())
+    const draft = { ...api.purchaseLineDefaults(), allocation: 'none', quantity_base: '1500', paid_minor: '123' }
+    const oldCommand = api.freezePurchaseCommand({ kind: 'create-line', ...api.purchaseLineProposal(draft, original) })
+    await api.patchItem(item.id, { unit_code: 'L', base_unit: 'ml', scale_factor: 100 }, { ...root(), expectedRevision: item.revision })
+    await api.patchPurchase(purchase.id, { currency: 'USD' }, { ...root(), purchase })
+    const stale = await failureCode(() => api.sendPurchaseCommand(oldCommand, csrfToken, read()))
+    const current = await api.readPurchaseAllocation(purchase.id, item.id, read())
+    const adopted = api.adoptPurchaseAllocation(draft, original, current)
+    const allocation = api.freezePurchaseCommand({ kind: 'create-line', ...api.purchaseLineProposal(adopted.values, adopted.source) })
+    const line = await api.sendPurchaseCommand(allocation, csrfToken, read())
+    const detail = await api.readPurchaseDetail(purchase.id, read())
+    const patch = api.purchasePatch({ ...api.purchaseDefaults(detail.purchase), receipt_note: '  Reviewed correction é\n' }, detail.purchase)
+    const correction = api.freezePurchaseCommand({ kind: 'patch-purchase', source: detail, body: patch })
+    const corrected = await api.sendPurchaseCommand(correction, csrfToken, read())
+    const associated = await api.readItemPurchases(item.id, read())
+    let locked: unknown
+    try { api.freezePurchaseCommand({ kind: 'patch-purchase', source: detail, body: { currency: 'EUR' } }) } catch (error) { locked = error instanceof Error && 'code' in error ? error.code : 'unexpected' }
+    const frozenLine = await api.sendPurchaseCommand(allocation, csrfToken, read())
+    const frozenHeader = await api.sendPurchaseCommand(creation, csrfToken, read())
+    const final = await api.readPurchaseDetail(purchase.id, read())
+    const stock = await api.fetchStockPage({ item_id: item.id }, read())
+    return { purchase, item, original, draft, adopted, stale, line, detail, corrected, associated, locked, frozenLine, frozenHeader, final, stock,
+      keys: { creation: creation.key, allocation: allocation.key, correction: correction.key } }
+  })
+  expect(result.purchase).toMatchObject({ revision: 1, currency: 'JPY', purchased_at: '2026-11-06T04:00:00.123456789Z', receipt_note: '' })
+  expect(result.original).toMatchObject({ kind: 'quantity', purchase: { revision: 1, currency: 'JPY' }, item: { revision: 1, unit_code: 'kg', base_unit: 'g', scale_factor: 1000 } })
+  expect(result.original).not.toHaveProperty('units'); expect(result.original).not.toHaveProperty('stock')
+  expect(result.stale).toBe('REVISION_CONFLICT')
+  expect(result.adopted.values).toEqual(result.draft)
+  expect(result.adopted.source).toMatchObject({ kind: 'quantity', purchase: { revision: 2, currency: 'USD' }, item: { revision: 2, unit_code: 'L', base_unit: 'ml', scale_factor: 100 } })
+  expect(result.line).toMatchObject({ revision: 1, item_unit_id: null, quantity_base: 1500, paid_minor: 123 })
+  expect(result.detail).toEqual({ purchase: { ...result.purchase, revision: 3, currency: 'USD' }, lines: [result.line] })
+  expect(result.corrected).toMatchObject({ revision: 4, currency: 'USD', receipt_note: '  Reviewed correction é\n' })
+  expect(result.associated).toMatchObject({ item: { revision: 4, base_unit: 'ml' }, purchases: [result.corrected] })
+  expect(result.locked).toBe('PURCHASE_CURRENCY_LOCKED')
+  expect(result.frozenLine).toEqual(result.line); expect(result.frozenHeader).toEqual(result.purchase)
+  expect(result.final).toEqual({ purchase: result.corrected, lines: [result.line] }); expect(result.stock).toEqual({ data: [], next_cursor: null })
+  for (const key of [result.keys.creation, result.keys.allocation]) {
+    const attempts = writes.filter((request) => request.key === key)
+    expect(attempts).toHaveLength(2); expect(attempts[1]).toEqual(attempts[0])
+  }
+  const allocated = writes.find((request) => request.key === result.keys.allocation)
+  expect(allocated?.proof).toBe('"2"')
+  expect(JSON.parse(allocated?.body ?? '{}')).toMatchObject({ item_revision: 2, item_unit_id: null, quantity_base: 1500, paid_minor: 123 })
+  expect(writes.some((request) => JSON.parse(request.body ?? '{}').currency === 'EUR')).toBe(false)
+})
+
+test('withholds a whole Purchase detail when real source changes inside its Line collection interval', async ({ page, application }) => {
+  await provision(page, application)
+  await page.goto('/')
+  const purchase = await page.evaluate(async () => {
+    const modulePath = '/assets/purchase-sdk.js'
+    const api = await import(modulePath)
+    const csrf = await fetch('/api/v1/auth/csrf', { credentials: 'same-origin', cache: 'no-store' })
+    return api.createPurchase({ merchant_name: 'Bracketed header', purchased_at: '2026-11-06T00:00:00Z', currency: 'JPY' }, { csrfToken: (await csrf.json()).token, idempotencyKey: crypto.randomUUID(), signal: new AbortController().signal })
+  })
+  let attempts = 0
+  await page.route((url) => url.pathname === `/api/v1/purchases/${purchase.id}/lines`, async (route) => {
+    if (route.request().method() !== 'GET') { await route.continue(); return }
+    const response = await route.fetch()
+    if (++attempts === 1) expect((await page.request.patch(`/api/v1/purchases/${purchase.id}`, { headers: await writeContext(page, application.url, purchase.revision), data: { receipt_note: 'Concurrent actual source' } })).status()).toBe(200)
+    await route.fulfill({ response })
+  })
+  const result = await page.evaluate(async (purchaseID) => {
+    const modulePath = '/assets/purchase-sdk.js'
+    const api = await import(modulePath)
+    let code: unknown
+    try { await api.readPurchaseDetail(purchaseID, new AbortController().signal) } catch (error) { code = error instanceof Error && 'code' in error ? error.code : 'unexpected' }
+    const current = await api.readPurchaseDetail(purchaseID, new AbortController().signal)
+    return { code, current }
+  }, purchase.id)
+  expect(result.code).toBe('INVALID_RESPONSE')
+  expect(result.current).toEqual({ purchase: { ...purchase, revision: 2, receipt_note: 'Concurrent actual source' }, lines: [] })
+  expect(attempts).toBe(2)
+})
+
+test('withholds a mixed individual allocation context and reviews the actual selected Unit under the changed Item proof', async ({ page, application }) => {
+  await provision(page, application)
+  await page.goto('/')
+  const original = await page.evaluate(async () => {
+    const modulePath = '/assets/purchase-sdk.js'
+    const api = await import(modulePath)
+    const csrf = await fetch('/api/v1/auth/csrf', { credentials: 'same-origin', cache: 'no-store' })
+    const csrfToken: string = (await csrf.json()).token
+    const root = () => ({ csrfToken, idempotencyKey: crypto.randomUUID(), signal: new AbortController().signal })
+    const purchase = await api.createPurchase({ merchant_name: 'Individual review', purchased_at: '2026-11-06T00:00:00Z', currency: 'JPY' }, root())
+    const created = await api.createItem({ name: 'Original Unit owner' }, root())
+    const unit = await api.createUnit(created.id, { location_id: null, serial_number: '' }, { ...root(), expectedRevision: created.revision })
+    const item = await api.fetchItem(created.id, new AbortController().signal)
+    return { purchase, item, unit }
+  })
+  let attempts = 0
+  await page.route((url) => url.pathname === `/api/v1/items/${original.item.id}/units`, async (route) => {
+    if (route.request().method() !== 'GET') { await route.continue(); return }
+    const response = await route.fetch()
+    if (++attempts === 1) expect((await page.request.patch(`/api/v1/items/${original.item.id}`, { headers: await writeContext(page, application.url, original.item.revision), data: { name: 'Concurrent actual owner' } })).status()).toBe(200)
+    await route.fulfill({ response })
+  })
+  const result = await page.evaluate(async (original) => {
+    const modulePath = '/assets/purchase-sdk.js'
+    const api = await import(modulePath)
+    const read = () => new AbortController().signal
+    let code: unknown
+    try { await api.readPurchaseAllocation(original.purchase.id, original.item.id, read()) } catch (error) { code = error instanceof Error && 'code' in error ? error.code : 'unexpected' }
+    const current = await api.readPurchaseAllocation(original.purchase.id, original.item.id, read())
+    const proposal = api.purchaseLineProposal({ ...api.purchaseLineDefaults(), allocation: 'unit', item_unit_id: original.unit.id, quantity_base: '1', paid_minor: '0' }, current)
+    const command = api.freezePurchaseCommand({ kind: 'create-line', ...proposal })
+    const csrf = await fetch('/api/v1/auth/csrf', { credentials: 'same-origin', cache: 'no-store' })
+    const allocated = await api.sendPurchaseCommand(command, (await csrf.json()).token, read())
+    const physical = await api.fetchUnit(original.unit.id, read())
+    return { code, current, proposal, allocated, physical }
+  }, original)
+  expect(result.code).toBe('INVALID_RESPONSE')
+  expect(result.current).toEqual({ kind: 'individual', purchase: original.purchase, item: { ...original.item, revision: 3, name: 'Concurrent actual owner' }, units: [original.unit] })
+  expect(result.proposal).toMatchObject({ unit: original.unit, body: { item_revision: 3, item_unit_id: original.unit.id, quantity_base: 1, paid_minor: 0 } })
+  expect(result.allocated).toMatchObject({ revision: 1, item_id: original.item.id, item_unit_id: original.unit.id, quantity_base: 1, paid_minor: 0 })
+  expect(result.physical).toEqual(original.unit); expect(attempts).toBe(2)
+})
+
+test('retains an actual frozen review command after committed reply loss and later complete source changes', async ({ page, application }) => {
+  await provision(page, application)
+  const writes = watchDomainWrites(page, ['/api/v1/purchases'])
+  let attempts = 0
+  await page.route('**/api/v1/purchases/*/lines', async (route) => {
+    if (route.request().method() !== 'POST') { await route.continue(); return }
+    const response = await route.fetch()
+    expect(response.status()).toBe(200)
+    if (++attempts === 1) await route.abort('failed')
+    else await route.fulfill({ response })
+  })
+  await page.goto('/')
+  const result = await page.evaluate(async () => {
+    const modulePath = '/assets/purchase-sdk.js'
+    const api = await import(modulePath)
+    const csrf = await fetch('/api/v1/auth/csrf', { credentials: 'same-origin', cache: 'no-store' })
+    const csrfToken: string = (await csrf.json()).token
+    const root = () => ({ csrfToken, idempotencyKey: crypto.randomUUID(), signal: new AbortController().signal })
+    const read = () => new AbortController().signal
+    const purchase = await api.createPurchase({ merchant_name: 'Unknown original command', purchased_at: '2026-11-06T00:00:00Z', currency: 'JPY' }, root())
+    const item = await api.createItem({ name: 'Unknown allocation', tracking_mode: 'quantity', unit_code: 'kg', base_unit: 'g', scale_factor: 1000 }, root())
+    const source = await api.readPurchaseAllocation(purchase.id, item.id, read())
+    const command = api.freezePurchaseCommand({ kind: 'create-line', ...api.purchaseLineProposal({ ...api.purchaseLineDefaults(), allocation: 'none', quantity_base: '1500', paid_minor: '123' }, source) })
+    let code: unknown
+    try { await api.sendPurchaseCommand(command, csrfToken, read()) } catch (error) { code = error instanceof Error && 'code' in error ? error.code : 'unexpected' }
+    window.dispatchEvent(new Event('online'))
+    const before = await api.readPurchaseDetail(purchase.id, read())
+    const correction = api.freezePurchaseCommand({ kind: 'patch-purchase', source: before, body: { merchant_name: 'Later reviewed current merchant' } })
+    const later = await api.sendPurchaseCommand(correction, csrfToken, read())
+    const refreshed = await api.readPurchaseAllocation(purchase.id, item.id, read())
+    const reconciled = await api.sendPurchaseCommand(command, csrfToken, read())
+    const final = await api.readPurchaseDetail(purchase.id, read())
+    return { code, before, later, refreshed, original: command, reconciled, final }
+  })
+  expect(result.code).toBe('NETWORK_ERROR')
+  expect(result.before.lines).toHaveLength(1)
+  expect(result.refreshed).toMatchObject({ purchase: { revision: 3, merchant_name: 'Later reviewed current merchant' }, item: { revision: 3 } })
+  expect(result.original).toMatchObject({ purchase: { revision: 1, merchant_name: 'Unknown original command' }, item: { revision: 1, base_unit: 'g' }, unit: null, body: { item_revision: 1, quantity_base: 1500, paid_minor: 123 } })
+  expect(result.reconciled).toEqual(result.before.lines[0]); expect(result.final).toEqual({ purchase: result.later, lines: result.before.lines })
+  expect(attempts).toBe(2)
+  const allocations = writes.filter((request) => request.path.endsWith('/lines'))
+  expect(allocations).toHaveLength(2); expect(allocations[1]).toEqual(allocations[0])
+})

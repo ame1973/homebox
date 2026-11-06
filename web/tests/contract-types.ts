@@ -486,6 +486,35 @@ const implicitRawPurchaseUnit = purchaseTransport.POST('/purchases/{id}/lines', 
 const bulkRawPurchaseUnit = purchaseTransport.POST('/purchases/{id}/lines', { params: { path: { id: reviewedPurchase.id }, header: purchaseProof }, body: { ...allocatedPurchaseLine, quantity_base: 2 } })
 // @ts-expect-error A type-only write marker is never an actual wire value.
 const markedRawPurchaseUnit = purchaseTransport.POST('/purchases/{id}/lines', { params: { path: { id: reviewedPurchase.id }, header: purchaseProof }, body: { ...unallocatedPurchaseLine, item_unit_id: { $write: null } } })
+declare const purchaseModels: typeof import('../src/features/purchases/model')
+declare const purchaseForms: typeof import('../src/features/purchases/form')
+declare const purchaseCommands: typeof import('../src/features/purchases/commands')
+const reviewedPurchaseDetail = { purchase: reviewedPurchase, lines: [] } satisfies import('../src/features/purchases/model').PurchaseDetail
+const purchaseQuantityContext = { kind: 'quantity', purchase: reviewedPurchase, item: purchaseSDKLineContext.item } as const satisfies import('../src/features/purchases/model').PurchaseAllocationContext
+const reviewedAllocation = purchaseForms.purchaseLineProposal({ ...purchaseForms.purchaseLineDefaults(), allocation: 'none', quantity_base: '1500', paid_minor: '0' }, purchaseQuantityContext)
+const reviewedPurchaseCommands = [
+  purchaseCommands.freezePurchaseCommand({ kind: 'create-purchase', body: purchaseHeader }),
+  purchaseCommands.freezePurchaseCommand({ kind: 'patch-purchase', source: reviewedPurchaseDetail, body: purchaseReceiptClear }),
+  purchaseCommands.freezePurchaseCommand({ kind: 'create-line', ...reviewedAllocation }),
+]
+const purchaseReviewReads = [purchaseModels.readPurchaseDetail(reviewedPurchase.id, new AbortController().signal),
+  purchaseModels.readItemPurchases(currentItem.id, new AbortController().signal), purchaseModels.readPurchaseAllocation(reviewedPurchase.id, currentItem.id, new AbortController().signal)]
+// @ts-expect-error Header correction carries its complete original source context.
+const unprovenReviewedPurchase = purchaseCommands.freezePurchaseCommand({ kind: 'patch-purchase', body: purchaseReceiptClear })
+// @ts-expect-error Allocation carries a real original Item interpretation.
+const ownerlessReviewedAllocation = purchaseCommands.freezePurchaseCommand({ kind: 'create-line', purchase: reviewedPurchase, unit: null, body: unallocatedPurchaseLine })
+// @ts-expect-error Even no named Unit must be an explicit nullable review decision.
+const implicitReviewedUnit = purchaseCommands.freezePurchaseCommand({ kind: 'create-line', purchase: reviewedPurchase, item: currentItem, body: unallocatedPurchaseLine })
+// @ts-expect-error Posted purchase deletion is not one of the reviewed commands.
+const deletedReviewedPurchase = purchaseCommands.freezePurchaseCommand({ kind: 'delete-purchase', source: reviewedPurchaseDetail })
+// @ts-expect-error Individual selection requires the complete Unit collection, not an invented unqueried set.
+const incompletePurchaseContext: import('../src/features/purchases/model').PurchaseAllocationContext = { kind: 'individual', purchase: reviewedPurchase, item: currentItem }
+// @ts-expect-error Quantity selection does not pretend to query the Unit domain.
+const inventedPurchaseUnits: import('../src/features/purchases/model').PurchaseAllocationContext = { kind: 'quantity', purchase: reviewedPurchase, item: currentItem, units: [] }
+// @ts-expect-error Original reviewed command keys cannot be rebased or reassigned.
+reviewedPurchaseCommands[0]!.key = 'changed-command-key'
+void [reviewedPurchaseCommands, purchaseReviewReads, unprovenReviewedPurchase, ownerlessReviewedAllocation, implicitReviewedUnit, deletedReviewedPurchase, incompletePurchaseContext, inventedPurchaseUnits]
+
 void [purchaseSDKCalls, rawNullPurchaseLine, rawNamedPurchaseLine, unrelatedSDKPurchaseProof, totalSDKPurchaseHeader, looseSDKPurchaseProof,
   overriddenSDKPurchaseProof, emptySDKPurchasePatch, nullSDKPurchaseReceipt, ownerlessSDKPurchaseLine, stockAsSDKPurchaseItem, unprovenSDKPurchaseItem,
   implicitSDKPurchaseUnit, bulkSDKPurchaseUnit, textSDKPurchaseMoney, currencySDKPurchaseLine, searchedSDKPurchases, filteredSDKItemPurchases,
