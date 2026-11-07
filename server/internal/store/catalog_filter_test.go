@@ -67,8 +67,8 @@ func setCatalogTimezone(t *testing.T, s *Store, name string) {
 
 func seedCatalogPurchase(t *testing.T, s *Store, itemID, id, purchased, currency, merchant string) {
 	t.Helper()
-	execSQL(t, s.db, `INSERT INTO purchases(id,merchant_name,purchased_at,currency,created_at) VALUES(?,?,?,?,'2026')`, id, merchant, purchased, currency)
-	execSQL(t, s.db, "INSERT INTO purchase_lines(id,purchase_id,item_id,quantity_base,paid_minor) VALUES(?,?,?,1,100)", id, id, itemID)
+	seedReadPurchase(t, s, PurchaseData{ID: id, MerchantName: merchant, PurchasedAt: purchased, Currency: currency})
+	seedReadPurchaseLine(t, s, PurchaseLineData{ID: id, PurchaseID: id, ItemID: itemID, QuantityBase: 1, PaidMinor: 100})
 }
 
 func seedUnmaterializedCatalogItem(t *testing.T, s *Store, id, name string) {
@@ -187,7 +187,7 @@ func TestCatalogDateCurrencyAndExactMerchantMustMatchOneAssociatedPurchase(t *te
 	seedCatalogPurchase(t, s, item.ID, "a", "2026-11-05T12:00:00Z", "TWD", "Alpha")
 	seedCatalogPurchase(t, s, item.ID, "b", "2026-10-05T12:00:00Z", "USD", "Beta")
 	seedCatalogPurchase(t, s, item.ID, "c", "2026-11-05T12:00:00Z", "USD", "Gamma")
-	execSQL(t, s.db, "INSERT INTO purchase_lines(id,purchase_id,item_id,quantity_base,paid_minor) VALUES('another-c','c',?,1,100)", item.ID)
+	seedReadPurchaseLine(t, s, PurchaseLineData{ID: "another-c", PurchaseID: "c", ItemID: item.ID, QuantityBase: 1, PaidMinor: 100})
 	other := createCatalogItem(t, catalog, token, ItemCreate{Name: "Other"})
 	seedCatalogPurchase(t, s, other.ID, "d", "2026-11-05T12:00:00Z", "USD", "Beta")
 	for _, test := range []struct {

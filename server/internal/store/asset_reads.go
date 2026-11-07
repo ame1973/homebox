@@ -144,6 +144,16 @@ func assetMatchesPurchase(ctx context.Context, tx *sql.Tx, unitID string, filter
 		if err != nil {
 			return false, err
 		}
+		if line.ItemUnitID == nil || *line.ItemUnitID != unitID {
+			return false, ErrDomainState
+		}
+		active, err := purchaseLineIsActive(ctx, tx, line)
+		if err != nil {
+			return false, err
+		}
+		if !active {
+			continue
+		}
 		instant, _ := time.Parse(time.RFC3339Nano, purchase.PurchasedAt)
 		day := civilDateKey(instant.In(zone))
 		if (from == 0 || day >= from) && (to == 0 || day <= to) {

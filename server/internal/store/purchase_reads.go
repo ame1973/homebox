@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"strings"
 	"time"
 )
@@ -80,7 +81,7 @@ func (p *Purchases) PageLines(ctx context.Context, token, purchaseID, cursor str
 			if _, err := loadPurchase(ctx, tx, purchaseID); err != nil {
 				return metadataPage[PurchaseLine]{}, err
 			}
-			rows, err := tx.QueryContext(ctx, purchaseLineSelect+" WHERE l.purchase_id=? AND l.id>? ORDER BY l.id LIMIT ?", purchaseID, after, size+1)
+			rows, err := tx.QueryContext(ctx, purchaseLineSelect+" WHERE l.purchase_id=? AND l.id>? ORDER BY l.id", purchaseID, after)
 			if err != nil {
 				return metadataPage[PurchaseLine]{}, err
 			}
@@ -94,14 +95,25 @@ func (p *Purchases) PageLines(ctx context.Context, token, purchaseID, cursor str
 				if err = validatePurchaseLineAuthority(ctx, tx, value); err != nil {
 					return metadataPage[PurchaseLine]{}, err
 				}
+				active, err := purchaseLineIsActive(ctx, tx, value)
+				if err != nil {
+					return metadataPage[PurchaseLine]{}, err
+				}
+				if !active {
+					continue
+				}
 				page.Data = append(page.Data, value)
+				if len(page.Data) > size {
+					page.Data = page.Data[:size]
+					page.NextID = page.Data[size-1].ID
+					if err = rows.Close(); err != nil {
+						return metadataPage[PurchaseLine]{}, err
+					}
+					return page, nil
+				}
 			}
-			if err = rows.Err(); err != nil {
+			if err = errors.Join(rows.Err(), rows.Close()); err != nil {
 				return metadataPage[PurchaseLine]{}, err
-			}
-			if len(page.Data) > size {
-				page.Data = page.Data[:size]
-				page.NextID = page.Data[size-1].ID
 			}
 			return page, nil
 		})
@@ -180,8 +192,12 @@ func listPurchaseHeaders(ctx context.Context, tx *sql.Tx, after string, limit in
 			}
 		}
 		if criteria != "" {
-			if err = validatePurchaseCriteria(ctx, tx, value.ID, filters, criteria, lineArgs); err != nil {
+			matched, err := validatePurchaseCriteria(ctx, tx, value.ID, filters, criteria, lineArgs)
+			if err != nil {
 				return metadataPage[Purchase]{}, err
+			}
+			if !matched {
+				continue
 			}
 		}
 		page.Data = append(page.Data, value)
@@ -197,29 +213,33 @@ func listPurchaseHeaders(ctx context.Context, tx *sql.Tx, after string, limit in
 	return page, nil
 }
 
-func validatePurchaseCriteria(ctx context.Context, tx *sql.Tx, purchaseID string, filters ItemFilters, criteria string, lineArgs []any) error {
+func validatePurchaseCriteria(ctx context.Context, tx *sql.Tx, purchaseID string, filters ItemFilters, criteria string, lineArgs []any) (bool, error) {
 	args := append([]any{filters.CategoryID, filters.LocationID, purchaseID}, lineArgs...)
 	rows, err := tx.QueryContext(ctx, itemFilterCTEs+purchaseLineSelect+" JOIN items i ON i.id=l.item_id WHERE l.purchase_id=? AND "+criteria+" ORDER BY l.id", args...)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer rows.Close()
-	found := false
+	found, matched := false, false
 	for rows.Next() {
 		line, err := scanPurchaseLine(rows)
 		if err != nil {
-			return err
+			return false, err
 		}
 		if err = validatePurchaseLineAuthority(ctx, tx, line); err != nil {
-			return err
+			return false, err
 		}
-		found = true
+		active, err := purchaseLineIsActive(ctx, tx, line)
+		if err != nil {
+			return false, err
+		}
+		found, matched = true, matched || active
 	}
-	if err = rows.Err(); err != nil {
-		return err
+	if err = errors.Join(rows.Err(), rows.Close()); err != nil {
+		return false, err
 	}
 	if !found {
-		return ErrDomainState
+		return false, ErrDomainState
 	}
-	return nil
+	return matched, nil
 }

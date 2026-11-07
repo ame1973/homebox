@@ -35,6 +35,9 @@ func TestCatalogUnitSearchKeepsIdentifiersAndPurchaseEvidenceInTheirOwnScope(t *
 	seedSearchUnit(t, s, unitID, "item", "ASSETALPHA", testPointer("SerialAlpha"), "UnitAlphaNote")
 	seedSearchUnit(t, s, "unit-beta", "item", "ASSETBETA", testPointer("SerialBeta"), "UnitBetaNote")
 	seedSearchUnit(t, s, "unit-other", "other", "ASSETOTHER", nil, "UnrelatedUnitNote")
+	for _, id := range []string{unitID, "unit-beta", "unit-other"} {
+		execSQL(t, s.db, "INSERT INTO projection_revisions VALUES('unit',?,1)", id)
+	}
 	for _, purchase := range []struct {
 		id, item, merchant, receipt, note string
 		unit                              *string
@@ -44,15 +47,11 @@ func TestCatalogUnitSearchKeepsIdentifiersAndPurchaseEvidenceInTheirOwnScope(t *
 		{"common", "item", "MerchantCommon", "ReceiptCommon", "LineCommon", nil},
 		{"other", "other", "MerchantOther", "ReceiptOther", "LineOther", testPointer("unit-other")},
 	} {
-		execSQL(t, s.db, `INSERT INTO purchases(id,merchant_name,purchased_at,currency,receipt_note,created_at)
- VALUES(?,?,'2026-01-01T00:00:00Z','TWD',?,'2026')`, purchase.id, purchase.merchant, purchase.receipt)
-		execSQL(t, s.db, `INSERT INTO purchase_lines(id,purchase_id,item_id,item_unit_id,quantity_base,paid_minor,note)
- VALUES(?,?,?,?,1,100,?)`, purchase.id, purchase.id, purchase.item, purchase.unit, purchase.note)
+		seedReadPurchase(t, s, PurchaseData{ID: purchase.id, MerchantName: purchase.merchant, PurchasedAt: "2026-01-01T00:00:00Z", Currency: "TWD", ReceiptNote: purchase.receipt})
+		seedReadPurchaseLine(t, s, PurchaseLineData{ID: purchase.id, PurchaseID: purchase.id, ItemID: purchase.item, ItemUnitID: purchase.unit, QuantityBase: 1, PaidMinor: 100, Note: purchase.note})
 	}
-	execSQL(t, s.db, `INSERT INTO purchases(id,merchant_name,purchased_at,currency,receipt_note,created_at)
- VALUES('unlinked','UnlinkedMerchant','2026-01-01T00:00:00Z','TWD','UnlinkedReceipt','2026')`)
-	execSQL(t, s.db, `INSERT INTO purchase_lines(id,purchase_id,item_id,item_unit_id,quantity_base,paid_minor,note)
- VALUES('alpha-again','alpha','item',?,1,100,'LineAlphaAgain')`, unitID)
+	seedReadPurchase(t, s, PurchaseData{ID: "unlinked", MerchantName: "UnlinkedMerchant", PurchasedAt: "2026-01-01T00:00:00Z", Currency: "TWD", ReceiptNote: "UnlinkedReceipt"})
+	seedReadPurchaseLine(t, s, PurchaseLineData{ID: "alpha-again", PurchaseID: "alpha", ItemID: "item", ItemUnitID: &unitID, QuantityBase: 1, PaidMinor: 100, Note: "LineAlphaAgain"})
 	changed := requireProjectionReplay(t, s, func() { publishCatalogSearch(t, taxonomy, token, "publish-unit-scopes", "item") })
 	if len(changed) != 3 || !changed[projectionKey{"search_doc", projectionPair("unit", unitID)}] ||
 		changed[projectionKey{"search_doc", projectionPair("unit", "unit-other")}] {

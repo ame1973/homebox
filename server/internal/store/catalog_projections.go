@@ -48,6 +48,55 @@ func sourceTextRows(ctx context.Context, query queryer, statement string, args .
 	return sourceText(values...), nil
 }
 
+func purchaseSearchText(ctx context.Context, query queryer, itemID, unitID string) (string, error) {
+	condition, args := "l.item_id=?", []any{itemID}
+	if unitID != "" {
+		condition += " AND l.item_unit_id=?"
+		args = append(args, unitID)
+	}
+	rows, err := query.QueryContext(ctx, purchaseLineSelect+" WHERE "+condition+" ORDER BY l.id", args...)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	parents := make(map[string]string)
+	var notes []string
+	for rows.Next() {
+		line, err := scanPurchaseLine(rows)
+		if err != nil {
+			return "", err
+		}
+		if line.ItemID != itemID || unitID != "" && (line.ItemUnitID == nil || *line.ItemUnitID != unitID) {
+			return "", ErrDomainState
+		}
+		purchase, err := loadPurchaseLineAuthority(ctx, query, line)
+		if err != nil {
+			return "", err
+		}
+		active, err := purchaseLineIsActive(ctx, query, line)
+		if err != nil {
+			return "", err
+		}
+		if active {
+			parents[purchase.ID] = purchase.MerchantName + "\n" + purchase.ReceiptNote
+			notes = append(notes, line.Note)
+		}
+	}
+	if err = errors.Join(rows.Err(), rows.Close()); err != nil {
+		return "", err
+	}
+	ids := make([]string, 0, len(parents))
+	for id := range parents {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	values := make([]string, 0, len(ids)+len(notes))
+	for _, id := range ids {
+		values = append(values, parents[id])
+	}
+	return sourceText(append(values, notes...)...), nil
+}
+
 func categoryPathText(ctx context.Context, query queryer, id *string) (string, error) {
 	if id == nil {
 		return "", nil
@@ -97,7 +146,7 @@ func (m *mutationTx) touchItemSearch(id string, touchItem bool) error {
 		if _, err := m.touch("item", id, false); err != nil {
 			return err
 		}
-		if _, err := m.tx.ExecContext(m.ctx, "UPDATE items SET updated_at=? WHERE id=? AND updated_at<>?", stamp(m.now), id, stamp(m.now)); err != nil {
+		if err := requireDomainRow(m.tx.ExecContext(m.ctx, "UPDATE items SET updated_at=? WHERE id=?", stamp(m.now), id)); err != nil {
 			return err
 		}
 	}
@@ -155,21 +204,11 @@ func loadSearchText(ctx context.Context, query queryer, item ItemData, unitID st
 		}
 		value.details = sourceText(value.details, text)
 	}
-	condition, args := "l.item_id=?", []any{item.ID}
-	if unitID != "" {
-		condition += " AND l.item_unit_id=?"
-		args = append(args, unitID)
+	purchases, err := purchaseSearchText(ctx, query, item.ID, unitID)
+	if err != nil {
+		return searchText{}, err
 	}
-	for _, statement := range []string{
-		"SELECT p.merchant_name||char(10)||p.receipt_note FROM purchases p WHERE EXISTS(SELECT 1 FROM purchase_lines l WHERE l.purchase_id=p.id AND " + condition + ") ORDER BY p.id",
-		"SELECT l.note FROM purchase_lines l WHERE " + condition + " ORDER BY l.id",
-	} {
-		text, err := sourceTextRows(ctx, query, statement, args...)
-		if err != nil {
-			return searchText{}, err
-		}
-		value.details = sourceText(value.details, text)
-	}
+	value.details = sourceText(value.details, purchases)
 	value.reviewed, err = sourceTextRows(ctx, query, `SELECT CASE WHEN state='corrected' THEN corrected_value ELSE raw_value END
  FROM ai_review_entries WHERE item_id=? AND field_key IN('specification','keyword')
  AND state IN('accepted','corrected') AND reviewed_at IS NOT NULL ORDER BY id`, item.ID)
@@ -224,7 +263,7 @@ func (m *mutationTx) materializeSearch(identity string) (searchData, error) {
  VALUES(?,?,?,?,?,?,?) ON CONFLICT(unit_id) DO UPDATE SET title=excluded.title,identifiers=excluded.identifiers,
  details=excluded.details,reviewed_ai=excluded.reviewed_ai,revision=excluded.revision,updated_at=excluded.updated_at`
 	}
-	if _, err = m.tx.ExecContext(m.ctx, statement, id, text.title, text.identifiers, text.details, text.reviewed, pending.revision, stamp(m.now)); err != nil {
+	if err = requireDomainRow(m.tx.ExecContext(m.ctx, statement, id, text.title, text.identifiers, text.details, text.reviewed, pending.revision, stamp(m.now))); err != nil {
 		return searchData{}, err
 	}
 	return searchData{EntityType: kind, EntityID: id, ApprovedText: sourceText(text.title, text.identifiers, text.details, text.reviewed)}, nil

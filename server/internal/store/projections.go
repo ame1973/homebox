@@ -81,6 +81,13 @@ func (m *mutationTx) projectionPayload(key projectionKey) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
+		active, err := purchaseLineIsActive(m.ctx, m.tx, value)
+		if err != nil {
+			return nil, err
+		}
+		if !active {
+			return nil, ErrNotFound
+		}
 		return json.Marshal(value.PurchaseLineData)
 	case "asset":
 		value, err := loadAsset(m.ctx, m.tx, key.id)

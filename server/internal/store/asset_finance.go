@@ -190,7 +190,17 @@ func readAssetAcquisition(ctx context.Context, query queryer, asset Asset) (int6
 		if err != nil {
 			return 0, err
 		}
-		if purchase.Currency != asset.Currency || line.ItemUnitID == nil || *line.ItemUnitID != asset.ItemUnitID {
+		if line.ItemUnitID == nil || *line.ItemUnitID != asset.ItemUnitID {
+			return 0, ErrDomainState
+		}
+		active, err := purchaseLineIsActive(ctx, query, line)
+		if err != nil {
+			return 0, err
+		}
+		if !active {
+			continue
+		}
+		if purchase.Currency != asset.Currency {
 			return 0, ErrDomainState
 		}
 		found = true

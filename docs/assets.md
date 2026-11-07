@@ -50,7 +50,7 @@ A sent timeout, canceled wait or malformed reply may already have committed. The
 
 ## Financial correction contracts
 
-Separate [audited financial correction contracts](financial-corrections.md) now define retained DisposalRecord reads and financial correction/history operations, alongside Purchase allocation correction. They preserve the original disposal, distinguish explicit void from zero proceeds, retain an actual independent Disposal proof after void and never revive/move/dispose a Unit again or infer retirement. These additions are contract/generated-transport only: their persistence/HTTP/SDK/reviewed screens remain unfinished. The eleven currently implemented Asset operations do not silently supply those new workflows, and retirement-date correction remains separate required work.
+Separate [audited financial correction contracts](financial-corrections.md) now define retained DisposalRecord reads and financial correction/history operations, alongside Purchase allocation correction. They preserve the original disposal, distinguish explicit void from zero proceeds, retain an actual independent Disposal proof after void and never revive/move/dispose a Unit again or infer retirement. DisposalRecord/disposal correction persistence/services and all five new HTTP/SDK/reviewed-screen workflows remain unfinished. Private Purchase allocation correction/history services now validate proposed old/new Asset totals and current acquisition effects without changing physical state. The eleven currently implemented Asset operations do not silently supply the new correction workflows, and retirement-date correction remains separate required work.
 
 ## Domain boundaries
 

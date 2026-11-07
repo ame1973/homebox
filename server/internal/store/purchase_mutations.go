@@ -42,6 +42,13 @@ type PurchaseLineCreate struct {
 	Note         string  `json:"note"`
 }
 
+func validPurchaseLineCreate(input PurchaseLineCreate) bool {
+	return validDomainID(input.ItemID) && input.ItemRevision >= 1 && input.ItemRevision <= maxSafeInteger &&
+		(input.ItemUnitID == nil || validDomainID(*input.ItemUnitID)) && input.QuantityBase >= 1 && input.QuantityBase <= maxSafeInteger &&
+		input.PaidMinor >= 0 && input.PaidMinor <= maxSafeInteger && authString(input.Note, 0, 10000) &&
+		(input.ItemUnitID == nil || input.QuantityBase == 1)
+}
+
 // Purchases owns actual purchase transactions; HTTP still owns transport,
 // Origin/CSRF/client-version/admission. No physical receipt or AI worker is needed.
 type Purchases struct{ auth *Auth }
@@ -227,9 +234,7 @@ func (m *mutationTx) recordPurchaseCorrection(before, after Purchase, input Purc
 
 func (p *Purchases) CreateLine(ctx context.Context, token, key, purchaseID string, revision int64, input PurchaseLineCreate) (PurchaseLine, error) {
 	input.ItemUnitID = snapshotPurchaseString(input.ItemUnitID)
-	if !validDomainID(purchaseID) || !validDomainID(input.ItemID) || input.ItemRevision < 1 || input.ItemRevision > maxSafeInteger ||
-		(input.ItemUnitID != nil && !validDomainID(*input.ItemUnitID)) || input.QuantityBase < 1 || input.QuantityBase > maxSafeInteger ||
-		input.PaidMinor < 0 || input.PaidMinor > maxSafeInteger || !authString(input.Note, 0, 10000) || (input.ItemUnitID != nil && input.QuantityBase != 1) {
+	if !validDomainID(purchaseID) || !validPurchaseLineCreate(input) {
 		return PurchaseLine{}, ErrDomainInput
 	}
 	if err := validExpectedRevision(revision); err != nil {
@@ -248,49 +253,18 @@ func (p *Purchases) CreateLine(ctx context.Context, token, key, purchaseID strin
 		if purchase.Revision != revision {
 			return PurchaseLine{}, ErrRevisionConflict
 		}
-		item, err := itemAtRevision(ctx, m.tx, input.ItemID, input.ItemRevision)
+		item, asset, err := m.preparePurchaseLine(purchase, input)
 		if err != nil {
 			return PurchaseLine{}, err
 		}
-		if _, ok := currency.MinorUnits(purchase.Currency); !ok {
-			return PurchaseLine{}, ErrPurchaseCurrency
-		}
-		var asset *Asset
-		if input.ItemUnitID != nil {
-			if item.TrackingMode != "individual" {
-				return PurchaseLine{}, ErrUnitTracking
-			}
-			unit, err := loadUnit(ctx, m.tx, *input.ItemUnitID)
-			if err != nil {
-				return PurchaseLine{}, err
-			}
-			if unit.ItemID != item.ID {
-				return PurchaseLine{}, ErrDomainInput
-			}
-			asset, err = m.purchaseAsset(purchase, unit)
-			if err != nil {
-				return PurchaseLine{}, err
-			}
-		}
-		id, err := newDomainID()
+		line, err := m.insertPurchaseLine(purchaseID, input)
 		if err != nil {
 			return PurchaseLine{}, err
-		}
-		err = requireDomainRow(m.tx.ExecContext(ctx, `INSERT INTO purchase_lines(id,purchase_id,item_id,item_unit_id,quantity_base,paid_minor,note,created_at,mutation_event_id) VALUES(?,?,?,?,?,?,?,?,?)`, id, purchaseID, input.ItemID, input.ItemUnitID, input.QuantityBase, input.PaidMinor, input.Note, stamp(m.now), m.eventID))
-		if err != nil {
-			return PurchaseLine{}, err
-		}
-		lineRevision, err := m.touch("purchase_line", id, false)
-		if err != nil {
-			return PurchaseLine{}, err
-		}
-		if lineRevision != 1 {
-			return PurchaseLine{}, ErrDomainState
 		}
 		if _, err = m.touch("purchase", purchaseID, false); err != nil {
 			return PurchaseLine{}, err
 		}
-		if err = m.touchItemSearch(input.ItemID, true); err != nil {
+		if err = m.touchItemSearch(item.ID, true); err != nil {
 			return PurchaseLine{}, err
 		}
 		if asset != nil {
@@ -305,16 +279,71 @@ func (p *Purchases) CreateLine(ctx context.Context, token, key, purchaseID strin
 				return PurchaseLine{}, ErrDomainState
 			}
 		}
-		stored, err := loadPurchaseLine(ctx, m.tx, id)
+		stored, err := loadPurchaseLine(ctx, m.tx, line.ID)
 		if err != nil {
 			return PurchaseLine{}, err
 		}
-		expected := PurchaseLineData{id, purchaseID, input.ItemID, input.ItemUnitID, input.QuantityBase, input.PaidMinor, input.Note}
-		if stored.Revision != 1 || !reflect.DeepEqual(stored.PurchaseLineData, expected) {
+		if stored.Revision != 1 || !reflect.DeepEqual(stored.PurchaseLineData, line.PurchaseLineData) {
 			return PurchaseLine{}, ErrDomainState
 		}
 		return stored, nil
 	})
+}
+
+func (m *mutationTx) preparePurchaseLine(purchase Purchase, input PurchaseLineCreate) (Item, *Asset, error) {
+	item, err := itemAtRevision(m.ctx, m.tx, input.ItemID, input.ItemRevision)
+	if err != nil {
+		return Item{}, nil, err
+	}
+	if _, ok := currency.MinorUnits(purchase.Currency); !ok {
+		return Item{}, nil, ErrPurchaseCurrency
+	}
+	var asset *Asset
+	if input.ItemUnitID != nil {
+		if item.TrackingMode != "individual" {
+			return Item{}, nil, ErrUnitTracking
+		}
+		unit, err := loadUnit(m.ctx, m.tx, *input.ItemUnitID)
+		if err != nil {
+			return Item{}, nil, err
+		}
+		if unit.ItemID != item.ID {
+			return Item{}, nil, ErrDomainInput
+		}
+		asset, err = m.purchaseAsset(purchase, unit)
+		if err != nil {
+			return Item{}, nil, err
+		}
+	}
+	return item, asset, nil
+}
+
+// Parent/Item/Asset effects are finalized by the owning command after all proposed
+// source exists; correction must validate replacement and void as one history.
+func (m *mutationTx) insertPurchaseLine(purchaseID string, input PurchaseLineCreate) (PurchaseLine, error) {
+	id, err := newDomainID()
+	if err != nil {
+		return PurchaseLine{}, err
+	}
+	if err = requireDomainRow(m.tx.ExecContext(m.ctx, `INSERT INTO purchase_lines(id,purchase_id,item_id,item_unit_id,quantity_base,paid_minor,note,created_at,mutation_event_id) VALUES(?,?,?,?,?,?,?,?,?)`,
+		id, purchaseID, input.ItemID, input.ItemUnitID, input.QuantityBase, input.PaidMinor, input.Note, stamp(m.now), m.eventID)); err != nil {
+		return PurchaseLine{}, err
+	}
+	if revision, err := m.touch("purchase_line", id, false); err != nil || revision != 1 {
+		if err != nil {
+			return PurchaseLine{}, err
+		}
+		return PurchaseLine{}, ErrDomainState
+	}
+	stored, err := loadPurchaseLine(m.ctx, m.tx, id)
+	if err != nil {
+		return PurchaseLine{}, err
+	}
+	expected := PurchaseLineData{id, purchaseID, input.ItemID, input.ItemUnitID, input.QuantityBase, input.PaidMinor, input.Note}
+	if stored.Revision != 1 || !reflect.DeepEqual(stored.PurchaseLineData, expected) {
+		return PurchaseLine{}, ErrDomainState
+	}
+	return stored, nil
 }
 
 // The original Item proof freezes profile changes too: every financial producer

@@ -250,7 +250,7 @@ func TestPurchaseReadOwnerAndMatchingLookupsUseActualIndexesWithoutInventingSour
 		sql, index string
 		args       []any
 	}{
-		{purchaseLineSelect + " WHERE l.purchase_id=? AND l.id>? ORDER BY l.id LIMIT ?", "idx_purchase_lines_purchase_id", []any{fixture.purchase.ID, "", 51}},
+		{purchaseLineSelect + " WHERE l.purchase_id=? AND l.id>? ORDER BY l.id", "idx_purchase_lines_purchase_id", []any{fixture.purchase.ID, ""}},
 		{itemFilterCTEs + purchaseSelect + " WHERE p.id>? AND EXISTS(SELECT 1 FROM purchase_lines l JOIN items i ON i.id=l.item_id WHERE l.purchase_id=p.id AND " + criteria + ") ORDER BY p.id", "idx_purchase_lines_item_purchase", append([]any{"", "", ""}, args...)},
 	} {
 		rows, err := fixture.store.db.QueryContext(t.Context(), "EXPLAIN QUERY PLAN "+query.sql, query.args...)
@@ -272,7 +272,7 @@ func TestPurchaseReadOwnerAndMatchingLookupsUseActualIndexesWithoutInventingSour
 	}
 	before := purchaseCommandState(t, fixture.store)
 	_, err := readDomain(t.Context(), fixture.auth, fixture.token, func(tx *sql.Tx) (bool, error) {
-		return false, validatePurchaseCriteria(t.Context(), tx, fixture.purchase.ID, ItemFilters{}, "l.item_id='absent'", nil)
+		return validatePurchaseCriteria(t.Context(), tx, fixture.purchase.ID, ItemFilters{}, "l.item_id='absent'", nil)
 	})
 	if !errors.Is(err, ErrDomainState) {
 		t.Fatal("an internally inconsistent matching set was treated as evidence", err)

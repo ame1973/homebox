@@ -22,6 +22,7 @@ func purchaseCommandState(t *testing.T, s *Store) map[string]string {
 	t.Helper()
 	state := domainState(t, s)
 	state["purchase_header_corrections"] = scalar[string](t, s.db, `SELECT json_group_array(json_array(mutation_event_id,purchase_id,context_json)) FROM (SELECT * FROM purchase_header_corrections ORDER BY mutation_event_id)`)
+	state["purchase_line_corrections"] = scalar[string](t, s.db, `SELECT json_group_array(json_array(mutation_event_id,revision,purchase_id,line_id,replacement_line_id,action,reason,created_at,context_json)) FROM (SELECT * FROM purchase_line_corrections ORDER BY mutation_event_id)`)
 	return state
 }
 func requirePurchaseCommandState(t *testing.T, s *Store, before map[string]string) {

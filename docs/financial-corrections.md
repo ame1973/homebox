@@ -1,6 +1,6 @@
 # Audited Financial Corrections
 
-**Availability: executable contracts and generated raw transport types only.** The five operations below are specified and validated, but their persistence services, HTTP handlers, stateless browser adapters and reviewed operating screens are not implemented yet. Do not call these paths as working features. The existing [seven purchase operations](purchases.md) and [eleven Asset financial operations](assets.md) remain available; their tests do not establish these new workflows.
+**Availability: private Purchase correction persistence/services and executable contracts.** Migration 0017 and `Purchases.CorrectLine/PageLineCorrections` implement allocation void/replacement and complete authenticated history inside the private Go store boundary. They are exercised directly, not exposed through HTTP or browser controls. All five operations below have contracts/generated transport types, but their HTTP handlers, stateless browser adapters and reviewed operating screens remain unfinished; DisposalRecord/disposal correction persistence/services are also still pending. Do not call these paths as working features. The existing [seven purchase operations](purchases.md) and [eleven Asset financial operations](assets.md) remain available; their browser/socket tests do not establish the new correction workflows.
 
 This closes an interface gap in the read-only source requirements without weakening posted-history immutability. The root OpenAPI now contains 142 operations and 177 schemas, preserving all original 103 operation identities and every existing schema, including all version-one offline payloads. Specification revision v0.9.3 is not an application release.
 
@@ -78,6 +78,16 @@ Voided attribution has no current acquisition effect. Retained historical record
 
 Source, actual correction/audit, old-Line tombstone, optional new Line, Purchase and affected old/new Item/Asset/search/current/outbox/original reply must commit together. A late invalid owner, ignored write, failed publication, revoked session or failed COMMIT must expose neither a partial void nor a partial replacement.
 
+## Implemented private Purchase boundary
+
+Migration 0017 adds one immutable, indexed correction journal with actual Purchase/original-Line/optional-replacement references and a deferred reference to the real mutation event. Each entry has its own stored revision one and exact complete original/input/replacement/Purchase/Item context. Existing posted rows, old current/frozen bytes, counters and epoch are not backfilled or rewritten. Native text bytes are bounded without treating embedded NUL as an end-of-string; Go validates complete UTF-8/code-point bounds and preserves exact reasons.
+
+`Purchases.CorrectLine` snapshots the whole replacement and nullable Unit before fingerprinting, checks all original scopes and uses the existing completed-session domain transaction. It posts a new independent Line only for replacement, voids the original current effect and validates complete proposed old/new Asset histories before publication. Shared Items/Assets advance once; quantities, Unit state, placement and movement history do not change. Original-key replay precedes current proofs/eligibility but never completed authorization; expired claims remain reserved. A failed/ignored required write, altered context/source, unsafe total, late authorization or COMMIT failure returns no successful result and rolls everything back.
+
+Current Line pages skip validated voided rows before slicing, including large raw gaps. Item-associated Purchase, catalog/Stock purchase filters, exact-Unit Asset filters/acquisition and approved search publication classify actual retained source rather than blindly excluding journal matches in SQL. Invalid/missing referenced context fails closed instead of resurrecting the old attribution. The original Line counter advances to its independent tombstone; actual Purchase/old/new Item counters must have advanced beyond their stored original proofs. Detailed history completes its own live pages and never becomes a new offline entity or subject proof. Global Purchase headers and historical currency/deletion guards remain retained even when no allocation is currently active.
+
+These are private service capabilities, not a CLI financial-write interface or authorization to edit SQLite manually. The five new HTTP handlers, transport parsing and reviewed browser workflows still need separate implementation and evidence.
+
 ## Retained disposal record and financial correction
 
 The existing current-disposal GET remains a current effective resource, not a substitute for the retained record. A financial void makes that current resource absent and publishes its independent tombstone. The separate `DisposalRecord` remains readable with:
@@ -120,15 +130,16 @@ A future browser workflow must complete and bracket only its selected source/his
 
 Current financial effects use the existing `purchase_line` and `disposal` upserts/tombstones, with all normative version-one payloads unchanged. A voided old Line cannot reappear from raw retained history during materialization; a corrected disposal publishes its actual current decision. The normative replica remains 22 kinds. Detailed authenticated correction/audit history is not a second offline authoritative ledger or a new projection kind. Old frozen replies/outbox bytes and retained original source remain exact. See [Offline Replica and Safe Draft Protocol](../contracts/sync.md).
 
-Run the executable contract/type checks from the repository root:
+Run the executable contract/type checks and private Purchase transaction tests from the repository root:
 
 ```sh
 uv run --frozen python -m unittest tests.test_financial_corrections_contracts -v
 npm --prefix web run api:check
 npm --prefix web run typecheck
 npm --prefix web test -- --coverage.enabled=false src/lib/api/client.test.ts
+go -C server test ./internal/store -run '^TestPurchaseLineCorrection' -count=1
 ```
 
-Negative schemas and strict actual-client type fixtures cover required proofs/null/zero, distinct original-versus-replacement intent, one named Unit, independent immutable entry revisions, bounded retained record/history, exact safe numbers/dates/reasons and unchanged offline shapes. Ownership, correction progression, complete proposed totals, real currency eligibility, immutable SQL source, atomic publication, idempotency and authorization remain authoritative runtime gates; schema acceptance alone does not establish them. The shared safe client recognizes `PURCHASE_LINE_VOIDED` without exposing arbitrary server messages/details.
+Negative schemas and strict actual-client type fixtures cover required proofs/null/zero, distinct original-versus-replacement intent, one named Unit, independent immutable entry revisions, bounded retained record/history, exact safe numbers/dates/reasons and unchanged offline shapes. Actual private Go Purchase tests separately cover void/replacement, immutable exact context, independent original proofs, complete 205-entry history/current-page gaps, current evidence/totals, zero versus void, old/new Asset effects, safe proposed versus unsafe old totals, original/fresh-login/expired-key behavior and SQL/ignored/rewritten/authorization/COMMIT rollback. Fresh/certified schema-16 upgrades retain exact old source/current/frozen bytes/epoch and verified recovery snapshots; a late checksum failure retains the old schema. The shared safe client recognizes `PURCHASE_LINE_VOIDED` without exposing arbitrary server messages/details. None of these checks establishes the new HTTP/browser workflows or Disposal correction service.
 
-Still required: additive persistence/transaction services, HTTP/parser/TLS/socket evidence, stateless adapters, complete reviewed source/form/command/controller composition, responsive actual-Go browser workflows and any remaining retirement-date correction. Full sync/PWA, media, camera, worker/search, analytics, encrypted backup/restore, deployment and physical acceptance also remain separate complete-product gates. No existing automated suite is relabeled as testing these unimplemented handlers, physical devices, hosted CI or a production deployment.
+Still required: DisposalRecord/disposal correction persistence/transactions, all five HTTP handlers and strict parser/TLS/socket evidence, stateless adapters, complete reviewed source/form/command/controller composition, responsive actual-Go browser workflows and any remaining retirement-date correction. Full sync/PWA, media, camera, worker/search, analytics, encrypted backup/restore, deployment and physical acceptance also remain separate complete-product gates. No existing automated suite is relabeled as testing these unimplemented handlers, physical devices, hosted CI or a production deployment.

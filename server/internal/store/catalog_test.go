@@ -228,8 +228,8 @@ func TestCatalogHistoryGuardsIncludeDisposedZeroAndFinancialRowsButArchiveIsMeta
 				}
 				execSQL(t, s.db, "INSERT INTO stock_balances VALUES(?,'location',?,'2026')", item.ID, quantity)
 			case "purchase":
-				execSQL(t, s.db, "INSERT INTO purchases(id,merchant_name,purchased_at,currency,created_at) VALUES('purchase','Merchant','2026','TWD','2026')")
-				execSQL(t, s.db, "INSERT INTO purchase_lines(id,purchase_id,item_id,quantity_base,paid_minor) VALUES('line','purchase',?,1,100)", item.ID)
+				seedReadPurchase(t, s, PurchaseData{ID: "purchase", MerchantName: "Merchant", PurchasedAt: "2026-11-06T00:00:00Z", Currency: "TWD"})
+				seedReadPurchaseLine(t, s, PurchaseLineData{ID: "line", PurchaseID: "purchase", ItemID: item.ID, QuantityBase: 1, PaidMinor: 100})
 			case "movement":
 				execSQL(t, s.db, "INSERT INTO inventory_events(id,item_id,action,quantity_base,occurred_at) VALUES('movement',?,'adjust',0,'2026')", item.ID)
 			}

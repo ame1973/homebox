@@ -213,37 +213,42 @@ func itemMatchesPurchase(ctx context.Context, tx *sql.Tx, itemID string, filters
 		condition += " AND p.merchant_name=?"
 		args = append(args, filters.Merchant)
 	}
-	joined := " FROM purchase_lines l JOIN purchases p ON p.id=l.purchase_id WHERE " + condition
-	if from == 0 && to == 0 {
-		var matched bool
-		err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1"+joined+")", args...).Scan(&matched)
-		return matched, err
-	}
-	rows, err := tx.QueryContext(ctx, "SELECT DISTINCT p.id,p.purchased_at"+joined+" ORDER BY p.id", args...)
+	rows, err := tx.QueryContext(ctx, purchaseLineSelect+" JOIN purchases p ON p.id=l.purchase_id WHERE "+condition+" ORDER BY l.id", args...)
 	if err != nil {
 		return false, err
 	}
 	defer rows.Close()
+	matched := false
 	for rows.Next() {
-		var id, purchased string
-		if err = rows.Scan(&id, &purchased); err != nil {
+		line, err := scanPurchaseLine(rows)
+		if err != nil {
 			return false, err
 		}
-		if !validDomainID(id) || !domainInstantSyntax.MatchString(purchased) {
+		if line.ItemID != itemID {
 			return false, ErrDomainState
 		}
-		instant, err := time.Parse(time.RFC3339Nano, purchased)
-		if err != nil || instant.Year() < 1 {
-			return false, ErrDomainState
+		purchase, err := loadPurchaseLineAuthority(ctx, tx, line)
+		if err != nil {
+			return false, err
 		}
-		// Classify the instant's local date directly. A 23/25-hour or skipped day
-		// must not be approximated by UTC midnight or a fixed 24-hour window.
+		active, err := purchaseLineIsActive(ctx, tx, line)
+		if err != nil {
+			return false, err
+		}
+		if !active {
+			continue
+		}
+		instant, _ := time.Parse(time.RFC3339Nano, purchase.PurchasedAt)
+		// Civil labels, not elapsed 24-hour windows, still own date filtering.
 		day := civilDateKey(instant.In(zone))
 		if (from == 0 || day >= from) && (to == 0 || day <= to) {
-			return true, nil
+			matched = true
 		}
 	}
-	return false, rows.Err()
+	if err = errors.Join(rows.Err(), rows.Close()); err != nil {
+		return false, err
+	}
+	return matched, nil
 }
 
 func readItemSearchText(ctx context.Context, tx *sql.Tx, item Item) (string, error) {
