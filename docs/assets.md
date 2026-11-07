@@ -1,6 +1,6 @@
 # Assets, Usage and Cost Accounting
 
-**Availability: all eleven Go/HTTP financial operations below are implemented and tested.** Migrations 0015/0016, retained Asset/Usage/Cost/Disposal loaders, atomic source/publication, complete original-proof profile decisions, immutable usage/cost appends, physical/financial retirement/disposal, signed live collections, detail reads and current-posted calculations are available through the protected same-origin API. Strict readers, SQL revalidation after body reading, independent resource ETags, verified TLS/cookie jars, parser fuzz and actual compiled-server/socket response-schema checks cover these boundaries. All eleven stateless runtime Asset browser adapters are also implemented with strict input/response/type checks and private actual-SDK/Go browser evidence. Bracketed profile/detail/selected-history/lifecycle read models are also implemented. Exact raw form/default/proposal models for all five writers are also implemented, including explicit whole-interpretation adoption without conversion. Volatile frozen commands, no-replay review state and responsive operating screens remain **not implemented yet**. HTTP/SDK/service/schema tests are not physical-device acceptance. Existing [physical Unit workflows](holdings.md) and [purchase workflows](purchases.md) remain functional. The existing [Purchase allocation operation](purchases.md) atomically integrates an authoritative matching purchase-basis Asset; manual basis, currency mismatch, invalid authority and unsafe complete totals remain guarded. It does not implicitly create or reinterpret a profile.
+**Availability: all eleven Go/HTTP financial operations below are implemented and tested.** Migrations 0015/0016, retained Asset/Usage/Cost/Disposal loaders, atomic source/publication, complete original-proof profile decisions, immutable usage/cost appends, physical/financial retirement/disposal, signed live collections, detail reads and current-posted calculations are available through the protected same-origin API. Strict readers, SQL revalidation after body reading, independent resource ETags, verified TLS/cookie jars, parser fuzz and actual compiled-server/socket response-schema checks cover these boundaries. All eleven stateless runtime Asset browser adapters are also implemented with strict input/response/type checks and private actual-SDK/Go browser evidence. Bracketed profile/detail/selected-history/lifecycle read models are also implemented. Exact raw form/default/proposal models for all five writers are also implemented, including explicit whole-interpretation adoption without conversion. Volatile original-source/body/key commands and the shared no-replay review controller are also implemented for all five writers, including dependent read invalidation without installing frozen replies. Responsive operating screens remain **not implemented yet**. HTTP/SDK/service/schema tests are not physical-device acceptance. Existing [physical Unit workflows](holdings.md) and [purchase workflows](purchases.md) remain functional. The existing [Purchase allocation operation](purchases.md) atomically integrates an authoritative matching purchase-basis Asset; manual basis, currency mismatch, invalid authority and unsafe complete totals remain guarded. It does not implicitly create or reinterpret a profile.
 
 ## Domain boundaries
 
@@ -246,7 +246,7 @@ await putAssetProfile(reviewedUnit.id, {
 })
 ```
 
-On an uncertain sent result, retain the complete original context/body/key for explicit foreground reconciliation. A fresh login supplies only fresh CSRF/signal; it must not substitute newer source proofs or turn a historical reply into current state. Complete read and raw form/proposal models are available; volatile original-command/review state and responsive Asset screens remain unfinished. These adapters do not silently add those controls or an offline mutation queue.
+On an uncertain sent result, retain the complete original context/body/key for explicit foreground reconciliation. A fresh login supplies only fresh CSRF/signal; it must not substitute newer source proofs or turn a historical reply into current state. Complete read/form/command models and the shared no-replay review controller are available below; responsive Asset screens remain unfinished. These adapters do not silently add those controls or an offline mutation queue.
 
 ## Complete foreground read sources
 
@@ -258,7 +258,7 @@ Usage/cost source completes every explicit page of **only that selected owned co
 
 Lifecycle source includes the actual nullable Disposal and last physical placement/status, even when retained money needs separate eligibility review. Detail source additionally loads the exact current-posted summary, snapshots the requested `as_of` before asynchronous reads and checks its Unit/basis/currency/usage/residual/proceeds/manual interpretation against the same retained sources. A readable legacy Disposal in another currency is not silently combined into an aligned calculation. The model never recomputes ledger eligibility or adopts `source_revision` as an Asset proof.
 
-Volatile frozen commands, no-replay review control and responsive operating screens remain separate unfinished work. Consumers must retain drafts/original commands through failed/refreshed sources rather than automatically replacing reviewed context or submitting a mutation.
+Consumers retain drafts/original commands through failed/refreshed sources rather than automatically replacing reviewed context or submitting a mutation. The volatile command/controller layer below provides that delivery boundary; responsive operating screens remain unfinished.
 
 ## Exact raw form models
 
@@ -273,6 +273,33 @@ Profile bodies carry original Item/nullable Asset proofs; lifecycle bodies deriv
 Explicit profile adoption preserves any edited **whole financial tuple** (basis/currency/manual/residual/usage) and each nullable/date pair together, retaining invalid/in-progress text instead of partially merging a new currency into old money. Event adoption changes only the reviewed interpretation label/currency and whole source while leaving raw counts/money/notes/selected IDs unchanged; missing targets stay invalid, never silently null. Lifecycle adoption preserves changed raw drafts/notes and adopts an unedited actual recorded decision as a whole. No helper mutates or converts the original draft/source.
 
 Runtime and strict type cases exercise these boundaries. Private actual-Go browser cases build and submit all five proposed bodies from their actual complete sources, including explicit zero profile/residual/proceeds, referenced signed correction/credit, independent proofs/dates and no implicit physical changes. This programmatic form-model evidence is not a completed responsive form UI.
+
+## Frozen commands and foreground review state
+
+`web/src/features/assets/commands.ts` validates and copies one complete original proposal with an independent volatile key for `put-profile`, `record-usage`, `record-cost`, `retire-asset` or `dispose-asset`. Profile source retains whole Unit/Item/explicit nullable Asset; events retain their complete selected history and original interpretation; lifecycle additionally retains the independent Unit and explicit nullable Disposal. Duplicate/foreign history, missing selected correction targets, mismatched interpretation/body proofs, loose counters and credentials are rejected before review/delivery. Complete histories are not truncated to a single page. A retained detail calculation may remain display context, never a financial proof or eligibility decision.
+
+`sendAssetCommand` dispatches exactly that original body/key/proof through the actual stateless adapter. It performs no source read, current-data adoption, retry, storage or alternate-key construction. CSRF and AbortSignal are supplied only for the explicit attempt. For example, after visible review and explicit confirmation:
+
+```ts
+import { freezeAssetCommand, sendAssetCommand } from '@/features/assets/commands'
+import { assetUsageBody } from '@/features/assets/form'
+
+const command = freezeAssetCommand({
+  kind: 'record-usage',
+  source: reviewedUsageSource,
+  body: assetUsageBody(rawDraft, reviewedUsageSource),
+})
+
+// Deliver only after reviewing this exact snapshot and explicitly confirming.
+const historicalReply = await sendAssetCommand(command, csrfToken, signal)
+// Recheck authoritative reads; never install historicalReply as current state.
+```
+
+`useAssetMutation` reuses the shared foreground controller: explicit review and single-flight confirmation, fresh current-session CSRF, `networkMode: 'always'`, `retry: false` and immediate mutation-cache GC. An offline write is never paused for replay. Background/offline/exit can abort local waiting, not undo a committed transaction. Sent unknown outcomes retain the complete original command through dismissal, cache eviction or newer source; only an explicit same-key attempt reconciles it. A fresh login changes only attempt credentials/signal, not the original proofs. Session loss purges volatile financial context without forwarding bodies/amounts through login; pre-send CSRF failure dispatches and invalidates nothing.
+
+Confirmed or sent-failed financial commands invalidate `assets`, `catalog`, `holdings` and `purchases` reads without installing their frozen result. `assetCommandReadRoots` derives the additional `locations` scope from the captured original command only: retirement may physically change a Unit not already retired/disposed, and disposal may physically change a Unit not already disposed. Date-only retirement and already-disposed financial adoption do not broadly refresh locations. Later cache changes cannot replace that original interpretation. Related catalog/owned/taxonomy/location/holding/purchase mutations now invalidate Asset reads too; unrelated account/taxonomy/location scopes remain untouched according to the command.
+
+This is tested volatile review state, not rendered Asset forms, persistent drafts, an offline write queue or client-side financial eligibility. Responsive operating screens remain unfinished.
 
 ## Retained persistence foundation
 
@@ -306,4 +333,6 @@ Strict runtime/type adapter checks additionally cover all eleven transports, ori
 
 Source-model runtime checks separately complete 205-row selected histories, reject changed/foreign/missing authority and ambiguous optional absence, preserve broad retained review data and withhold page/cursor/cancellation failures. Private actual-SDK/Go browser cases read all five coherent scopes and force genuine profile creation, event append, disposal and calculation changes inside the real requested interval. Route predicates match the exact pathname even when the request contains paging/as_of parameters; a departing old prefix is never installed as current source.
 
-Still required: volatile frozen original-command/review state, reviewed responsive Asset screens, allocation/disposal adjustment/void integration, analytics and device/operator acceptance. Implemented persistence/services/HTTP/SDK do not establish those remaining gates. No hardware, hosted CI or completed-product claim follows from this document.
+Command/controller runtime and strict type checks separately exercise all five original scopes, large complete legacy histories, exact single dispatch, dynamic physical read roots, untouched newer caches, rejected/uncertain outcomes, pre-send failures, interruption, source eviction, fresh-CSRF explicit retry and session purge. Private actual-Go browser cases build each real form/source command, let it commit before losing the reply, change real financial/physical source, then perform a genuine fresh login and explicitly resend the identical original key/body/proof. The original result is returned without another event or current-state overwrite, and each sender attempt makes no hidden domain read.
+
+Still required: reviewed responsive Asset screens, allocation/disposal adjustment/void integration, analytics and device/operator acceptance. Implemented persistence/services/HTTP/SDK/review state do not establish those remaining gates. No hardware, hosted CI or completed-product claim follows from this document.

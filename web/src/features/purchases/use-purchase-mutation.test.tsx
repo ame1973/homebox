@@ -14,7 +14,7 @@ const item = { id: 'item', revision: 7, name: 'Original quantity', brand: null, 
 const purchase = { id: 'purchase', revision: 12, merchant_name: 'Reviewed merchant', purchased_at: '2026-11-06T00:00:00.000000001Z', currency: 'JPY', receipt_note: '' } as const
 const proposal: PurchaseCommandInput = { kind: 'create-line', purchase, item, unit: null, body: { item_id: item.id, item_revision: 7, item_unit_id: null, quantity_base: 1500, paid_minor: 0 } }
 const reply: PurchaseResult = { id: 'line', revision: 1, purchase_id: purchase.id, item_id: item.id, item_unit_id: null, quantity_base: 1500, paid_minor: 0, note: '' }
-const keys = [['purchases', 'detail', purchase.id], ['purchases', 'allocation', purchase.id, item.id], ['purchases', 'item', item.id], ['purchases', 'list', { currency: 'JPY' }], ['catalog', 'item', item.id], ['catalog', 'items'], ['holdings', 'item', item.id], ['holdings', 'stock', { item_id: item.id }]] as const
+const keys = [['purchases', 'detail', purchase.id], ['purchases', 'allocation', purchase.id, item.id], ['purchases', 'item', item.id], ['purchases', 'list', { currency: 'JPY' }], ['catalog', 'item', item.id], ['catalog', 'items'], ['holdings', 'item', item.id], ['holdings', 'stock', { item_id: item.id }], ['assets', 'detail', 'unit'], ['assets', 'costs', 'unit']] as const
 const unrelated = [['auth', 'me'], ['taxonomy', 'categories'], ['locations', 'tree']] as const
 beforeEach(() => {
   vi.mocked(fetchCSRF).mockReset().mockResolvedValue('csrf')

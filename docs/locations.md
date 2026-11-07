@@ -30,7 +30,7 @@ Parent selection uses native controls plus name/code filtering and a full-path d
 3. Confirm once. The page obtains current-session CSRF, sends the frozen key/body/original revision, and waits for the authoritative acknowledgement. Repeated activation, reconnection, and timers do not create another write.
 4. On success, fresh reads populate the destination page. A frozen replay response is never installed as if it were the latest resource.
 
-Browser location mutations invalidate location and dependent catalog/holding/purchase read scopes after confirmation or a sent failure: moving a branch can change subtree-filter membership even though actual holding assignments remain unchanged. This refresh never installs a frozen response or broadly invalidates unrelated authentication/taxonomy state.
+Browser location mutations invalidate location and dependent catalog/holding/purchase/Asset read scopes after confirmation or a sent failure: moving a branch can change subtree-filter membership even though actual holding assignments remain unchanged. This refresh never installs a frozen response or broadly invalidates unrelated authentication/taxonomy state.
 
 Metadata editing submits only changed descriptive fields. Moving and activation status use their separate reviewed actions. A concurrent revision does not overwrite input or silently update the form's base: read current data, then explicitly retain only edited logical fields against the new base or discard the draft. Retaining edits also preserves unfinished invalid text for validation; untouched concurrent names/types/order are not overwritten accidentally. An unchanged form sends no mutation.
 

@@ -16,7 +16,7 @@ const target = { ...source, id: 'target', name: 'Target', code: 'DST' }
 const balance = { item_id: owner.id, location_id: source.id, revision: 2, quantity_base: 1500, unit_code: 'kg', base_unit: 'g', scale_factor: 1000 } as const
 const proposal: HoldingCommandInput = { kind: 'transfer', owner, balances: [balance], source: [source], target: [target], body: { item_id: owner.id, source_location_id: source.id, target_location_id: target.id, quantity_base: 1500 } }
 const reply: HoldingResult = { ...balance, location_id: target.id, revision: 1 }
-const keys = [['holdings', 'item', owner.id], ['holdings', 'unit', 'unit'], ['holdings', 'stock', {}], ['catalog', 'item', owner.id], ['catalog', 'items'], ['locations', 'tree'], ['purchases', 'list', { location_id: target.id }], ['purchases', 'allocation', 'purchase', owner.id]] as const
+const keys = [['holdings', 'item', owner.id], ['holdings', 'unit', 'unit'], ['holdings', 'stock', {}], ['catalog', 'item', owner.id], ['catalog', 'items'], ['locations', 'tree'], ['purchases', 'list', { location_id: target.id }], ['purchases', 'allocation', 'purchase', owner.id], ['assets', 'detail', 'unit'], ['assets', 'list', { location_id: target.id }]] as const
 beforeEach(() => {
   vi.mocked(fetchCSRF).mockReset().mockResolvedValue('csrf')
   vi.mocked(sendHoldingCommand).mockReset().mockResolvedValue(reply)

@@ -611,6 +611,36 @@ void [manualAssetInput, purchaseAssetInput, retainedAsset, assetUseInput, assetC
   unprovenAssetRetire, implicitAssetProceeds, nonSaleAssetProceeds, nullAssetUnitProof, partialAssetUsage, partialAssetCost, partialAssetDisposal,
   partialAssetPage, partialAssetUsagePage, partialAssetCostPage, unprovenAssetHeaders, implicitRawAssetIntent, markedRawAssetIntent, unreferencedRawAssetCost, lifecycleAssetFilter]
 
+declare const assetCommands: typeof import('../src/features/assets/commands')
+declare const assetMutation: ReturnType<typeof import('../src/features/assets/use-asset-mutation').useAssetMutation>
+const reviewedAssetCommands = [
+  assetCommands.freezeAssetCommand({ kind: 'put-profile', source: reviewedAssetProfileSource, body: manualAssetInput }),
+  assetCommands.freezeAssetCommand({ kind: 'record-usage', source: reviewedAssetUsageSource, body: assetCorrectionInput }),
+  assetCommands.freezeAssetCommand({ kind: 'record-cost', source: reviewedAssetCostsSource, body: assetAdjustmentInput }),
+  assetCommands.freezeAssetCommand({ kind: 'retire-asset', source: reviewedAssetLifecycleSource, body: assetRetireInput }),
+  assetCommands.freezeAssetCommand({ kind: 'dispose-asset', source: reviewedAssetDetailSource, body: assetDisposalInput }),
+]
+const frozenAssetUsage = assetCommands.freezeAssetCommand({ kind: 'record-usage', source: reviewedAssetUsageSource, body: assetUseInput })
+const sentAssetCommand = assetCommands.sendAssetCommand(frozenAssetUsage, 'fresh-csrf', new AbortController().signal)
+assetMutation.review({ kind: 'record-cost', source: reviewedAssetCostsSource, body: assetCostInput })
+// @ts-expect-error Reviewed commands require a complete original source, not loose proofs.
+const looseAssetCommand = assetCommands.freezeAssetCommand({ kind: 'put-profile', source: { expectedRevision: 7 }, body: manualAssetInput })
+// @ts-expect-error Usage commands retain their selected complete history, not a Cost source.
+const wrongAssetCommandHistory = assetCommands.freezeAssetCommand({ kind: 'record-usage', source: reviewedAssetCostsSource, body: assetUseInput })
+// @ts-expect-error Lifecycle commands retain explicit nullable Disposal context too.
+const partialAssetCommandLifecycle = assetCommands.freezeAssetCommand({ kind: 'dispose-asset', source: { item: currentItem, unit: holdingUnit, asset: retainedAsset }, body: assetDisposalInput })
+// @ts-expect-error Calculation metadata is not an Asset command source or proof.
+const summaryAssetCommand = assetCommands.freezeAssetCommand({ kind: 'record-cost', source: reviewedAssetDetailSource.summary, body: assetCostInput })
+// @ts-expect-error Raw monetary strings must pass the exact form proposal boundary first.
+const rawAssetCommand = assetCommands.freezeAssetCommand({ kind: 'record-cost', source: reviewedAssetCostsSource, body: { ...assetCostInput, amount_minor: '1' } })
+// @ts-expect-error Keys belong to the frozen command, not supplied draft input.
+const suppliedAssetCommandKey = assetCommands.freezeAssetCommand({ kind: 'record-usage', source: reviewedAssetUsageSource, body: assetUseInput, key: 'replacement' })
+// @ts-expect-error Original keys remain read-only after review.
+frozenAssetUsage.key = 'replacement'
+// @ts-expect-error Confirmation uses the retained command; it does not adopt another body.
+assetMutation.confirm({ body: assetUseInput })
+void [reviewedAssetCommands, sentAssetCommand, looseAssetCommand, wrongAssetCommandHistory, partialAssetCommandLifecycle, summaryAssetCommand, rawAssetCommand, suppliedAssetCommandKey]
+
 import * as assetForms from '../src/features/assets/form'
 declare const reviewedAssetProfileSource: import('../src/features/assets/model').AssetProfileSource
 declare const reviewedAssetCostsSource: import('../src/features/assets/model').AssetCostsSource

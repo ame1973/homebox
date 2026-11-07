@@ -5,7 +5,8 @@ import { fetchCSRF } from '@/lib/api/auth'
 import { uncertainMutationFailure, type ReviewedCommand } from './reviewed-command'
 
 export function useReviewedMutation<Input, Command extends ReviewedCommand, Result>(
-  freeze: (input: Input) => Command, send: (command: Command, csrf: string, signal: AbortSignal) => Promise<Result>, queryKeys: readonly (readonly unknown[])[],
+  freeze: (input: Input) => Command, send: (command: Command, csrf: string, signal: AbortSignal) => Promise<Result>,
+  queryKeys: readonly (readonly unknown[])[] | ((command: Command) => readonly (readonly unknown[])[]),
   onConfirmed: (command: Command, result: Result) => void, onSessionLost: (mandatory: boolean) => void,
 ) {
   const client = useQueryClient()
@@ -66,6 +67,7 @@ export function useReviewedMutation<Input, Command extends ReviewedCommand, Resu
   async function confirm() {
     const original = commandRef.current
     if (!original || active.current) return
+    const readRoots = typeof queryKeys === 'function' ? queryKeys(original) : queryKeys
     const controller = new AbortController()
     active.current = controller
     let sent = false
@@ -89,7 +91,7 @@ export function useReviewedMutation<Input, Command extends ReviewedCommand, Resu
       setConfirmed(true)
       // A frozen reply may predate another write. Invalidate reads only; never
       // install an acknowledgement as authoritative current state.
-      for (const queryKey of queryKeys) void client.invalidateQueries({ queryKey })
+      for (const queryKey of readRoots) void client.invalidateQueries({ queryKey })
       callbacks.current.onConfirmed(original, result)
     } catch (cause) {
       if (!mounted.current || active.current !== controller) return
@@ -106,7 +108,7 @@ export function useReviewedMutation<Input, Command extends ReviewedCommand, Resu
         setError(failure)
         setPhase(sent && uncertainMutationFailure(failure) ? 'uncertain' : 'rejected')
         // Reconciliation reads never change the original request/key/proof.
-        if (sent) for (const queryKey of queryKeys) void client.invalidateQueries({ queryKey })
+        if (sent) for (const queryKey of readRoots) void client.invalidateQueries({ queryKey })
       }
     } finally {
       if (active.current === controller) active.current = null
