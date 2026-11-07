@@ -11,8 +11,8 @@ import (
 
 var ErrAssetOverflow = errors.New("asset calculation exceeds the safe financial range")
 
-// Assets reads actual financial source through completed authorized transactions.
-// Transport/CSRF/admission and financial producers remain separate boundaries.
+// Assets owns authorized financial source services. HTTP still owns transport,
+// Origin/CSRF/admission; event/lifecycle producers remain separate boundaries.
 type Assets struct{ auth *Auth }
 
 func NewAssets(a *Auth) (*Assets, error) {
@@ -82,6 +82,51 @@ func (a *Assets) CostSummary(ctx context.Context, token, id, asOf string) (Asset
 	})
 }
 
+type assetTotals struct {
+	acquisition, extra, proceeds, usage, net int64
+	projected                                *int64
+}
+
+// Shared by current summaries and proposed profile validation. Calendar settings
+// are not financial source and must not gate an otherwise valid profile command.
+func readAssetTotals(ctx context.Context, query queryer, asset Asset) (assetTotals, error) {
+	var value assetTotals
+	var err error
+	if value.acquisition, err = readAssetAcquisition(ctx, query, asset); err != nil {
+		return assetTotals{}, err
+	}
+	if value.extra, err = readAssetExtra(ctx, query, asset); err != nil {
+		return assetTotals{}, err
+	}
+	if value.usage, err = readAssetUsage(ctx, query, asset); err != nil {
+		return assetTotals{}, err
+	}
+	disposal, err := loadDisposal(ctx, query, asset.ItemUnitID)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return assetTotals{}, err
+	}
+	if err == nil {
+		if disposal.Currency != asset.Currency {
+			return assetTotals{}, ErrDomainState
+		}
+		value.proceeds = disposal.RealizedProceedsMinor
+	}
+	// Each operand is already a safe integer; three such magnitudes fit int64.
+	// Validate published results, not an arbitrary intermediate/row ordering.
+	base := value.acquisition + value.extra
+	if value.net, err = assetSafeTotal(big.NewInt(base - value.proceeds)); err != nil {
+		return assetTotals{}, err
+	}
+	if asset.EstimatedResidualMinor != nil {
+		projected, err := assetSafeTotal(big.NewInt(base - *asset.EstimatedResidualMinor))
+		if err != nil {
+			return assetTotals{}, err
+		}
+		value.projected = &projected
+	}
+	return value, nil
+}
+
 func loadAssetCostSummary(ctx context.Context, query queryer, id string, asOf time.Time) (AssetCostSummary, error) {
 	asset, err := loadAsset(ctx, query, id)
 	if err != nil {
@@ -91,41 +136,14 @@ func loadAssetCostSummary(ctx context.Context, query queryer, id string, asOf ti
 	if err != nil {
 		return AssetCostSummary{}, err
 	}
+	totals, err := readAssetTotals(ctx, query, asset)
+	if err != nil {
+		return AssetCostSummary{}, err
+	}
 	value := AssetCostSummary{UnitID: id, Currency: asset.Currency, CostBasis: asset.CostBasis,
-		EstimatedResidualMinor: asset.EstimatedResidualMinor, UsageUnit: asset.UsageUnit,
-		AsOf: stamp(asOf), Timezone: zoneName, DayPolicy: "inclusive_civil_days"}
-	if value.AcquisitionMinor, err = readAssetAcquisition(ctx, query, asset); err != nil {
-		return AssetCostSummary{}, err
-	}
-	if value.ExtraMinor, err = readAssetExtra(ctx, query, asset); err != nil {
-		return AssetCostSummary{}, err
-	}
-	if value.TotalUsage, err = readAssetUsage(ctx, query, asset); err != nil {
-		return AssetCostSummary{}, err
-	}
-	disposal, err := loadDisposal(ctx, query, id)
-	if err != nil && !errors.Is(err, ErrNotFound) {
-		return AssetCostSummary{}, err
-	}
-	if err == nil {
-		if disposal.Currency != asset.Currency {
-			return AssetCostSummary{}, ErrDomainState
-		}
-		value.RealizedProceedsMinor = disposal.RealizedProceedsMinor
-	}
-	// Each operand is already a safe integer; three such magnitudes fit int64.
-	// Validate the published results, not an arbitrary intermediate/row ordering.
-	base := value.AcquisitionMinor + value.ExtraMinor
-	if value.NetCostMinor, err = assetSafeTotal(big.NewInt(base - value.RealizedProceedsMinor)); err != nil {
-		return AssetCostSummary{}, err
-	}
-	if asset.EstimatedResidualMinor != nil {
-		projected, err := assetSafeTotal(big.NewInt(base - *asset.EstimatedResidualMinor))
-		if err != nil {
-			return AssetCostSummary{}, err
-		}
-		value.ProjectedNetCostMinor = &projected
-	}
+		AcquisitionMinor: totals.acquisition, ExtraMinor: totals.extra, RealizedProceedsMinor: totals.proceeds,
+		EstimatedResidualMinor: asset.EstimatedResidualMinor, NetCostMinor: totals.net, ProjectedNetCostMinor: totals.projected,
+		TotalUsage: totals.usage, UsageUnit: asset.UsageUnit, AsOf: stamp(asOf), Timezone: zoneName, DayPolicy: "inclusive_civil_days"}
 	if value.ElapsedDays, err = assetElapsedDays(asset, asOf, zone); err != nil {
 		return AssetCostSummary{}, err
 	}

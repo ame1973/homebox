@@ -52,7 +52,8 @@ func fixtureSchemaSnapshot(t *testing.T) string {
 		err = s.db.QueryRowContext(ctx, `SELECT (SELECT COUNT(*) FROM admin_accounts) + (SELECT COUNT(*) FROM sessions) +
  (SELECT COUNT(*) FROM auth_bootstrap) + (SELECT COUNT(*) FROM auth_reauth_grants) + (SELECT COUNT(*) FROM auth_server_secret) +
  (SELECT COUNT(*) FROM security_audit) + (SELECT COUNT(*) FROM api_idempotency) + (SELECT COUNT(*) FROM mutation_events) +
- (SELECT COUNT(*) FROM current_projections) + (SELECT COUNT(*) FROM sync_changes)`).Scan(&privateRows)
+ (SELECT COUNT(*) FROM current_projections) + (SELECT COUNT(*) FROM sync_changes) +
+ (SELECT COUNT(*) FROM asset_profile_changes)`).Scan(&privateRows)
 		if err == nil && privateRows != 0 {
 			err = errors.New("test schema snapshot contains private or published state")
 		}
@@ -112,7 +113,7 @@ func TestStoreFixtureSnapshotsKeepIndependentStateIdentityAndSecrets(t *testing.
 		t.Fatal("test stores share identity, epoch or a database path")
 	}
 	for _, s := range []*Store{first, second} {
-		for _, table := range []string{"admin_accounts", "sessions", "auth_bootstrap", "auth_reauth_grants", "auth_server_secret", "security_audit", "api_idempotency", "mutation_events", "current_projections", "projection_revisions", "sync_changes", "items", "locations", "purchases", "asset_profiles"} {
+		for _, table := range []string{"admin_accounts", "sessions", "auth_bootstrap", "auth_reauth_grants", "auth_server_secret", "security_audit", "api_idempotency", "mutation_events", "current_projections", "projection_revisions", "sync_changes", "items", "locations", "purchases", "asset_profiles", "asset_profile_changes"} {
 			if scalar[int](t, s.db, "SELECT COUNT(*) FROM "+table) != 0 {
 				t.Fatal("test fixture copied private/source/counter/receipt state", table)
 			}
