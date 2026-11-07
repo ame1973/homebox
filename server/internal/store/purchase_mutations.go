@@ -86,8 +86,7 @@ func (p *Purchases) Create(ctx context.Context, token, key string, input Purchas
 			return Purchase{}, err
 		}
 		instant, _ := time.Parse(time.RFC3339Nano, input.PurchasedAt)
-		_, err = m.tx.ExecContext(ctx, "INSERT INTO purchases(id,merchant_name,purchased_at,currency,receipt_note,created_at) VALUES(?,?,?,?,?,?)", id, input.MerchantName, stamp(instant), input.Currency, input.ReceiptNote, stamp(m.now))
-		if err != nil {
+		if err = requireDomainRow(m.tx.ExecContext(ctx, "INSERT INTO purchases(id,merchant_name,purchased_at,currency,receipt_note,created_at) VALUES(?,?,?,?,?,?)", id, input.MerchantName, stamp(instant), input.Currency, input.ReceiptNote, stamp(m.now))); err != nil {
 			return Purchase{}, err
 		}
 		revision, err := m.touch("purchase", id, false)
@@ -97,7 +96,15 @@ func (p *Purchases) Create(ctx context.Context, token, key string, input Purchas
 		if revision != 1 {
 			return Purchase{}, ErrDomainState
 		}
-		return loadPurchase(ctx, m.tx, id)
+		stored, err := loadPurchase(ctx, m.tx, id)
+		if err != nil {
+			return Purchase{}, err
+		}
+		expected := PurchaseData{id, input.MerchantName, stamp(instant), input.Currency, input.ReceiptNote}
+		if stored.Revision != 1 || stored.PurchaseData != expected {
+			return Purchase{}, ErrDomainState
+		}
+		return stored, nil
 	})
 }
 
@@ -168,26 +175,34 @@ func (p *Purchases) Patch(ctx context.Context, token, key, id string, revision i
 			if err != nil {
 				return Purchase{}, err
 			}
-			if _, err = m.tx.ExecContext(ctx, "UPDATE purchases SET merchant_name=?,purchased_at=?,currency=?,receipt_note=? WHERE id=?", after.MerchantName, after.PurchasedAt, after.Currency, after.ReceiptNote, id); err != nil {
+			if err = requireDomainRow(m.tx.ExecContext(ctx, "UPDATE purchases SET merchant_name=?,purchased_at=?,currency=?,receipt_note=? WHERE id=?", after.MerchantName, after.PurchasedAt, after.Currency, after.ReceiptNote, id)); err != nil {
 				return Purchase{}, err
 			}
-			if _, err = m.touch("purchase", id, false); err != nil {
+			revision, err := m.touch("purchase", id, false)
+			if err != nil {
 				return Purchase{}, err
 			}
+			if revision != before.Revision+1 {
+				return Purchase{}, ErrDomainState
+			}
+			after.Revision = revision
 			for _, item := range items {
 				if err = m.touchItemSearch(item, true); err != nil {
 					return Purchase{}, err
 				}
 			}
-			after, err = loadPurchase(ctx, m.tx, id)
-			if err != nil {
-				return Purchase{}, err
-			}
 		}
 		if err = m.recordPurchaseCorrection(before, after, input); err != nil {
 			return Purchase{}, err
 		}
-		return after, nil
+		stored, err := loadPurchase(ctx, m.tx, id)
+		if err != nil {
+			return Purchase{}, err
+		}
+		if stored != after {
+			return Purchase{}, ErrDomainState
+		}
+		return stored, nil
 	})
 }
 
@@ -228,8 +243,20 @@ func (m *mutationTx) recordPurchaseCorrection(before, after Purchase, input Purc
 	if err != nil {
 		return err
 	}
-	_, err = m.tx.ExecContext(m.ctx, "INSERT INTO purchase_header_corrections(mutation_event_id,purchase_id,context_json) VALUES(?,?,?)", m.eventID, before.ID, string(context))
-	return err
+	if err = requireDomainRow(m.tx.ExecContext(m.ctx, "INSERT INTO purchase_header_corrections(mutation_event_id,purchase_id,context_json) VALUES(?,?,?)", m.eventID, before.ID, string(context))); err != nil {
+		return err
+	}
+	var stored string
+	if err = m.tx.QueryRowContext(m.ctx, "SELECT context_json FROM purchase_header_corrections WHERE mutation_event_id=? AND purchase_id=?", m.eventID, before.ID).Scan(&stored); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrDomainState
+		}
+		return err
+	}
+	if stored != string(context) {
+		return ErrDomainState
+	}
+	return nil
 }
 
 func (p *Purchases) CreateLine(ctx context.Context, token, key, purchaseID string, revision int64, input PurchaseLineCreate) (PurchaseLine, error) {

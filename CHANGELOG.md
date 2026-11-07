@@ -156,6 +156,8 @@
 
 ### Fixed
 
+- Require one actual Purchase header/source and immutable correction-context write, including value-equal correction intent. Compare created/corrected header fields and independent counters with the reviewed proposal, then verify the exact stored context before freezing success. Ignored, rewritten, missing or reseeded source now rolls back source/search/counters/audit/original responses instead of acknowledging a different or unaudited decision. Preserve existing schemas, no-op/equivalent-instant spelling and explicit original-key retry; add real SQLite failure/retry regressions.
+
 - Reject success when SQLite skips mandatory current/outbox, reply/audit or active-session activity writes. Require one actual affected row instead of treating a nil driver error or stale insert identity as proof of publication, including receipt-only no-ops, reads and explicit original-key replay. Reuse the exact-row guard for private financial source/context; preserve legitimate zero-row tombstone cache deletion, independent counters, original responses and complete transaction rollback.
 
 - Reduce repeated store-test schema setup by cloning a once-per-process, freshly migrated and verified empty Online Backup snapshot into independent private databases. Retain real per-store instance/epoch/server-secret initialization, source/auth/receipt isolation, cleanup checks and actual fresh/legacy migration coverage without changing production migrations, Argon2 costs, test cases or deadlines.
