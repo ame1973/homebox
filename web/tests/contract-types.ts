@@ -520,7 +520,7 @@ void [purchaseSDKCalls, rawNullPurchaseLine, rawNamedPurchaseLine, unrelatedSDKP
   implicitSDKPurchaseUnit, bulkSDKPurchaseUnit, textSDKPurchaseMoney, currencySDKPurchaseLine, searchedSDKPurchases, filteredSDKItemPurchases,
   filteredSDKPurchaseLines, implicitRawPurchaseUnit, bulkRawPurchaseUnit, markedRawPurchaseUnit]
 
-// Asset contracts describe pending services, not a runtime SDK or implemented UI.
+// Asset wire shapes remain distinct from runtime adapter validation and UI.
 const assetFields = { cost_basis: 'manual' as const, currency: 'JPY', manual_acquisition_minor: 0,
   in_service_at: null, retired_at: null, estimated_residual_minor: null, usage_unit: 'times' as const }
 const manualAssetInput = { ...assetFields, item_revision: 11, asset_revision: null } satisfies components['schemas']['AssetWrite']
@@ -610,6 +610,67 @@ void [manualAssetInput, purchaseAssetInput, retainedAsset, assetUseInput, assetC
   nullManualAsset, doubleAssetAcquisition, reassignedAssetInput, unreferencedAssetUsage, referencedAssetUse, unreferencedAssetCost, referencedAssetRefund,
   unprovenAssetRetire, implicitAssetProceeds, nonSaleAssetProceeds, nullAssetUnitProof, partialAssetUsage, partialAssetCost, partialAssetDisposal,
   partialAssetPage, partialAssetUsagePage, partialAssetCostPage, unprovenAssetHeaders, implicitRawAssetIntent, markedRawAssetIntent, unreferencedRawAssetCost, lifecycleAssetFilter]
+
+import * as assetSDK from '../src/lib/api/assets'
+const assetSDKContext = { ...writeContext, asset: retainedAsset }
+const assetSDKProfileContext = { ...assetSDKContext, unit: holdingUnit, item: currentItem }
+const assetSDKLifecycleContext = { ...assetSDKContext, unit: holdingUnit }
+const assetSDKDisposalContext = { ...assetSDKLifecycleContext, disposal: null }
+const assetSDKCalls = [
+  assetSDK.fetchAsset(holdingUnit.id, new AbortController().signal),
+  assetSDK.fetchAssetsPage({ currency: 'JPY', merchant: 'Exact\nmerchant', status: 'active', limit: 50 }, new AbortController().signal),
+  assetSDK.fetchAssetUsagePage(holdingUnit.id, { limit: 50 }, new AbortController().signal),
+  assetSDK.fetchAssetCostsPage(holdingUnit.id, { cursor: 'signed' }, new AbortController().signal),
+  assetSDK.fetchAssetDisposal(holdingUnit.id, new AbortController().signal),
+  assetSDK.fetchAssetCostSummary(holdingUnit.id, { as_of: '2026-11-07T00:00:00Z' }, new AbortController().signal),
+  assetSDK.putAssetProfile(holdingUnit.id, manualAssetInput, { ...assetSDKProfileContext, asset: null }),
+  assetSDK.putAssetProfile(holdingUnit.id, { ...manualAssetInput, asset_revision: retainedAsset.revision }, assetSDKProfileContext),
+  assetSDK.putAssetProfile(holdingUnit.id, purchaseAssetInput, { ...assetSDKProfileContext, asset: null }),
+  assetSDK.recordAssetUsage(holdingUnit.id, assetUseInput, assetSDKContext),
+  assetSDK.recordAssetUsage(holdingUnit.id, assetCorrectionInput, assetSDKContext),
+  assetSDK.recordAssetCost(holdingUnit.id, assetCostInput, assetSDKContext),
+  assetSDK.recordAssetCost(holdingUnit.id, assetAdjustmentInput, assetSDKContext),
+  assetSDK.retireAsset(holdingUnit.id, assetRetireInput, assetSDKLifecycleContext),
+  assetSDK.disposeAsset(holdingUnit.id, assetDisposalInput, assetSDKDisposalContext),
+  assetSDK.disposeAsset(holdingUnit.id, assetNonSaleInput, assetSDKDisposalContext),
+]
+// @ts-expect-error Profile opt-in retains the whole original Unit/Item and explicit nullable Asset.
+const looseSDKAssetProfile = assetSDK.putAssetProfile(holdingUnit.id, manualAssetInput, { ...writeContext, expectedRevision: 13 })
+// @ts-expect-error Reviewed absence is explicit, never an omitted context field.
+const implicitSDKAssetPresence = assetSDK.putAssetProfile(holdingUnit.id, manualAssetInput, { ...writeContext, unit: holdingUnit, item: currentItem })
+// @ts-expect-error An owning Item proof is not inferred from the Unit or Asset.
+const itemlessSDKAssetProfile = assetSDK.putAssetProfile(holdingUnit.id, manualAssetInput, { ...writeContext, unit: holdingUnit, asset: null })
+// @ts-expect-error A loose proof cannot override any whole original profile scope.
+const overriddenSDKAssetProfile = assetSDK.putAssetProfile(holdingUnit.id, manualAssetInput, { ...assetSDKProfileContext, expectedRevision: 13 })
+// @ts-expect-error A partial profile is not a complete financial decision.
+const partialSDKAssetProfile = assetSDK.putAssetProfile(holdingUnit.id, { cost_basis: 'manual' }, assetSDKProfileContext)
+// @ts-expect-error Nullable profile proof cannot be a real request marker object.
+const markedSDKAssetProfile = assetSDK.putAssetProfile(holdingUnit.id, { ...manualAssetInput, asset_revision: { $write: null } }, assetSDKProfileContext)
+// @ts-expect-error Usage retains the whole original Asset, not a loose counter.
+const looseSDKAssetUsage = assetSDK.recordAssetUsage(holdingUnit.id, assetUseInput, { ...writeContext, expectedRevision: 7 })
+// @ts-expect-error Cost cannot override the original Asset proof.
+const overriddenSDKAssetCost = assetSDK.recordAssetCost(holdingUnit.id, assetCostInput, { ...assetSDKContext, expectedRevision: 7 })
+// @ts-expect-error Corrections still need a real reference through the adapter signature.
+const unreferencedSDKAssetUsage = assetSDK.recordAssetUsage(holdingUnit.id, { ...assetUseInput, event_type: 'correction' }, assetSDKContext)
+// @ts-expect-error Ordinary refunds do not claim a correction target.
+const referencedSDKAssetRefund = assetSDK.recordAssetCost(holdingUnit.id, { ...assetCostInput, kind: 'refund', correction_of: 'cost' }, assetSDKContext)
+// @ts-expect-error Retirement retains the independent original Unit context as well as Asset.
+const unitlessSDKAssetRetire = assetSDK.retireAsset(holdingUnit.id, assetRetireInput, assetSDKContext)
+// @ts-expect-error Retained Disposal presence is explicit review context, not another invented wire proof.
+const implicitSDKAssetDisposal = assetSDK.disposeAsset(holdingUnit.id, assetDisposalInput, assetSDKLifecycleContext)
+// @ts-expect-error Zero proceeds cannot be omitted.
+const implicitSDKAssetProceeds = assetSDK.disposeAsset(holdingUnit.id, { kind: 'sold', disposed_at: '2026-11-07T00:00:00Z', currency: 'JPY', unit_revision: 13 }, assetSDKDisposalContext)
+// @ts-expect-error Non-sale money cannot bypass the generated discriminant through an SDK call.
+const nonSaleSDKAssetProceeds = assetSDK.disposeAsset(holdingUnit.id, { ...assetDisposalInput, kind: 'other', realized_proceeds_minor: 1 }, assetSDKDisposalContext)
+// @ts-expect-error Asset pages have no catalog q or synthetic current-Unit status filter.
+const searchedSDKAssets = assetSDK.fetchAssetsPage({ q: 'private' }, new AbortController().signal)
+// @ts-expect-error Owned immutable history has no currency filtering or client-side repricing.
+const filteredSDKAssetUsage = assetSDK.fetchAssetUsagePage(holdingUnit.id, { currency: 'JPY' }, new AbortController().signal)
+// @ts-expect-error The calculation accepts only its optional as_of, never an Asset proof.
+const provenSDKAssetSummary = assetSDK.fetchAssetCostSummary(holdingUnit.id, { expectedRevision: 7 }, new AbortController().signal)
+void [assetSDKCalls, looseSDKAssetProfile, implicitSDKAssetPresence, itemlessSDKAssetProfile, overriddenSDKAssetProfile, partialSDKAssetProfile,
+  markedSDKAssetProfile, looseSDKAssetUsage, overriddenSDKAssetCost, unreferencedSDKAssetUsage, referencedSDKAssetRefund, unitlessSDKAssetRetire,
+  implicitSDKAssetDisposal, implicitSDKAssetProceeds, nonSaleSDKAssetProceeds, searchedSDKAssets, filteredSDKAssetUsage, provenSDKAssetSummary]
 
 void [purchaseHeaders, purchaseProof, purchaseHeader, purchaseReceiptClear, unallocatedPurchaseLine, allocatedPurchaseLine, completePurchasePage, completePurchaseLinePage,
   filteredPurchases, originlessPurchase, unprovenPurchase, unprovenPurchaseLine, unrelatedPurchaseProof, headerPurchaseAmount, implicitPurchaseAllocation,

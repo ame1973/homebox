@@ -21,7 +21,7 @@ export type PurchaseWriteContext = WriteContext & Readonly<{ purchase: Purchase;
 export type PurchaseLineContext = PurchaseWriteContext & Readonly<{ item: Item }>
 
 const instantPattern = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})(?![\s\S])/
-function canonicalInstant(value: string): string | undefined {
+export function canonicalInstant(value: string): string | undefined {
   const parts = instantPattern.exec(value)
   if (!parts || value.startsWith('0000-')) return undefined
   // Date converts only whole seconds. Keep every fractional digit separate;
@@ -56,12 +56,12 @@ const withinQueryBudget = (query: PurchasePageQuery) => Object.values(query).eve
 // Reuse the catalog's complete filter/civil-date policy, without its q field.
 export const purchasePageQuerySchema: z.ZodType<PurchasePageQuery> = itemPageQuerySchema
   .refine((query) => !Object.hasOwn(query, 'q') && withinQueryBudget(query))
-const ownedQuerySchema = pageQuerySchema.refine(withinQueryBudget)
+export const ownedQuerySchema = pageQuerySchema.refine(withinQueryBudget)
 const purchasesPageSchema: z.ZodType<PurchasesPage> = z.strictObject({ data: z.array(purchaseSchema).max(100), next_cursor: text(1, 2048).nullable() })
   .refine((page) => new Set(page.data.map((purchase) => purchase.id)).size === page.data.length)
 const linesPageSchema: z.ZodType<PurchaseLinesPage> = z.strictObject({ data: z.array(purchaseLineSchema).max(100), next_cursor: text(1, 2048).nullable() })
   .refine((page) => new Set(page.data.map((line) => line.id)).size === page.data.length)
-function validLivePage(page: Readonly<{ data: readonly unknown[]; next_cursor: string | null }>, response: Response, query: PurchaseOwnedPageQuery) {
+export function validLivePage(page: Readonly<{ data: readonly unknown[]; next_cursor: string | null }>, response: Response, query: PurchaseOwnedPageQuery) {
   const limit = query.limit ?? 50
   return !response.headers.has('ETag') && page.data.length <= limit &&
     (page.next_cursor === null || page.data.length === limit && page.next_cursor !== query.cursor)

@@ -1,6 +1,6 @@
 # Assets, Usage and Cost Accounting
 
-**Availability: all eleven Go/HTTP financial operations below are implemented and tested.** Migrations 0015/0016, retained Asset/Usage/Cost/Disposal loaders, atomic source/publication, complete original-proof profile decisions, immutable usage/cost appends, physical/financial retirement/disposal, signed live collections, detail reads and current-posted calculations are available through the protected same-origin API. Strict readers, SQL revalidation after body reading, independent resource ETags, verified TLS/cookie jars, parser fuzz and actual compiled-server/socket response-schema checks cover these boundaries. Generated browser types are available; stateless runtime Asset adapters and reviewed responsive operating screens are **not implemented yet**. HTTP/service/schema tests are not browser or physical-device acceptance. Existing [physical Unit workflows](holdings.md) and [purchase workflows](purchases.md) remain functional. The existing [Purchase allocation operation](purchases.md) atomically integrates an authoritative matching purchase-basis Asset; manual basis, currency mismatch, invalid authority and unsafe complete totals remain guarded. It does not implicitly create or reinterpret a profile.
+**Availability: all eleven Go/HTTP financial operations below are implemented and tested.** Migrations 0015/0016, retained Asset/Usage/Cost/Disposal loaders, atomic source/publication, complete original-proof profile decisions, immutable usage/cost appends, physical/financial retirement/disposal, signed live collections, detail reads and current-posted calculations are available through the protected same-origin API. Strict readers, SQL revalidation after body reading, independent resource ETags, verified TLS/cookie jars, parser fuzz and actual compiled-server/socket response-schema checks cover these boundaries. All eleven stateless runtime Asset browser adapters are also implemented with strict input/response/type checks and private actual-SDK/Go browser evidence. Reviewed responsive operating screens and their complete foreground models remain **not implemented yet**. HTTP/SDK/service/schema tests are not physical-device acceptance. Existing [physical Unit workflows](holdings.md) and [purchase workflows](purchases.md) remain functional. The existing [Purchase allocation operation](purchases.md) atomically integrates an authoritative matching purchase-basis Asset; manual basis, currency mismatch, invalid authority and unsafe complete totals remain guarded. It does not implicitly create or reinterpret a profile.
 
 ## Domain boundaries
 
@@ -215,6 +215,39 @@ Owned event pages validate retained representation, real owner authority and com
 
 Independent 15-minute/2048-byte cursor purposes bind principal, epoch, size, collection/owner and normalized global filters/timezone. Default subtree is equivalent to explicit subtree; a changed effective scope is not. Existing metadata/Stock/Purchase purposes and token spellings remain untouched. Continuations are live across valid current changes and same-principal login, not revision-frozen snapshots, authorization or the full offline sync protocol. Reads never publish/repair source, install frozen data or fabricate audit/provenance. These methods back the three protected collection GETs; browser review models and screens remain separate work.
 
+## Runtime browser adapters
+
+`web/src/lib/api/assets.ts` provides all eleven stateless operations: `fetchAsset`, `fetchAssetsPage`, `fetchAssetUsagePage`, `fetchAssetCostsPage`, `fetchAssetDisposal`, `fetchAssetCostSummary`, `putAssetProfile`, `recordAssetUsage`, `recordAssetCost`, `retireAsset` and `disposeAsset`. It reuses the existing shared same-origin client, exact domain validators and lossless Purchase instant/query primitives. Reads have an eight-second deadline; writes have 30 seconds. CSRF, the original key and AbortSignal are caller-owned; the adapter never reads cookies directly, persists context, fetches a new proof or retries/replays a write.
+
+- Profile context retains the **whole original Unit and Item plus explicit nullable Asset**. The body still supplies its complete `item_revision` and `asset_revision`; the adapter checks them against that exact context and sends the Unit's original `If-Match`. A loose `expectedRevision`, missing absence decision or mismatched owner is rejected before sending.
+- Event context retains the **whole original Asset**, owning both its original proof and reviewed usage/currency interpretation. Corrections retain real explicit references, not extra invented event proofs. Physical metadata may change without changing that financial interpretation; no extra Unit/Item proof is introduced.
+- Lifecycle context additionally retains the **whole original Unit** and checks body `unit_revision` against it. Disposal context also supplies `disposal: null` for reviewed absence or the exact retained Disposal for equal historical reply/date interpretation. This is not another header/body proof. A new Disposal reply starts at one; a retained equal decision keeps its independent counter/spelling. Retirement validates the independent Unit reply and preserves reviewed placement/code/serial/notes.
+- All context and input are snapshotted before sending. New/changed financial instants normalize losslessly to nine-digit UTC; equivalent retained profile/disposal instants keep their original spelling. Changed nanoseconds, promised amounts/direction/notes/owners or unrelated aggregate revisions are invalid replies even if their ETags agree with the altered data.
+- Retained reads preserve bounded unknown uppercase currencies, negative historical use and missing old correction provenance without applying new-input policy. New manual/purchase, positive use/cost, correction/reference and non-sale-zero decisions remain machine-discriminated. Finite currency eligibility and complete financial history remain server-authoritative.
+- Live page adapters return exactly one complete page, with distinct resource identities, required nullable continuations, owner/filter checks and no ETag. They do not paginate secretly, sum partial history, manufacture an empty profile or turn a page into financial eligibility.
+- Summary validates exact returned breakdown consistency with BigInt, separate proceeds/residual and finite/null ratios, actual Unit identity and exact requested `as_of`. It does not reconstruct the financial ledger or home-civil day range in the browser. `source_revision`, including zero, is metadata, never a write proof.
+
+A profile caller builds the complete body from already reviewed source, not a new read inside the writer:
+
+```ts
+import { putAssetProfile } from '@/lib/api/assets'
+
+await putAssetProfile(reviewedUnit.id, {
+  ...reviewedFinancialDecision,
+  item_revision: reviewedItem.revision,
+  asset_revision: reviewedAsset?.revision ?? null,
+}, {
+  csrfToken,
+  idempotencyKey: originalConfirmedKey,
+  signal,
+  unit: reviewedUnit,
+  item: reviewedItem,
+  asset: reviewedAsset,
+})
+```
+
+On an uncertain sent result, retain the complete original context/body/key for explicit foreground reconciliation. A fresh login supplies only fresh CSRF/signal; it must not substitute newer source proofs or turn a historical reply into current state. Complete foreground read/form/command models and reviewed responsive Asset screens remain unfinished; these adapters do not silently add those controls or an offline mutation queue.
+
 ## Retained persistence foundation
 
 Migration **0015** and the private store loaders/materializers implement storage authority, not the financial commands listed above:
@@ -243,4 +276,6 @@ go -C server test ./internal/httpapi -run '^$' -fuzz FuzzAssetsJSON -fuzztime=3s
 
 The compiled native CLI/server has separately been driven on a private disposable loopback database through genuine bootstrap/setup/login/password rotation, all eleven financial operations and strict root response-schema checks. That run includes public purchase-basis opt-in plus compatible allocation, independent ETags, signed terminal global/owned pages, exact negative-net/separate-residual/service-day calculation, original-key reconciliation after a fresh login, graceful shutdown, CLI integrity and private-data cleanup. This is app/socket evidence, not the private service-serialization probe, browser UI or physical acceptance.
 
-Still required: stateless runtime browser adapters, reviewed responsive screens, allocation/disposal adjustment/void integration, analytics and device/operator acceptance. Implemented persistence/services/HTTP do not establish those remaining gates. No hardware, hosted CI or completed-product claim follows from this document.
+Strict runtime/type adapter checks additionally cover all eleven transports, original-context snapshots, deadlines, safe inputs, broad retained responses, complete pages and exact returned calculations. Private actual-SDK/Go browser cases exercise every operation, zero-paid purchase-basis acquisition, original financial/physical conflicts, fresh-login reconciliation and both genuinely committed altered/lost replies for all five writers. After an uncertain commit, later financial/physical changes remain current while an explicit identical original command retrieves only its frozen result; no hidden retry or fake success is used.
+
+Still required: complete foreground read/form/command models, reviewed responsive Asset screens, allocation/disposal adjustment/void integration, analytics and device/operator acceptance. Implemented persistence/services/HTTP/SDK do not establish those remaining gates. No hardware, hosted CI or completed-product claim follows from this document.
