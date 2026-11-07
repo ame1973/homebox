@@ -21,6 +21,9 @@ async function confirm(page: Page, label: string, uncertain = false) {
   await expect(title).toBeVisible()
   if (!uncertain) { await expect(title).toBeFocused(); await expect(title).toBeInViewport() }
   await dialog.getByRole('button', { name: label, exact: true }).click()
+  // Require the destination list, not only the departing editor's local notice.
+  await expect(page).toHaveURL(/\/settings\/(?:categories|tags)$/)
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(new RegExp(`^(${settings.categories}|${settings.tags})$`))
   await expect(page.getByText(text.done, { exact: true })).toBeVisible()
   await expect(dialog).toHaveCount(0)
 }
