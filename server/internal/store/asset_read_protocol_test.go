@@ -98,6 +98,9 @@ func TestAssetReadAuthorizationFinalSessionWriteAndCommitFailuresWithholdAllReso
 				func() (any, error) { return reader.Get(ctx, token, fixture.unit.ID) },
 				func() (any, error) { return reader.GetDisposal(ctx, token, fixture.unit.ID) },
 				func() (any, error) { return reader.CostSummary(ctx, token, fixture.unit.ID, "2026-11-07T00:00:00Z") },
+				func() (any, error) { return reader.Page(ctx, token, "", 50, AssetFilters{}) },
+				func() (any, error) { return reader.PageUsage(ctx, token, fixture.unit.ID, "", 50) },
+				func() (any, error) { return reader.PageCosts(ctx, token, fixture.unit.ID, "", 50) },
 			} {
 				if failure == "late expiry" {
 					calls := 0

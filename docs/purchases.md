@@ -126,7 +126,7 @@ The implemented Go service accepts allocations with no named Unit, an actually o
 
 The original Item proof also freezes the financial interpretation: profile/usage/cost/lifecycle producers already advance that aggregate. No new Unit/Asset request proof, endpoint or migration is added. Zero-paid allocations are real new history and advance Asset authority even when acquisition totals stay equal; only original-key reconciliation deduplicates. Unallocated or sibling spend never changes another Asset. Final Line/profile fields and independent counters must match the intended source, and required writes must affect actual rows. Any source/search/publication/audit/authorization/COMMIT failure withholds the whole result.
 
-This integration never silently opts in, changes basis/currency, repairs a profile, guesses service dates or mutates usage/cost/disposal/physical Unit source. New money still requires the finite matching currency policy, including zero. [Assets, Usage and Cost Accounting](assets.md) separates these working Purchase operations from the still unavailable dedicated Asset HTTP/browser interfaces, signed collections and audited adjustment/void workflows.
+This integration never silently opts in, changes basis/currency, repairs a profile, guesses service dates or mutates usage/cost/disposal/physical Unit source. New money still requires the finite matching currency policy, including zero. [Assets, Usage and Cost Accounting](assets.md) separates these working Purchase operations from the still unavailable dedicated Asset HTTP/browser interfaces and audited adjustment/void workflows.
 
 ## Descriptive correction and immutable history
 
