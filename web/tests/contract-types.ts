@@ -641,6 +641,39 @@ frozenAssetUsage.key = 'replacement'
 assetMutation.confirm({ body: assetUseInput })
 void [reviewedAssetCommands, sentAssetCommand, looseAssetCommand, wrongAssetCommandHistory, partialAssetCommandLifecycle, summaryAssetCommand, rawAssetCommand, suppliedAssetCommandKey]
 
+declare const assetEditor: typeof import('../src/features/assets/editor-model')
+declare const assetNavigation: typeof import('../src/lib/asset-navigation')
+const assetEditors = [
+  { kind: 'put-profile', source: reviewedAssetProfileSource },
+  { kind: 'record-usage', source: reviewedAssetUsageSource },
+  { kind: 'record-cost', source: reviewedAssetCostsSource },
+  { kind: 'retire-asset', source: reviewedAssetLifecycleSource },
+  { kind: 'dispose-asset', source: reviewedAssetLifecycleSource },
+] as const satisfies readonly import('../src/features/assets/editor-model').AssetEditorData[]
+const assetUIValues = assetEditor.assetEditorDefaults(assetEditors[0])
+const assetUIProposal: import('../src/features/assets/commands').AssetCommandInput = assetEditor.assetEditorProposal(assetEditors[0], assetUIValues)
+const assetUIRoutes = [
+  assetNavigation.assetRoute('new', 'usage/new'),
+  assetNavigation.assetListRoute({ currency: 'JPY', merchant: 'Exact\nmerchant', limit: 50 }),
+  assetNavigation.assetSummaryRoute('unit', { as_of: '2026-11-07T00:00:00.123456789Z' }),
+]
+// @ts-expect-error A calculation is display context, not an editor's original financial source.
+const summaryAssetEditor: import('../src/features/assets/editor-model').AssetEditorData = { kind: 'record-cost', source: reviewedAssetDetailSource.summary }
+// @ts-expect-error A usage editor must retain its complete selected Usage collection, not Costs.
+const wrongHistoryAssetEditor: import('../src/features/assets/editor-model').AssetEditorData = { kind: 'record-usage', source: reviewedAssetCostsSource }
+// @ts-expect-error Lifecycle review requires explicit nullable Disposal context.
+const implicitDisposalAssetEditor: import('../src/features/assets/editor-model').AssetEditorData = { kind: 'dispose-asset', source: { item: currentItem, unit: holdingUnit, asset: retainedAsset } }
+// @ts-expect-error Editor values retain raw text until the exact proposal boundary.
+const numericAssetDraft = assetEditor.assetEditorProposal(assetEditors[2], { amount_minor: 1 })
+// @ts-expect-error Browser route modes are implemented UI paths, not API endpoint names.
+const rawAPIAssetRoute = assetNavigation.assetRoute('unit', 'cost-summary')
+// @ts-expect-error Amounts and commands never belong to global read filters or login returns.
+const monetaryAssetRoute = assetNavigation.assetListRoute({ currency: 'JPY', paid_minor: 1 })
+// @ts-expect-error Summary read scope cannot carry a write proof.
+const provenAssetUIRoute = assetNavigation.assetSummaryRoute('unit', { as_of: '2026-11-07T00:00:00Z', expectedRevision: 7 })
+void [assetUIProposal, assetUIRoutes, summaryAssetEditor, wrongHistoryAssetEditor, implicitDisposalAssetEditor,
+  numericAssetDraft, rawAPIAssetRoute, monetaryAssetRoute, provenAssetUIRoute]
+
 import * as assetForms from '../src/features/assets/form'
 declare const reviewedAssetProfileSource: import('../src/features/assets/model').AssetProfileSource
 declare const reviewedAssetCostsSource: import('../src/features/assets/model').AssetCostsSource

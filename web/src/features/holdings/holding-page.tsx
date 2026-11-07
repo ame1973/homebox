@@ -11,6 +11,7 @@ import { fetchAdmin } from '@/lib/api/auth'
 import { ApiError } from '@/lib/api/client'
 import { pathIDSchema } from '@/lib/api/domain'
 import { catalogNavigationState, catalogRoute } from '@/lib/catalog-navigation'
+import { assetNavigationState, assetRoute } from '@/lib/asset-navigation'
 import { holdingReturnPath, itemHoldingsRoute, stockPrefill, unitRoute } from '@/lib/holding-navigation'
 import { messages } from '@/lib/messages'
 import { useOnline } from '@/lib/use-online'
@@ -36,7 +37,7 @@ export default function HoldingPage({ mode, action }: { mode: Mode; action?: Sto
   const [transitioning, setTransitioning] = useState(false), [remembered, setRemembered] = useState<View>()
   const validPath = holdingReturnPath(route.pathname + route.search) !== undefined
   const returnTo = validPath ? route.pathname + route.search : '/items'
-  const navigationState = useMemo(() => catalogNavigationState(route.state?.catalogList, route.state?.catalogCursors), [route.state?.catalogList, route.state?.catalogCursors])
+  const navigationState = useMemo(() => ({ ...catalogNavigationState(route.state?.catalogList, route.state?.catalogCursors), ...(route.state?.assetList !== undefined ? assetNavigationState(route.state?.assetList, route.state?.assetCursors) : {}) }), [route.state?.catalogList, route.state?.catalogCursors, route.state?.assetList, route.state?.assetCursors])
   const auth = useQuery({ queryKey: ['auth', 'me'], enabled: online && !transitioning, staleTime: 0, refetchOnMount: 'always', queryFn: async ({ signal }) => {
     try { return await fetchAdmin(signal) } catch (error) { if (error instanceof ApiError && error.status === 401) return null; throw error }
   } })
@@ -109,6 +110,7 @@ export default function HoldingPage({ mode, action }: { mode: Mode; action?: Sto
             {(missing || wrongMode) && <Alert role="alert" className="p-4"><AlertTitle>{missing ? text.missing : text.trackingError}</AlertTitle><AlertDescription className="text-base">{missing ? text.missingHelp : text.wrongMode}</AlertDescription></Alert>}
             {mode === 'item' && metadata.kind !== 'unit' && <HoldingList data={metadata} locations={locations.data} navigationState={navigationState} canWrite={canWrite} />}
             {mode === 'unit' && unit && <section className="min-w-0 max-w-3xl space-y-6"><div className="flex flex-wrap gap-2">{(['edit', 'move', 'status'] as const).map((action) => canWrite && !(action === 'move' && unit.status === 'disposed') ? <Button key={action} asChild variant={action === 'edit' ? 'default' : 'outline'} className={control}><Link to={unitRoute(unit.id, action)} state={navigationState}>{action === 'edit' ? text.editUnit : action === 'move' ? text.moveUnit : text.statusUnit}</Link></Button> : <Button key={action} disabled variant="outline" className={control}>{action === 'edit' ? text.editUnit : action === 'move' ? text.moveUnit : text.statusUnit}</Button>)}</div>
+              <Button asChild variant="outline" className={control}><Link to={assetRoute(unit.id)} state={navigationState}>{messages.assets.title}</Link></Button>
               <UnitFields unit={unit} locations={locations.data} /><p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">{text.identifier}：{unit.id}<br />{text.unitProof}{unit.revision}</p>{unit.status === 'disposed' && <p>{text.disposedHelp}</p>}
               <section className="space-y-4 border-t pt-6"><p className="text-base leading-relaxed text-muted-foreground">{text.deleteHelp}</p><Button type="button" variant="destructive" disabled={!canWrite || operation.phase === 'pending' || operation.phase === 'uncertain' || holdingPath(locations.data, unit.location_id) === undefined} className={control} onClick={removeUnit}>{text.deleteUnit}</Button></section>
             </section>}

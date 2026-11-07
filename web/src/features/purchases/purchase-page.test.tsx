@@ -106,6 +106,25 @@ it('applies exact server filters and resets page scope only after explicit apply
   await waitFor(() => expect(api.fetchPurchasesPage).toHaveBeenCalledWith(expect.objectContaining({ from: '2026-01-01', to: '2026-11-07', limit: 1 }), expect.any(AbortSignal)))
   await waitFor(() => expect(screen.getByRole('button', { name: cat.reset })).toBeEnabled()); await click(cat.reset); await waitFor(() => expect(work.router.state.location.search).toBe(''))
 })
+it('discards only the global purchase cursor trail when explicitly changing its signed filter scope', async () => {
+  purchases.set('second', { ...purchase, id: 'second', merchant_name: 'Second merchant' })
+  const work = mount('/purchases?limit=1&cursor=1', { purchaseCursors: [null], catalogList: '/items?limit=1' })
+  await screen.findByRole('link', { name: JSON.stringify('Second merchant') })
+  expect(screen.getByRole('button', { name: cat.previousPage })).toBeEnabled()
+  await userEvent.setup().click(screen.getByText(cat.advanced, { exact: true })); fill(cat.currency, 'JPY'); await click(cat.apply)
+  await waitFor(() => expect(work.router.state.location.search).not.toContain('cursor='))
+  expect(work.router.state.location.state.purchaseCursors).toEqual([]); expect(work.router.state.location.state.catalogList).toBe('/items?limit=1')
+  await waitFor(() => expect(screen.getByRole('button', { name: cat.previousPage })).toBeDisabled())
+})
+it('resets catalog-selection cursors without discarding the separate global Purchase return scope', async () => {
+  const global = '/purchases?currency=JPY&limit=1&cursor=original'
+  const work = mount('/purchases/purchase/allocate?limit=1&cursor=1', { selectionCursors: [null], purchaseList: global, purchaseCursors: [null, 'previous'] })
+  await screen.findByText(JSON.stringify(quantity.name)); expect(screen.getByRole('button', { name: cat.previousPage })).toBeEnabled()
+  fill(cat.search, 'Quantity'); await click(cat.apply)
+  await waitFor(() => expect(work.router.state.location.search).toContain('q=Quantity'))
+  expect(work.router.state.location.state.selectionCursors).toEqual([]); expect(work.router.state.location.state.purchaseList).toBe(global); expect(work.router.state.location.state.purchaseCursors).toEqual([null, 'previous'])
+  await waitFor(() => expect(screen.getByRole('button', { name: cat.previousPage })).toBeDisabled())
+})
 it('sends the exact multiline merchant filter instead of native single-line normalization', async () => {
   const work = mount(); await screen.findByRole('link', { name: JSON.stringify(purchase.merchant_name) }); await userEvent.setup().click(screen.getByText(cat.advanced, { exact: true }))
   const merchant = '  Exact\nmerchant é 😀  '; fill(cat.merchant, merchant); expect(field(cat.merchant)).toHaveValue(merchant); await click(cat.apply)

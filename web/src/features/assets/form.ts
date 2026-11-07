@@ -19,6 +19,7 @@ export type AssetUsageValues = z.infer<typeof usageValues>
 export type AssetCostValues = z.infer<typeof costValues>
 export type AssetRetireValues = z.infer<typeof retireValues>
 export type AssetDisposalValues = z.infer<typeof disposalValues>
+export { profileValues, usageValues, costValues, retireValues, disposalValues }
 type Schemas = components['schemas']
 
 function original(source: AssetProfileSource) {

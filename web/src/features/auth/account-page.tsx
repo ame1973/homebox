@@ -12,6 +12,7 @@ import { useOnline } from '@/lib/use-online'
 import { applicationReturnPath } from '@/lib/settings-navigation'
 import { catalogNavigationState } from '@/lib/catalog-navigation'
 import { purchaseCursorTrail, purchaseNavigationState, purchaseReturnPath } from '@/lib/purchase-navigation'
+import { assetNavigationState } from '@/lib/asset-navigation'
 import { AuthError } from './auth-error'
 import { CredentialsForm } from './credentials-form'
 import { clearSessionQueries, useAuthAction, type AuthNotice, type AuthOutcome } from './use-auth-action'
@@ -26,10 +27,11 @@ export default function AccountPage({ mode }: { mode: 'login' | 'setup' | 'accou
   const navigate = useNavigate()
   const location = useLocation()
   const returnTo = applicationReturnPath(location.state?.returnTo)
-  const catalogState = returnTo && /^\/(?:items(?:\/|\?|$)|units\/|u\/|purchases(?:\/|\?|$))/.test(returnTo) && location.state?.catalogList !== undefined
+  const catalogState = returnTo && /^\/(?:items(?:\/|\?|$)|units\/|u\/|purchases(?:\/|\?|$)|assets(?:\/|\?|$))/.test(returnTo) && location.state?.catalogList !== undefined
     ? catalogNavigationState(location.state.catalogList, location.state.catalogCursors) : undefined
   const purchaseState = returnTo && purchaseReturnPath(returnTo) ? { ...purchaseNavigationState(location.state?.purchaseList, location.state?.purchaseCursors, location.state?.purchaseItem), ...(/\/allocate(?:\?|$)/.test(returnTo) ? { selectionCursors: purchaseCursorTrail(location.state?.selectionCursors) } : {}) } : undefined
-  const returnState = returnTo ? { returnTo, ...catalogState, ...purchaseState } : undefined
+  const assetState = returnTo && /^\/(?:assets(?:\/|\?|$)|units\/|u\/)/.test(returnTo) && location.state?.assetList !== undefined ? assetNavigationState(location.state.assetList, location.state.assetCursors) : undefined
+  const returnState = returnTo ? { returnTo, ...catalogState, ...purchaseState, ...assetState } : undefined
   const online = useOnline()
   const [logoutOpen, setLogoutOpen] = useState(false)
   const [transitioning, setTransitioning] = useState(false)

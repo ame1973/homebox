@@ -8,6 +8,7 @@ import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { mutationControl as control } from '@/components/mutation-review'
 import { itemPageQuerySchema, type ItemPageQuery } from '@/lib/api/catalog'
 import { purchasePageQuerySchema } from '@/lib/api/purchases'
+import { assetPageQuerySchema } from '@/lib/api/assets'
 import type { LocationTree } from '@/features/locations/tree'
 import type { CategoryTree } from '@/features/taxonomy/model'
 import { messages } from '@/lib/messages'
@@ -16,7 +17,7 @@ import { CatalogHierarchyPicker } from './hierarchy-picker'
 const text = messages.catalog
 type Values = Record<'q' | 'from' | 'to' | 'currency' | 'merchant' | 'category_id' | 'location_id' | 'scope' | 'status' | 'limit', string>
 export function CatalogFilters({ query, categories, locations, disabled, onApply, domain = 'catalog' }: {
-  query: ItemPageQuery; categories: CategoryTree; locations: LocationTree; disabled: boolean; onApply: (query: ItemPageQuery) => void; domain?: 'catalog' | 'purchases'
+  query: ItemPageQuery; categories: CategoryTree; locations: LocationTree; disabled: boolean; onApply: (query: ItemPageQuery) => void; domain?: 'catalog' | 'purchases' | 'assets'
 }) {
   const prefix = useId()
   const advanced = useRef<HTMLDetailsElement>(null)
@@ -26,7 +27,7 @@ export function CatalogFilters({ query, categories, locations, disabled, onApply
     if (disabled) return
     const candidate: Record<string, string | number> = Object.fromEntries(Object.entries(values).filter(([, value]) => value !== ''))
     candidate.limit = /^[1-9][0-9]{0,2}$/.test(values.limit) ? Number(values.limit) : Number.NaN
-    const result = (domain === 'purchases' ? purchasePageQuerySchema : itemPageQuerySchema).safeParse(candidate)
+    const result = (domain === 'purchases' ? purchasePageQuerySchema : domain === 'assets' ? assetPageQuerySchema : itemPageQuerySchema).safeParse(candidate)
     form.clearErrors()
     if (!result.success) {
       if (advanced.current) advanced.current.open = true
@@ -61,7 +62,7 @@ export function CatalogFilters({ query, categories, locations, disabled, onApply
         {field('limit')}
       </div>
     </details>
-    <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{domain === 'purchases' ? messages.purchases.filterHelp : text.filterHelp}</p>
+    <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{domain === 'purchases' ? messages.purchases.filterHelp : domain === 'assets' ? messages.assets.filterHelp : text.filterHelp}</p>
     <div className="flex flex-wrap gap-2"><Button type="submit" variant="outline" disabled={disabled} className={control}>{text.apply}</Button><Button type="button" variant="outline" disabled={disabled} className={control} onClick={() => onApply({})}>{text.reset}</Button></div>
   </form>
 }

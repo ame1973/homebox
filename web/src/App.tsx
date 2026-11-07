@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef } from 'react'
 import { Link, NavLink, Route, Routes, useLocation } from 'react-router'
-import { MapPin, Package, ReceiptText, Settings, UserRound } from 'lucide-react'
+import { MapPin, NotebookTabs, Package, ReceiptText, Settings, UserRound } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ThemeMenu } from '@/components/theme-menu'
 import { AppErrorBoundary } from '@/components/app-error-boundary'
@@ -13,6 +13,7 @@ const CatalogPage = lazy(() => import('@/features/catalog/catalog-page'))
 const OwnedPage = lazy(() => import('@/features/catalog/owned-page'))
 const HoldingPage = lazy(() => import('@/features/holdings/holding-page'))
 const PurchasePage = lazy(() => import('@/features/purchases/purchase-page'))
+const AssetPage = lazy(() => import('@/features/assets/asset-page'))
 const UnitAlias = lazy(() => import('@/features/holdings/holding-page').then((module) => ({ default: module.UnitAlias })))
 const LocationsPage = lazy(() => import('@/features/locations/locations-page'))
 const LocationAlias = lazy(() => import('@/features/locations/locations-page').then((module) => ({ default: module.LocationAlias })))
@@ -36,6 +37,7 @@ export default function App() {
           <Button variant="outline" asChild className="min-h-11 h-auto gap-2 whitespace-normal text-base aria-[current=page]:border-primary aria-[current=page]:bg-muted"><NavLink to="/locations"><MapPin className="size-4" aria-hidden="true" />{messages.locations.nav}</NavLink></Button>
           <Button variant="outline" asChild className="min-h-11 h-auto gap-2 whitespace-normal text-base aria-[current=page]:border-primary aria-[current=page]:bg-muted"><NavLink to="/items"><Package className="size-4" aria-hidden="true" />{messages.catalog.nav}</NavLink></Button>
           <Button variant="outline" asChild className="min-h-11 h-auto gap-2 whitespace-normal text-base aria-[current=page]:border-primary aria-[current=page]:bg-muted"><NavLink to="/purchases"><ReceiptText className="size-4" aria-hidden="true" />{messages.purchases.nav}</NavLink></Button>
+          <Button variant="outline" asChild className="min-h-11 h-auto gap-2 whitespace-normal text-base aria-[current=page]:border-primary aria-[current=page]:bg-muted"><NavLink to="/assets"><NotebookTabs className="size-4" aria-hidden="true" />{messages.assets.nav}</NavLink></Button>
           <Button variant="outline" asChild className="min-h-11 gap-2 text-base"><Link to="/login"><UserRound className="size-4" aria-hidden="true" />{messages.app.account}</Link></Button>
           <Button variant="outline" asChild className="min-h-11 h-auto gap-2 whitespace-normal text-base aria-[current=page]:border-primary aria-[current=page]:bg-muted"><NavLink to="/settings"><Settings className="size-4" aria-hidden="true" />{messages.settings.nav}</NavLink></Button>
           <ThemeMenu />
@@ -87,6 +89,16 @@ export default function App() {
               <Route path="/purchases/:id/allocate/:itemID" element={<PurchasePage key={location.key} mode="allocate" />} />
               <Route path="/purchases/:id" element={<PurchasePage key={location.key} mode="detail" />} />
               <Route path="/items/:id/purchases" element={<PurchasePage key={location.key} mode="item" />} />
+              <Route path="/assets" element={<AssetPage key={location.key} mode="list" />} />
+              <Route path="/assets/:id" element={<AssetPage key={location.key} mode="detail" />} />
+              <Route path="/assets/:id/edit" element={<AssetPage key={location.key} mode="edit" />} />
+              <Route path="/assets/:id/usage" element={<AssetPage key={location.key} mode="usage" />} />
+              <Route path="/assets/:id/usage/new" element={<AssetPage key={location.key} mode="usage-new" />} />
+              <Route path="/assets/:id/costs" element={<AssetPage key={location.key} mode="costs" />} />
+              <Route path="/assets/:id/costs/new" element={<AssetPage key={location.key} mode="costs-new" />} />
+              <Route path="/assets/:id/retire" element={<AssetPage key={location.key} mode="retire" />} />
+              <Route path="/assets/:id/dispose" element={<AssetPage key={location.key} mode="dispose" />} />
+              <Route path="/assets/:id/summary" element={<AssetPage key={location.key} mode="summary" />} />
               <Route path="/u/:id" element={<UnitAlias />} />
               <Route path="/l/:id" element={<LocationAlias />} />
               <Route path="*" element={
