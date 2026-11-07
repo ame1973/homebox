@@ -611,6 +611,26 @@ void [manualAssetInput, purchaseAssetInput, retainedAsset, assetUseInput, assetC
   unprovenAssetRetire, implicitAssetProceeds, nonSaleAssetProceeds, nullAssetUnitProof, partialAssetUsage, partialAssetCost, partialAssetDisposal,
   partialAssetPage, partialAssetUsagePage, partialAssetCostPage, unprovenAssetHeaders, implicitRawAssetIntent, markedRawAssetIntent, unreferencedRawAssetCost, lifecycleAssetFilter]
 
+import * as assetForms from '../src/features/assets/form'
+declare const reviewedAssetProfileSource: import('../src/features/assets/model').AssetProfileSource
+declare const reviewedAssetCostsSource: import('../src/features/assets/model').AssetCostsSource
+const rawAssetProfile = assetForms.assetProfileDefaults(reviewedAssetProfileSource)
+const rawAssetUsage = assetForms.assetUsageDefaults(reviewedAssetUsageSource)
+const rawAssetCost = assetForms.assetCostDefaults(reviewedAssetCostsSource)
+const rawAssetRetire = assetForms.assetRetireDefaults(reviewedAssetLifecycleSource)
+const rawAssetDisposal = assetForms.assetDisposalDefaults(reviewedAssetLifecycleSource)
+const assetFormProposals = [assetForms.assetProfileBody(rawAssetProfile, reviewedAssetProfileSource), assetForms.assetUsageBody(rawAssetUsage, reviewedAssetUsageSource),
+  assetForms.assetCostBody(rawAssetCost, reviewedAssetCostsSource), assetForms.assetRetireBody(rawAssetRetire, reviewedAssetLifecycleSource), assetForms.assetDisposalBody(rawAssetDisposal, reviewedAssetLifecycleSource)]
+// @ts-expect-error Form proposals retain complete source, not a loose numeric proof.
+const looseAssetFormSource = assetForms.assetProfileBody(rawAssetProfile, { expectedRevision: 7 })
+// @ts-expect-error Raw minor-unit money remains string input even when zero is intended.
+const numericRawAssetCost = assetForms.assetCostBody({ ...rawAssetCost, amount_minor: 0 }, reviewedAssetCostsSource)
+// @ts-expect-error Selected correction sources cannot be replaced by another history kind.
+const wrongAssetHistoryForm = assetForms.assetUsageBody(rawAssetUsage, reviewedAssetCostsSource)
+// @ts-expect-error Disposal retains original physical/financial and nullable Disposal source context.
+const partialAssetDisposalForm = assetForms.assetDisposalBody(rawAssetDisposal, { asset: retainedAsset, unit: holdingUnit })
+void [assetFormProposals, looseAssetFormSource, numericRawAssetCost, wrongAssetHistoryForm, partialAssetDisposalForm]
+
 import * as assetModels from '../src/features/assets/model'
 declare const reviewedAssetUsageSource: assetModels.AssetUsageSource
 declare const reviewedAssetLifecycleSource: assetModels.AssetLifecycleSource

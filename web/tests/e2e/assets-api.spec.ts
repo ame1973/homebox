@@ -13,7 +13,7 @@ const test = applicationTest.extend<{}, { applicationWebDirectory: string }>({
     try {
       cpSync(fileURLToPath(new URL('../../dist', import.meta.url)), web, { recursive: true })
       // Bundle actual modules privately; no production test entry or fake service.
-      writeFileSync(entry, `export * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/assets.ts', import.meta.url)))};\nexport {createItem,fetchItem,patchItem} from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/catalog.ts', import.meta.url)))};\nexport {createUnit,fetchUnit,patchUnit} from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/holdings.ts', import.meta.url)))};\nexport {createPurchase,createPurchaseLine} from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/purchases.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/features/assets/model.ts', import.meta.url)))};\n`)
+      writeFileSync(entry, `export * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/assets.ts', import.meta.url)))};\nexport {createItem,fetchItem,patchItem} from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/catalog.ts', import.meta.url)))};\nexport {createUnit,fetchUnit,patchUnit} from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/holdings.ts', import.meta.url)))};\nexport {createPurchase,createPurchaseLine} from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/purchases.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/features/assets/model.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/features/assets/form.ts', import.meta.url)))};\n`)
       await build({ configFile: false, logLevel: 'silent', build: { outDir: sdk, minify: false, lib: { entry, formats: ['es'], fileName: 'assets-sdk' } } })
       cpSync(join(sdk, 'assets-sdk.js'), join(web, 'assets', 'assets-sdk.js'))
       await provideFixture(web)
@@ -385,5 +385,77 @@ for (const kind of ['usage', 'costs', 'lifecycle', 'detail'] as const) {
     if (kind === 'costs') expect(result.current.costs).toHaveLength(1)
     if (kind === 'lifecycle') { expect(result.current.unit.status).toBe('disposed'); expect(result.current.disposal).toMatchObject({ revision: 1, realized_proceeds_minor: 0 }) }
     if (kind === 'detail') expect(result.current.summary).toMatchObject({ extra_minor: 1, net_cost_minor: 101 })
+  })
+}
+
+for (const kind of ['profile', 'usage', 'cost', 'retire', 'disposal'] as const) {
+  test(`submits an exact explicitly reviewed ${kind} form proposal against its actual complete source`, async ({ page, application }) => {
+    await provision(page, application)
+    const writes = watchDomainWrites(page, ['/api/v1/units'])
+    await page.goto('/')
+    const result = await page.evaluate(async ({ kind }) => {
+      const modulePath = '/assets/assets-sdk.js'
+      const api = await import(modulePath)
+      const response = await fetch('/api/v1/auth/csrf', { credentials: 'same-origin', cache: 'no-store' })
+      const csrfToken: string = (await response.json()).token
+      const root = () => ({ csrfToken, idempotencyKey: crypto.randomUUID(), signal: new AbortController().signal })
+      const read = () => new AbortController().signal
+      const owner = await api.createItem({ name: 'Actual raw financial form' }, root())
+      const unit = await api.createUnit(owner.id, { location_id: null, notes: 'No implicit physical change' }, { ...root(), expectedRevision: owner.revision })
+      const item = await api.fetchItem(owner.id, read())
+      let source, values, body
+      if (kind === 'profile') {
+        source = await api.readAssetProfile(unit.id, read())
+        values = { ...api.assetProfileDefaults(source), cost_basis: 'manual', currency: 'JPY', manual_acquisition_minor: '0', usage_unit: 'times',
+          service_decision: 'unknown', retirement_decision: 'unknown', residual_decision: 'value', estimated_residual_minor: '0' }
+        body = api.assetProfileBody(values, source)
+      } else {
+        const profile = await api.putAssetProfile(unit.id, { item_revision: item.revision, asset_revision: null, cost_basis: 'manual', currency: 'JPY', manual_acquisition_minor: 100,
+          in_service_at: '2026-01-01T00:00:00Z', retired_at: null, estimated_residual_minor: null, usage_unit: 'times' }, { ...root(), unit, item, asset: null })
+        if (kind === 'usage') {
+          await api.recordAssetUsage(unit.id, { delta: 2, usage_unit: 'times', event_type: 'use', occurred_at: '2026-11-07T04:00:00.123456789Z' }, { ...root(), asset: profile })
+          source = await api.readAssetUsage(unit.id, read())
+          values = { ...api.assetUsageDefaults(source), delta: '-1', event_type: 'correction', correction_of: source.usage[0].id,
+            occurred_at: '2026-11-07T12:00:00.123456789+08:00', note: '\0Raw correction é\n' }
+          body = api.assetUsageBody(values, source)
+        } else if (kind === 'cost') {
+          await api.recordAssetCost(unit.id, { amount_minor: 5, currency: 'JPY', kind: 'repair', direction: 'expense', occurred_at: '2026-11-07T04:00:00.123456789Z' }, { ...root(), asset: profile })
+          source = await api.readAssetCosts(unit.id, read())
+          values = { ...api.assetCostDefaults(source), amount_minor: '2', kind: 'adjustment', direction: 'credit', correction_of: source.costs[0].id,
+            occurred_at: '2026-11-07T12:00:00.123456789+08:00', note: '\0Raw adjustment é\n' }
+          body = api.assetCostBody(values, source)
+        } else {
+          source = await api.readAssetLifecycle(unit.id, read())
+          if (kind === 'retire') {
+            values = { ...api.assetRetireDefaults(source), retired_at: '2026-11-07T12:00:00.123456789+08:00', note: 'Raw retirement\n' }
+            body = api.assetRetireBody(values, source)
+          } else {
+            // Disposal date is an independent decision, not an inferred service
+            // bound or another physical movement time.
+            values = { ...api.assetDisposalDefaults(source), kind: 'other', realized_proceeds_minor: '0', disposed_at: '1999-01-01T00:00:00Z', note: 'Raw zero proceeds\n' }
+            body = api.assetDisposalBody(values, source)
+          }
+        }
+      }
+      const command = { ...root(), ...source }
+      const value = kind === 'profile' ? await api.putAssetProfile(unit.id, body, command) : kind === 'usage' ? await api.recordAssetUsage(unit.id, body, command) :
+        kind === 'cost' ? await api.recordAssetCost(unit.id, body, command) : kind === 'retire' ? await api.retireAsset(unit.id, body, command) : await api.disposeAsset(unit.id, body, command)
+      return { value, unit, source, values, body, key: command.idempotencyKey, current: await api.fetchAsset(unit.id, read()), physical: await api.fetchUnit(unit.id, read()) }
+    }, { kind })
+    expect(result.value.revision).toBe(kind === 'retire' ? 2 : 1)
+    if (kind === 'profile') {
+      expect(result.body).toMatchObject({ item_revision: result.source.item.revision, asset_revision: null, manual_acquisition_minor: 0, in_service_at: null, retired_at: null, estimated_residual_minor: 0 })
+      expect(result.value).toMatchObject({ manual_acquisition_minor: 0, estimated_residual_minor: 0 })
+    }
+    if (kind === 'usage') expect(result.value).toMatchObject({ delta: -1, correction_of: result.source.usage[0].id, occurred_at: '2026-11-07T04:00:00.123456789Z', note: '\0Raw correction é\n' })
+    if (kind === 'cost') expect(result.value).toMatchObject({ amount_minor: 2, direction: 'credit', correction_of: result.source.costs[0].id, note: '\0Raw adjustment é\n' })
+    if (kind === 'retire') { expect(result.value.status).toBe('retired'); expect(result.current.retired_at).toBe('2026-11-07T04:00:00.123456789Z') }
+    if (kind === 'disposal') { expect(result.value).toMatchObject({ kind: 'other', realized_proceeds_minor: 0, disposed_at: '1999-01-01T00:00:00.000000000Z' }); expect(result.current.retired_at).toBeNull() }
+    if (kind === 'profile' || kind === 'usage' || kind === 'cost') expect(result.physical).toEqual(result.unit)
+    else expect(result.physical).toEqual({ ...result.unit, revision: 2, status: kind === 'retire' ? 'retired' : 'disposed' })
+    const attempts = writes.filter((request) => request.key === result.key)
+    expect(attempts).toHaveLength(1)
+    expect(attempts[0]?.proof).toBe(`"${kind === 'profile' ? result.source.unit.revision : result.source.asset.revision}"`)
+    expect(JSON.parse(attempts[0]?.body ?? '{}')).toEqual(result.body)
   })
 }
