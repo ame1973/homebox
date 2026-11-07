@@ -13,7 +13,7 @@ const test = applicationTest.extend<{}, { applicationWebDirectory: string }>({
     try {
       cpSync(fileURLToPath(new URL('../../dist', import.meta.url)), web, { recursive: true })
       // Bundle actual modules privately; no production test entry or fake service.
-      writeFileSync(entry, `export * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/assets.ts', import.meta.url)))};\nexport {createItem,fetchItem,patchItem} from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/catalog.ts', import.meta.url)))};\nexport {createUnit,fetchUnit,patchUnit} from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/holdings.ts', import.meta.url)))};\nexport {createPurchase,createPurchaseLine} from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/purchases.ts', import.meta.url)))};\n`)
+      writeFileSync(entry, `export * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/assets.ts', import.meta.url)))};\nexport {createItem,fetchItem,patchItem} from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/catalog.ts', import.meta.url)))};\nexport {createUnit,fetchUnit,patchUnit} from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/holdings.ts', import.meta.url)))};\nexport {createPurchase,createPurchaseLine} from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/purchases.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/features/assets/model.ts', import.meta.url)))};\n`)
       await build({ configFile: false, logLevel: 'silent', build: { outDir: sdk, minify: false, lib: { entry, formats: ['es'], fileName: 'assets-sdk' } } })
       cpSync(join(sdk, 'assets-sdk.js'), join(web, 'assets', 'assets-sdk.js'))
       await provideFixture(web)
@@ -263,4 +263,127 @@ for (const kind of ['profile', 'usage', 'cost', 'retire', 'disposal'] as const) 
       expect(originalRequests).toHaveLength(2); expect(originalRequests[1]).toEqual(originalRequests[0])
     })
   }
+}
+
+test('reads coherent profile, selected history, lifecycle and exact detail sources without sibling or quantity authority', async ({ page, application }) => {
+  await provision(page, application)
+  const readPaths: string[] = []
+  page.on('request', (request) => { if (request.method() === 'GET') readPaths.push(new URL(request.url()).pathname) })
+  await page.goto('/')
+  const result = await page.evaluate(async () => {
+    const modulePath = '/assets/assets-sdk.js'
+    const api = await import(modulePath)
+    const response = await fetch('/api/v1/auth/csrf', { credentials: 'same-origin', cache: 'no-store' })
+    const csrfToken: string = (await response.json()).token
+    const root = () => ({ csrfToken, idempotencyKey: crypto.randomUUID(), signal: new AbortController().signal })
+    const read = () => new AbortController().signal
+    const owner = await api.createItem({ name: 'Coherent financial source' }, root())
+    const unit = await api.createUnit(owner.id, { location_id: null }, { ...root(), expectedRevision: owner.revision })
+    const item = await api.fetchItem(owner.id, read())
+    const profile = await api.putAssetProfile(unit.id, { item_revision: item.revision, asset_revision: null, cost_basis: 'manual', currency: 'JPY', manual_acquisition_minor: 100,
+      in_service_at: null, retired_at: null, estimated_residual_minor: null, usage_unit: 'times' }, { ...root(), item, unit, asset: null })
+    const usage = await api.recordAssetUsage(unit.id, { delta: 1, usage_unit: 'times', event_type: 'use', occurred_at: '2026-11-07T00:00:00.123456789Z' }, { ...root(), asset: profile })
+    const afterUse = await api.fetchAsset(unit.id, read())
+    const cost = await api.recordAssetCost(unit.id, { amount_minor: 1, currency: 'JPY', kind: 'repair', direction: 'expense', occurred_at: '2026-11-07T00:00:00.123456789Z' }, { ...root(), asset: afterUse })
+    return { unit, usage, cost, item: await api.fetchItem(item.id, read()), asset: await api.fetchAsset(unit.id, read()),
+      profile: await api.readAssetProfile(unit.id, read()), uses: await api.readAssetUsage(unit.id, read()), costs: await api.readAssetCosts(unit.id, read()),
+      lifecycle: await api.readAssetLifecycle(unit.id, read()), detail: await api.readAssetDetail(unit.id, { as_of: '2026-11-07T12:00:00.123456789+08:00' }, read()) }
+  })
+  for (const source of [result.profile, result.uses, result.costs, result.lifecycle, result.detail]) {
+    expect(source.unit).toEqual(result.unit); expect(source.item).toEqual(result.item); expect(source.asset).toEqual(result.asset)
+  }
+  expect(result.uses.usage).toEqual([result.usage]); expect(Object.hasOwn(result.uses, 'costs')).toBe(false)
+  expect(result.costs.costs).toEqual([result.cost]); expect(Object.hasOwn(result.costs, 'usage')).toBe(false)
+  expect(result.lifecycle.disposal).toBeNull(); expect(result.detail.disposal).toBeNull()
+  expect(result.detail.summary).toMatchObject({ acquisition_minor: 100, extra_minor: 1, net_cost_minor: 101, total_usage: 1, elapsed_days: null,
+    projected_net_cost_minor: null, per_day_minor: null, per_use_minor: 101, as_of: '2026-11-07T04:00:00.123456789Z' })
+  expect(readPaths).not.toContain(`/api/v1/items/${result.item.id}/units`); expect(readPaths).not.toContain('/api/v1/inventory')
+})
+
+test('withholds a profile created inside the real reviewed absence interval until an explicit fresh read', async ({ page, application }) => {
+  await provision(page, application)
+  await page.goto('/')
+  const seed = await page.evaluate(async () => {
+    const modulePath = '/assets/assets-sdk.js'
+    const api = await import(modulePath)
+    const response = await fetch('/api/v1/auth/csrf', { credentials: 'same-origin', cache: 'no-store' })
+    const csrfToken: string = (await response.json()).token
+    const root = () => ({ csrfToken, idempotencyKey: crypto.randomUUID(), signal: new AbortController().signal })
+    const item = await api.createItem({ name: 'Reviewed profile absence' }, root())
+    const unit = await api.createUnit(item.id, { location_id: null }, { ...root(), expectedRevision: item.revision })
+    return { unit, item: await api.fetchItem(item.id, new AbortController().signal) }
+  })
+  let raced = false
+  await page.route((url) => url.pathname === `/api/v1/units/${seed.unit.id}/asset`, async (route) => {
+    if (route.request().method() !== 'GET' || raced) { await route.continue(); return }
+    const original = await route.fetch()
+    expect(original.status()).toBe(404)
+    raced = true
+    const headers = await writeContext(page, application.url, seed.unit.revision)
+    const created = await page.request.put(`/api/v1/units/${seed.unit.id}/asset`, { headers, data: { item_revision: seed.item.revision, asset_revision: null, cost_basis: 'manual', currency: 'JPY',
+      manual_acquisition_minor: 0, in_service_at: null, retired_at: null, estimated_residual_minor: null, usage_unit: 'times' } })
+    expect(created.status()).toBe(200)
+    await route.fulfill({ response: original })
+  })
+  const code = await page.evaluate(async (id) => {
+    const modulePath = '/assets/assets-sdk.js'
+    const api = await import(modulePath)
+    try { await api.readAssetProfile(id, new AbortController().signal); return null } catch (error) { return error instanceof Error && 'code' in error ? error.code : 'unexpected' }
+  }, seed.unit.id)
+  expect(raced).toBe(true); expect(code).toBe('INVALID_RESPONSE')
+  const current = await page.evaluate(async (id) => {
+    const modulePath = '/assets/assets-sdk.js'
+    const api = await import(modulePath)
+    return api.readAssetProfile(id, new AbortController().signal)
+  }, seed.unit.id)
+  expect(current.asset).toMatchObject({ revision: 1, manual_acquisition_minor: 0 }); expect(current.item.revision).toBe(seed.item.revision + 1)
+})
+
+for (const kind of ['usage', 'costs', 'lifecycle', 'detail'] as const) {
+  test(`withholds genuine ${kind} source races at queried URLs rather than returning an old prefix`, async ({ page, application }) => {
+    await provision(page, application)
+    await page.goto('/')
+    const seed = await page.evaluate(async () => {
+      const modulePath = '/assets/assets-sdk.js'
+      const api = await import(modulePath)
+      const response = await fetch('/api/v1/auth/csrf', { credentials: 'same-origin', cache: 'no-store' })
+      const csrfToken: string = (await response.json()).token
+      const root = () => ({ csrfToken, idempotencyKey: crypto.randomUUID(), signal: new AbortController().signal })
+      const item = await api.createItem({ name: 'Actual source interval' }, root())
+      const unit = await api.createUnit(item.id, { location_id: null }, { ...root(), expectedRevision: item.revision })
+      const owner = await api.fetchItem(item.id, new AbortController().signal)
+      const asset = await api.putAssetProfile(unit.id, { item_revision: owner.revision, asset_revision: null, cost_basis: 'manual', currency: 'JPY', manual_acquisition_minor: 100,
+        in_service_at: null, retired_at: null, estimated_residual_minor: null, usage_unit: 'times' }, { ...root(), unit, item: owner, asset: null })
+      return { unit, asset }
+    })
+    const tail = kind === 'lifecycle' ? 'disposal' : kind === 'detail' ? 'cost-summary' : kind
+    let raced = false
+    await page.route((url) => url.pathname === `/api/v1/units/${seed.unit.id}/${tail}`, async (route) => {
+      if (route.request().method() !== 'GET' || raced) { await route.continue(); return }
+      const original = await route.fetch()
+      expect(original.status()).toBe(kind === 'lifecycle' ? 404 : 200)
+      raced = true
+      const headers = await writeContext(page, application.url, seed.asset.revision)
+      const body = kind === 'usage' ? { delta: 1, usage_unit: 'times', event_type: 'use', occurred_at: '2026-11-07T00:00:00.123456789Z' } : kind === 'lifecycle' ?
+        { unit_revision: seed.unit.revision, kind: 'other', disposed_at: '2026-11-07T00:00:00.123456789Z', currency: 'JPY', realized_proceeds_minor: 0 } :
+        { amount_minor: 1, currency: 'JPY', kind: 'repair', direction: 'expense', occurred_at: '2026-11-07T00:00:00.123456789Z' }
+      const changed = await page.request.post(`/api/v1/units/${seed.unit.id}/${kind === 'usage' ? 'usage' : kind === 'lifecycle' ? 'disposal' : 'costs'}`, { headers, data: body })
+      expect(changed.status()).toBe(200)
+      await route.fulfill({ response: original })
+    })
+    const result = await page.evaluate(async ({ id, kind }) => {
+      const modulePath = '/assets/assets-sdk.js'
+      const api = await import(modulePath)
+      const read = () => kind === 'usage' ? api.readAssetUsage(id, new AbortController().signal) : kind === 'costs' ? api.readAssetCosts(id, new AbortController().signal) :
+        kind === 'lifecycle' ? api.readAssetLifecycle(id, new AbortController().signal) : api.readAssetDetail(id, {}, new AbortController().signal)
+      let code = null
+      try { await read() } catch (error) { code = error instanceof Error && 'code' in error ? error.code : 'unexpected' }
+      return { code, current: await read() }
+    }, { id: seed.unit.id, kind })
+    expect(raced).toBe(true); expect(result.code).toBe('INVALID_RESPONSE'); expect(result.current.asset.revision).toBe(2)
+    if (kind === 'usage') expect(result.current.usage).toHaveLength(1)
+    if (kind === 'costs') expect(result.current.costs).toHaveLength(1)
+    if (kind === 'lifecycle') { expect(result.current.unit.status).toBe('disposed'); expect(result.current.disposal).toMatchObject({ revision: 1, realized_proceeds_minor: 0 }) }
+    if (kind === 'detail') expect(result.current.summary).toMatchObject({ extra_minor: 1, net_cost_minor: 101 })
+  })
 }

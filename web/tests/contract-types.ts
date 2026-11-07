@@ -611,6 +611,25 @@ void [manualAssetInput, purchaseAssetInput, retainedAsset, assetUseInput, assetC
   unprovenAssetRetire, implicitAssetProceeds, nonSaleAssetProceeds, nullAssetUnitProof, partialAssetUsage, partialAssetCost, partialAssetDisposal,
   partialAssetPage, partialAssetUsagePage, partialAssetCostPage, unprovenAssetHeaders, implicitRawAssetIntent, markedRawAssetIntent, unreferencedRawAssetCost, lifecycleAssetFilter]
 
+import * as assetModels from '../src/features/assets/model'
+declare const reviewedAssetUsageSource: assetModels.AssetUsageSource
+declare const reviewedAssetLifecycleSource: assetModels.AssetLifecycleSource
+declare const reviewedAssetDetailSource: assetModels.AssetDetail
+const assetSourceReads = [assetModels.readAssetProfile(holdingUnit.id, new AbortController().signal),
+  assetModels.readAssetUsage(holdingUnit.id, new AbortController().signal), assetModels.readAssetCosts(holdingUnit.id, new AbortController().signal),
+  assetModels.readAssetLifecycle(holdingUnit.id, new AbortController().signal), assetModels.readAssetDetail(holdingUnit.id, {}, new AbortController().signal)]
+const sourcedSDKAssetUsage = assetSDK.recordAssetUsage(holdingUnit.id, assetUseInput, { ...writeContext, asset: reviewedAssetUsageSource.asset })
+const sourcedSDKAssetDisposal = assetSDK.disposeAsset(holdingUnit.id, assetDisposalInput, { ...writeContext, ...reviewedAssetLifecycleSource })
+// @ts-expect-error A selected Usage collection does not invent an unqueried Cost set.
+const inventedAssetSourceCosts = reviewedAssetUsageSource.costs
+// @ts-expect-error Calculation metadata is not an original Asset proof/context.
+const summaryAsAssetProof = assetSDK.recordAssetUsage(holdingUnit.id, assetUseInput, { ...writeContext, asset: reviewedAssetDetailSource.summary })
+// @ts-expect-error Lifecycle source keeps explicit nullable Disposal presence.
+const implicitAssetLifecycleSource: assetModels.AssetLifecycleSource = { item: currentItem, unit: holdingUnit, asset: retainedAsset }
+// @ts-expect-error Complete retained event collections remain read-only review data.
+reviewedAssetUsageSource.usage.push(partialAssetUsage)
+void [assetSourceReads, sourcedSDKAssetUsage, sourcedSDKAssetDisposal, inventedAssetSourceCosts, summaryAsAssetProof, implicitAssetLifecycleSource]
+
 import * as assetSDK from '../src/lib/api/assets'
 const assetSDKContext = { ...writeContext, asset: retainedAsset }
 const assetSDKProfileContext = { ...assetSDKContext, unit: holdingUnit, item: currentItem }
