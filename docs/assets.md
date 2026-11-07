@@ -48,6 +48,10 @@ Later reads retain raw and invalid draft text. A known changed source requires e
 
 A sent timeout, canceled wait or malformed reply may already have committed. The page locks and retains the exact volatile original source/body/key and offers read-only checks plus explicit original-key reconciliation, even if later source is missing or changed. Reconnect never submits it. A frozen historical reply is not installed as current Query data; success navigates to an authoritative reread. A new login can reconcile a command retained by its caller, but session loss in the application purges private forms/commands and forwards only safe navigation scope; it does not persist the draft through login. Offline editors do not invent current authority, and initialized offline input never becomes a replay queue. Persistent drafts, the offline replica and full sync remain unfinished.
 
+## Financial correction contracts
+
+Separate [audited financial correction contracts](financial-corrections.md) now define retained DisposalRecord reads and financial correction/history operations, alongside Purchase allocation correction. They preserve the original disposal, distinguish explicit void from zero proceeds, retain an actual independent Disposal proof after void and never revive/move/dispose a Unit again or infer retirement. These additions are contract/generated-transport only: their persistence/HTTP/SDK/reviewed screens remain unfinished. The eleven currently implemented Asset operations do not silently supply those new workflows, and retirement-date correction remains separate required work.
+
 ## Domain boundaries
 
 An Item is shared catalog metadata. A Unit is one individually tracked physical object. An Asset is an explicit financial profile for one actual Unit; it is not created by receiving stock, purchasing an Item, editing Unit notes or changing an operational status.

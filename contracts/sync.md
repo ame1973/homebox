@@ -34,6 +34,12 @@ Raw SQL writes outside transaction-aware domain services are forbidden. Initial 
 
 Derived effects matter: changing category/tag/alias/purchase/review data may change item search; moving a unit changes its location evidence; deleting an owner emits media-link tombstones. Paths are derived from parent links rather than copied into every descendant projection. Unreviewed OCR and rejected suggestions never enter published search documents.
 
+## Financial correction effects
+
+The [audited financial correction contracts](../docs/financial-corrections.md) define current accounting effects without another replica kind. Allocation correction retains the original posted Line and may create a new independent replacement, but publishes an old-Line tombstone so retained audit source cannot resurrect a voided current attribution. Disposal correction retains the first posted decision and every immutable correction, publishing only the actual current financial decision or a tombstone for explicit void. An intentional zero-valued current decision remains an upsert, not a void.
+
+Existing `purchase_line`/`disposal` identities, version-one payload shapes and the 22-kind envelope remain unchanged. Source, correction/audit, real independent revisions, affected financial/search scopes, frozen upserts/tombstones and original response must commit atomically. Never rebuild effective values from current/FTS caches or overwrite old frozen bytes. Detailed authenticated correction history is not a second offline authoritative ledger; physical status/placement and movements are not undone by financial void. These are normative correction contracts, not a claim that their services or full sync are implemented.
+
 ## Frozen bootstrap
 
 `GET /sync/bootstrap` starts a short-lived materialized snapshot. In one immediate transaction, read server identity, dataset epoch, projection version, and change-log high watermark `H`, then materialize all current eligible projections in deterministic `(entity_type, entity_id)` order. Paginated responses read only these frozen rows, never live joins.

@@ -1376,6 +1376,30 @@ export interface paths {
         readonly patch: operations["patch_purchases_id"];
         readonly trace?: never;
     };
+    readonly "/purchases/{id}/line-corrections": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /**
+         * Purchase allocation correction history
+         * @description Read complete retained immutable financial correction history for this actual Purchase through the completed-session transaction. Validate original/replacement owners, actual source/counters and lookahead before returning a page, including voided original attribution. Use an independent owner/principal/epoch/collection/size signed live cursor, default 50/cap100/2048 bytes/15 minutes. No body, filters beyond limit/cursor, list ETag, frozen snapshot, read-side repair or publication. A correction entry is history, never a Purchase/Line/Item proof.
+         */
+        readonly get: operations["get_purchases_id_line_corrections"];
+        readonly put?: never;
+        /**
+         * Correct or void one purchase allocation
+         * @description Require exact Origin, completed session, CSRF/version/original key, original Purchase If-Match and required original Line/Item body proofs; replacement additionally retains its whole new Item interpretation/proof and explicit nullable Unit choice. Revalidate source/authorization inside SQL after strict 128 KiB JSON reading. Atomically void the original active attribution and optionally post a new independent Line, retaining original immutable source, exact audited before/after/input/reason and historical references. Publish old-Line tombstone, new Line, Purchase, affected old/new Item/Asset/search/current/outbox and original frozen immutable correction reply together. New replacement money requires finite policy; void does not reprice old money or create a negative physical quantity. Already voided source returns PURCHASE_LINE_VOIDED for a fresh command. Exact original-key reconciliation precedes current proofs/policy and survives later changes/fresh login; no hidden refresh, rebase, automatic replay or historical-cache installation. No query, duplicate/unknown fields, malformed Unicode or lossy/unsafe integers. The response ETag is the independent correction entry, not Purchase/Line/Item proof.
+         */
+        readonly post: operations["post_purchases_id_line_corrections"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
     readonly "/purchases/{id}/lines": {
         readonly parameters: {
             readonly query?: never;
@@ -1385,7 +1409,7 @@ export interface paths {
         };
         /**
          * List purchase allocations
-         * @description Complete actual Purchase-owned independent allocation rows in live stable-ID order, including zero-paid history. Require the actual Purchase/counter, validate each row's retained owner/Item/Unit authority and lookahead, and sign independent owner/collection/principal/epoch/size scope for 15 minutes. No body/list ETag or filters beyond limit/cursor; required null ends pagination, not a frozen snapshot or implicit spend total.
+         * @description Complete actual Purchase-owned independent allocation rows in live stable-ID order, including zero-paid history. Require the actual Purchase/counter, validate each row's retained owner/Item/Unit authority and lookahead, and sign independent owner/collection/principal/epoch/size scope for 15 minutes. No body/list ETag or filters beyond limit/cursor; required null ends pagination, not a frozen snapshot or implicit spend total. A reviewed void excludes its original Line from current allocations and emits its independent tombstone; the separate correction history retains original/replacement data. Active zero-paid attribution is not a void.
          */
         readonly get: operations["get_purchases_id_lines"];
         readonly put?: never;
@@ -1877,7 +1901,7 @@ export interface paths {
         };
         /**
          * Asset cost summary
-         * @description Calculate the complete current posted Asset breakdown from actual profile, exact-Unit purchase allocations, costs, usage and disposal in one completed authorized read transaction. as_of bounds inclusive home-civil service days only, not historical financial reconstruction; expose timezone, day_policy and same-transaction source_revision. Keep actual proceeds and residual projections separate, negative net values intact, null denominators and exact safe integer totals. Never sum a header plus its Lines, sibling/unallocated Item spend, mixed currencies or an unverified cache. Return no resource ETag because clock/timezone-dependent calculation is not an Asset write proof; fail closed on unsafe/incompatible authority.
+         * @description Calculate the complete current posted Asset breakdown from actual profile, exact-Unit purchase allocations, costs, usage and disposal in one completed authorized read transaction. as_of bounds inclusive home-civil service days only, not historical financial reconstruction; expose timezone, day_policy and same-transaction source_revision. Keep actual proceeds and residual projections separate, negative net values intact, null denominators and exact safe integer totals. Never sum a header plus its Lines, sibling/unallocated Item spend, mixed currencies or an unverified cache. Return no resource ETag because clock/timezone-dependent calculation is not an Asset write proof; fail closed on unsafe/incompatible authority. Voided attributions/disposal have no current accounting effect; derive effective decisions from authoritative immutable correction source rather than stale projections.
          */
         readonly get: operations["get_units_id_cost_summary"];
         readonly put?: never;
@@ -1921,15 +1945,59 @@ export interface paths {
         };
         /**
          * Recorded disposal
-         * @description Read the complete actual retained disposal for this exact Unit, including explicit kind, currency, proceeds, note and independent Disposal revision/ETag. Validate real profile/Unit/Item authority in the completed authorized transaction. Absence is 404, not guessed zero proceeds, a fabricated event or a reconstructed POST reply. Retained representation is not today's new-disposal eligibility; no body/query or read-side repair/publication.
+         * @description Read the complete actual retained disposal for this exact Unit, including explicit kind, currency, proceeds, note and independent Disposal revision/ETag. Validate real profile/Unit/Item authority in the completed authorized transaction. Absence is 404, not guessed zero proceeds, a fabricated event or a reconstructed POST reply. Retained representation is not today's new-disposal eligibility; no body/query or read-side repair/publication. A financial void makes this current resource absent; use the separate retained DisposalRecord, not 404/summary, for a correction proof or reinstatement. Never substitute original data for a different current decision.
          */
         readonly get: operations["get_units_id_disposal"];
         readonly put?: never;
         /**
          * Dispose unit
-         * @description Require exact Origin, completed session, CSRF/version/original key and the documented original proofs; revalidate authorization and actual source inside SQL after strict 128 KiB JSON reading. Reject duplicate/unknown fields, malformed Unicode, inexact/unsafe integers and query parameters without repair. Source, independent counters, current/frozen outbox, derived invalidation, immutable audit and original response commit atomically. Only exact original-key replay deduplicates append-only usage/cost events; a fresh key records another event even if every field matches. Equal eligible profile/lifecycle state is receipt-only. Preserve exact original body/key/proofs for explicit reconciliation after later changes or fresh login; never auto-rebase/replay, infer physical receipt or install frozen replies as current source. Original Asset If-Match and required original Unit unit_revision separately bind finance and physical placement/status. Record one explicit terminal disposal and proceeds together with all path/Unit/Asset/Item dependencies; return independent Disposal revision one. Preserve existing records and require a separately audited correction/void workflow instead of overwrite.
+         * @description Require exact Origin, completed session, CSRF/version/original key and the documented original proofs; revalidate authorization and actual source inside SQL after strict 128 KiB JSON reading. Reject duplicate/unknown fields, malformed Unicode, inexact/unsafe integers and query parameters without repair. Source, independent counters, current/frozen outbox, derived invalidation, immutable audit and original response commit atomically. Only exact original-key replay deduplicates append-only usage/cost events; a fresh key records another event even if every field matches. Equal eligible profile/lifecycle state is receipt-only. Preserve exact original body/key/proofs for explicit reconciliation after later changes or fresh login; never auto-rebase/replay, infer physical receipt or install frozen replies as current source. Original Asset If-Match and required original Unit unit_revision separately bind finance and physical placement/status. Record one explicit terminal disposal and proceeds together with all path/Unit/Asset/Item dependencies; return independent Disposal revision one. Preserve existing records and require a separately audited correction/void workflow instead of overwrite. A retained original/record/history after a financial void cannot be bypassed with ordinary creation or revision-one reseeding; use the separately reviewed financial correction operation.
          */
         readonly post: operations["post_units_id_disposal"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/units/{id}/disposal-corrections": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /**
+         * Disposal financial correction history
+         * @description Read the actual retained immutable financial correction history for one Unit's disposal, including explicit void and reinstatement. Complete owner/source/counter/chain/lookahead validation under an active completed session. Use an independent owner/principal/epoch/collection/size signed live cursor, default 50/cap100/2048 bytes/15 minutes; no body, filters beyond limit/cursor, list ETag, frozen snapshot or read-side repair/publication. History-entry revisions are not the actual DisposalRecord write proof. No original disposal is 404; actual empty correction history is a valid terminal page.
+         */
+        readonly get: operations["get_units_id_disposal_corrections"];
+        readonly put?: never;
+        /**
+         * Correct, void or reinstate disposal finance
+         * @description Require exact Origin, completed session, CSRF/version/original key, original retained DisposalRecord If-Match and original Asset body revision, not physical Unit/Item or summary proofs. Revalidate actual authorization/source/counters and complete proposed safe financial totals inside SQL after strict 128 KiB JSON reading. Replace supplies the whole financial decision, including explicit zero proceeds and lossless date, and may reinstate a voided record; void explicitly supplies null and removes only current accounting effect. Retain the original disposal and every exact before/after/input/reason/actual audit, advance independent Disposal/Asset/Item authority and publish current upsert/tombstone/outbox/original immutable correction reply atomically. New replacement money uses finite matching currency policy; void does not reprice history. Never move, dispose again, revive or change Unit status/placement, infer retirement, touch unchanged physical/location/search scopes or convert proceeds/residual/FX. Every fresh eligible correction is a new decision; exact original-key replay before current proofs/policy returns only its frozen result after later changes/fresh login. No body/query repair, hidden rebase, automatic replay or historical-cache installation; reject duplicate/unknown fields, malformed Unicode and lossy/unsafe integers. Independent correction-entry response ETag is not the subject's next proof.
+         */
+        readonly post: operations["post_units_id_disposal_corrections"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/units/{id}/disposal-record": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /**
+         * Retained disposal financial record
+         * @description Read actual immutable original disposal plus explicit nullable current financial decision and the real independent Disposal revision/ETag, including after a void. Complete active-session/Asset/Unit/Item/source/correction/counter validation in one authorized transaction; no source is 404, not a synthesized record. Failed reads, current-disposal 404 and summary/source_revision are never correction proofs. Preserve exact original data and broad retained representation; no body/query, read-side repair/publication, current cache authority or physical undo.
+         */
+        readonly get: operations["get_units_id_disposal_record"];
+        readonly put?: never;
+        readonly post?: never;
         readonly delete?: never;
         readonly options?: never;
         readonly head?: never;
@@ -2529,6 +2597,87 @@ export interface components {
             readonly kind: "sold" | "donated" | "recycled" | "discarded" | "other";
             readonly note: string;
             readonly realized_proceeds_minor: number;
+            readonly revision: number;
+        };
+        /** @description One actual immutable financial correction with independent source revision one and server-accepted creation time, never its subject's write proof. Retain whole before/after DisposalRecord values and exact reason; after keeps original data unchanged, advances the actual subject revision and has null current for void or the complete replacement for replace. Owners, revision progression, same original data and promised replacement require authoritative runtime validation. Original source and every prior correction/frozen response remain immutable; no physical removal/revival or new offline entity is created. */
+        readonly DisposalCorrection: {
+            /** @enum {unknown} */
+            readonly action: "replace" | "void";
+            readonly after: components["schemas"]["DisposalRecord"];
+            readonly before: components["schemas"]["DisposalRecord"];
+            readonly created_at: string & unknown;
+            readonly id: string;
+            readonly item_unit_id: string;
+            readonly reason: string;
+            /** @constant */
+            readonly revision: 1;
+        } & ({
+            /** @constant */
+            readonly action?: "void";
+            readonly after?: components["schemas"]["DisposalRecord"] & {
+                readonly current?: null;
+            };
+        } | {
+            /** @constant */
+            readonly action?: "replace";
+            readonly after?: components["schemas"]["DisposalRecord"] & {
+                readonly current?: components["schemas"]["DisposalData"];
+            };
+        });
+        /** @description One complete authenticated owner-scoped live stable-ID correction-history page, including original/replacement context after a void. Required nullable next_cursor ends pagination. Independent principal/epoch/owner/collection/size cursor, default 50/cap100, 2048 bytes and 15-minute expiry; no body, filters beyond limit/cursor, list ETag, frozen snapshot, current-data installation or offline ledger claim. Validate every row and lookahead before returning any prefix. */
+        readonly DisposalCorrectionList: {
+            readonly data: readonly components["schemas"]["DisposalCorrection"][];
+            readonly next_cursor: string | null;
+        };
+        /** @description Correct only finance using the original retained DisposalRecord If-Match and required original Asset body revision. Void requires explicit replacement null and an actually active current decision; replace requires the whole financial decision and can explicitly reinstate a voided record. Do not infer a usable proof from 404, a failed read, summary/source_revision, Unit metadata or a correction entry. Keep the first posted disposal and every correction immutable. Every fresh eligible correction advances real Disposal/Asset/Item financial authority and returns a new immutable entry; exact original-key replay alone deduplicates. Validate complete proposed safe current totals and original proofs after replay lookup. No Unit/Item body proof, physical movement, Unit revival/status/placement, location/search touch, retirement inference, FX, offline queue or automatic rebase/replay is permitted. */
+        readonly DisposalCorrectionWrite: {
+            /** @enum {unknown} */
+            readonly action: "replace" | "void";
+            readonly asset_revision: number;
+            readonly reason: string;
+            readonly replacement: components["schemas"]["DisposalFinancialWrite"] | null;
+        } & ({
+            /** @constant */
+            readonly action?: "void";
+            readonly replacement?: null;
+        } | {
+            /** @constant */
+            readonly action?: "replace";
+            readonly replacement?: components["schemas"]["DisposalFinancialWrite"];
+        });
+        /** @description Complete bounded retained disposal data without its separate subject revision. This has the existing Disposal fields, including explicit zero/non-sale historical values, exact dates and notes; retained representation is not today's new-money policy. Validate actual ownership, Unicode, instants and safe proceeds. Do not use the broader offline payload as a new HTTP input validator. */
+        readonly DisposalData: {
+            readonly currency: string;
+            readonly disposed_at: string & unknown;
+            readonly item_unit_id: string;
+            /** @enum {unknown} */
+            readonly kind: "sold" | "donated" | "recycled" | "discarded" | "other";
+            readonly note: string;
+            readonly realized_proceeds_minor: number;
+        };
+        /** @description A complete financial disposal replacement without a physical Unit proof: explicit kind, currency, exact financial date and realized proceeds including zero. New non-sale decisions require zero and new money requires finite supported currency matching the actual Asset. Omitted note defaults to empty without client default insertion. Preserve an equivalent retained date spelling; changed dates normalize losslessly. This never moves/revives/disposes a Unit, guesses retirement or converts residual into proceeds. */
+        readonly DisposalFinancialWrite: {
+            readonly currency: string;
+            readonly disposed_at: string & unknown;
+            /** @enum {unknown} */
+            readonly kind: "sold" | "donated" | "recycled" | "discarded" | "other";
+            /** @default  */
+            readonly note?: string;
+            readonly realized_proceeds_minor: number;
+        } & ({
+            /** @constant */
+            readonly kind?: "sold";
+        } | {
+            /** @enum {unknown} */
+            readonly kind?: "donated" | "recycled" | "discarded" | "other";
+            /** @constant */
+            readonly realized_proceeds_minor?: 0;
+        });
+        /** @description The retained financial record for an actual posted disposal, with the real independent Disposal revision/ETag even after financial void. original is the exact first posted data, never a guessed original revision or reconstructed legacy event. current is the actual effective decision or explicit null after void; a zero-proceeds current decision remains nonnull. Both payload owners must match this Unit. Read source/correction authority and real counters, never projections; only actual missing original source is 404. This subject revision is the correction If-Match, not Asset/Unit/Item/source_revision or an immutable correction entry's revision. No physical status, placement, service or retirement change is implied. */
+        readonly DisposalRecord: {
+            readonly current: components["schemas"]["DisposalData"] | null;
+            readonly item_unit_id: string;
+            readonly original: components["schemas"]["DisposalData"];
             readonly revision: number;
         };
         /** @description Explicit disposal against original Asset If-Match plus required original Unit unit_revision. The positive Unit proof separately binds physical status/placement; the Asset proof binds reviewed finance. Proceeds are explicit even when zero, match profile currency and obey new-money policy. Non-sale disposal has zero proceeds; retained history is never repaired to this new-input rule. Record the terminal physical action, disposal identity/revision, Asset/Unit/Item/path dependencies, immutable audit and frozen response atomically. Do not guess service/retirement dates, subtract residual as realized proceeds, silently edit an existing disposal or allow ordinary Unit status to bypass this financial command. Corrections/voids require their own audited workflow, not destructive overwrite. */
@@ -3369,6 +3518,53 @@ export interface components {
             readonly quantity_base: number;
             readonly revision: number;
         };
+        /** @description One actual immutable correction entry with independent source revision one and server-accepted creation time, not a Purchase/Line/Item write proof. before freezes the whole original active Line and its original revision; after is explicit null for void or the whole newly posted replacement with a different identity and revision one. Both belong to the same Purchase; ownership and exact proposed values require runtime validation. This is retained financial decision history, not a physical return, an invented legacy timestamp or a new offline entity. Exact original-key retry returns only this frozen entry without installing it as current data. */
+        readonly PurchaseLineCorrection: {
+            /** @enum {unknown} */
+            readonly action: "replace" | "void";
+            readonly after: components["schemas"]["PurchaseLine"] | null;
+            readonly before: components["schemas"]["PurchaseLine"];
+            readonly created_at: string & unknown;
+            readonly id: string;
+            readonly purchase_id: string;
+            readonly reason: string;
+            /** @constant */
+            readonly revision: 1;
+        } & ({
+            /** @constant */
+            readonly action?: "void";
+            readonly after?: null;
+        } | {
+            /** @constant */
+            readonly action?: "replace";
+            readonly after?: components["schemas"]["PurchaseLine"] & {
+                /** @constant */
+                readonly revision?: 1;
+            };
+        });
+        /** @description One complete authenticated owner-scoped live stable-ID correction-history page, including original/replacement context after a void. Required nullable next_cursor ends pagination. Independent principal/epoch/owner/collection/size cursor, default 50/cap100, 2048 bytes and 15-minute expiry; no body, filters beyond limit/cursor, list ETag, frozen snapshot, current-data installation or offline ledger claim. Validate every row and lookahead before returning any prefix. */
+        readonly PurchaseLineCorrectionList: {
+            readonly data: readonly components["schemas"]["PurchaseLineCorrection"][];
+            readonly next_cursor: string | null;
+        };
+        /** @description A separately reviewed financial correction under the original Purchase If-Match plus required original Line and owning Item body revisions. Void requires explicit replacement null; replace requires one complete new allocation, including its own original Item revision and explicit nullable Unit intent. Void the actual active original attribution and optionally create a new independent Line, never edit/reassign/delete the posted source or manufacture a negative physical quantity. Active zero-paid history is not a void. Retain original source/references and exact immutable before/after/input/reason under the actual audit. Validate complete proposed old/new Asset histories, finite new replacement money, safe totals and every source proof transactionally after original-key lookup. Current Line projections receive an independent tombstone; replacement starts at revision one. Publish all affected Purchase/Item/Asset/search/current/outbox/audit/original replies atomically, without physical receipt, Unit movement, FX, hidden rebase or automatic replay. */
+        readonly PurchaseLineCorrectionWrite: {
+            /** @enum {unknown} */
+            readonly action: "replace" | "void";
+            readonly item_revision: number;
+            readonly line_id: string;
+            readonly line_revision: number;
+            readonly reason: string;
+            readonly replacement: components["schemas"]["PurchaseLineWrite"] | null;
+        } & ({
+            /** @constant */
+            readonly action?: "void";
+            readonly replacement?: null;
+        } | {
+            /** @constant */
+            readonly action?: "replace";
+            readonly replacement?: components["schemas"]["PurchaseLineWrite"];
+        });
         /** @description One complete live stable-ID page of actual independent allocations for the selected Purchase, including zero-paid lines; required null ends pagination. No list ETag, frozen snapshot or cross-unit/currency total. */
         readonly PurchaseLineList: {
             readonly data: readonly components["schemas"]["PurchaseLine"][];
@@ -7761,6 +7957,92 @@ export interface operations {
             readonly 503: components["responses"]["Error503"];
         };
     };
+    readonly get_purchases_id_line_corrections: {
+        readonly parameters: {
+            readonly query?: {
+                readonly cursor?: string;
+                readonly limit?: number;
+            };
+            readonly header?: never;
+            readonly path: {
+                readonly id: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Successful response */
+            readonly 200: {
+                headers: {
+                    /** @description Protected API data is never cached by the service worker. */
+                    readonly "Cache-Control"?: "no-store";
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["PurchaseLineCorrectionList"];
+                };
+            };
+            readonly 400: components["responses"]["Error400"];
+            readonly 401: components["responses"]["Error401"];
+            readonly 403: components["responses"]["Error403"];
+            readonly 404: components["responses"]["Error404"];
+            readonly 409: components["responses"]["Error409"];
+            readonly 413: components["responses"]["Error413"];
+            readonly 415: components["responses"]["Error415"];
+            readonly 422: components["responses"]["Error422"];
+            readonly 429: components["responses"]["Error429"];
+            readonly 503: components["responses"]["Error503"];
+        };
+    };
+    readonly post_purchases_id_line_corrections: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header: {
+                readonly "Idempotency-Key": string;
+                /** @description Quoted original Purchase revision; required body line_revision and original owning item_revision remain independent. Replacement has its own original Item proof, never a refreshed or inferred counter. */
+                readonly "If-Match": string;
+                readonly Origin: string;
+                readonly "X-CSRF-Token": string;
+                /** @description Semantic application version. Incompatible writes return 426. */
+                readonly "X-HomeBox-Client-Version": string;
+            };
+            readonly path: {
+                readonly id: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["PurchaseLineCorrectionWrite"];
+            };
+        };
+        readonly responses: {
+            /** @description Success */
+            readonly 200: {
+                headers: {
+                    /** @description Protected API data is never cached by the service worker. */
+                    readonly "Cache-Control"?: "no-store";
+                    /** @description Strong independent immutable correction-entry revision one, not its subject's next write proof. */
+                    readonly ETag?: string;
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["PurchaseLineCorrection"];
+                };
+            };
+            readonly 400: components["responses"]["Error400"];
+            readonly 401: components["responses"]["Error401"];
+            readonly 403: components["responses"]["Error403"];
+            readonly 404: components["responses"]["Error404"];
+            readonly 409: components["responses"]["Error409"];
+            readonly 413: components["responses"]["Error413"];
+            readonly 415: components["responses"]["Error415"];
+            readonly 422: components["responses"]["Error422"];
+            readonly 426: components["responses"]["Error426"];
+            readonly 429: components["responses"]["Error429"];
+            readonly 503: components["responses"]["Error503"];
+        };
+    };
     readonly get_purchases_id_lines: {
         readonly parameters: {
             readonly query?: {
@@ -9291,6 +9573,129 @@ export interface operations {
             readonly 415: components["responses"]["Error415"];
             readonly 422: components["responses"]["Error422"];
             readonly 426: components["responses"]["Error426"];
+            readonly 429: components["responses"]["Error429"];
+            readonly 503: components["responses"]["Error503"];
+        };
+    };
+    readonly get_units_id_disposal_corrections: {
+        readonly parameters: {
+            readonly query?: {
+                readonly cursor?: string;
+                readonly limit?: number;
+            };
+            readonly header?: never;
+            readonly path: {
+                readonly id: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Successful response */
+            readonly 200: {
+                headers: {
+                    /** @description Protected API data is never cached by the service worker. */
+                    readonly "Cache-Control"?: "no-store";
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["DisposalCorrectionList"];
+                };
+            };
+            readonly 400: components["responses"]["Error400"];
+            readonly 401: components["responses"]["Error401"];
+            readonly 403: components["responses"]["Error403"];
+            readonly 404: components["responses"]["Error404"];
+            readonly 409: components["responses"]["Error409"];
+            readonly 413: components["responses"]["Error413"];
+            readonly 415: components["responses"]["Error415"];
+            readonly 422: components["responses"]["Error422"];
+            readonly 429: components["responses"]["Error429"];
+            readonly 503: components["responses"]["Error503"];
+        };
+    };
+    readonly post_units_id_disposal_corrections: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header: {
+                readonly "Idempotency-Key": string;
+                /** @description Quoted original retained DisposalRecord revision, including explicit voided state, not Asset/Unit/Item/summary or correction-entry revision. Required body asset_revision independently freezes original financial interpretation. */
+                readonly "If-Match": string;
+                /** @description Exact configured public origin, independent of the session and CSRF proof. */
+                readonly Origin: string;
+                readonly "X-CSRF-Token": string;
+                /** @description Semantic application version. Incompatible writes return 426. */
+                readonly "X-HomeBox-Client-Version": string;
+            };
+            readonly path: {
+                readonly id: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["DisposalCorrectionWrite"];
+            };
+        };
+        readonly responses: {
+            /** @description Success */
+            readonly 200: {
+                headers: {
+                    /** @description Protected API data is never cached by the service worker. */
+                    readonly "Cache-Control"?: "no-store";
+                    /** @description Strong independent immutable correction-entry revision one, not its subject's next write proof. */
+                    readonly ETag?: string;
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["DisposalCorrection"];
+                };
+            };
+            readonly 400: components["responses"]["Error400"];
+            readonly 401: components["responses"]["Error401"];
+            readonly 403: components["responses"]["Error403"];
+            readonly 404: components["responses"]["Error404"];
+            readonly 409: components["responses"]["Error409"];
+            readonly 413: components["responses"]["Error413"];
+            readonly 415: components["responses"]["Error415"];
+            readonly 422: components["responses"]["Error422"];
+            readonly 426: components["responses"]["Error426"];
+            readonly 429: components["responses"]["Error429"];
+            readonly 503: components["responses"]["Error503"];
+        };
+    };
+    readonly get_units_id_disposal_record: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly id: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Success */
+            readonly 200: {
+                headers: {
+                    /** @description Protected API data is never cached by the service worker. */
+                    readonly "Cache-Control"?: "no-store";
+                    /** @description Quoted actual independent Disposal subject revision, retained and readable after a financial void; not Asset/Unit/Item or correction-entry revision. */
+                    readonly ETag?: string;
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["DisposalRecord"];
+                };
+            };
+            readonly 400: components["responses"]["Error400"];
+            readonly 401: components["responses"]["Error401"];
+            readonly 403: components["responses"]["Error403"];
+            readonly 404: components["responses"]["Error404"];
+            readonly 409: components["responses"]["Error409"];
+            readonly 413: components["responses"]["Error413"];
+            readonly 415: components["responses"]["Error415"];
+            readonly 422: components["responses"]["Error422"];
             readonly 429: components["responses"]["Error429"];
             readonly 503: components["responses"]["Error503"];
         };

@@ -794,3 +794,70 @@ void [ownedCreateHeaders, barcodeBody, aliasBody, aliasResource, attributeBody, 
   createRoot, createChild, unprovenChild, unrelatedRootProof,
   invalidDelete, missingRevision, invalidQuantity, authHeaders, noOrigin, noCSRF, rawCredentialAdmin, hashLogin,
   childLocationHeaders, rootLocationHeaders, locationWithoutOrigin, rootLocation, minimalLocation, minimalItem, rootMove, parentWrapper, textSortOrder, nullKind]
+
+// These are contract-only transports, not implemented correction SDK functions.
+const lineVoidDecision = { line_id: 'line', line_revision: 9, item_revision: 11, action: 'void', replacement: null, reason: 'Void the incorrect attribution' } as const satisfies components['schemas']['PurchaseLineCorrectionWrite']
+const lineReplacementDecision = { ...lineVoidDecision, action: 'replace', replacement: { item_id: 'other-item', item_revision: 17, item_unit_id: null, quantity_base: 2, paid_minor: 0 } } as const satisfies components['schemas']['PurchaseLineCorrectionWrite']
+const correctionHeaders = { ...authHeaders, 'If-Match': '"9"' } satisfies operations['post_purchases_id_line_corrections']['parameters']['header']
+const disposalRecordData = { item_unit_id: 'unit', kind: 'sold', currency: 'JPY', disposed_at: '2026-11-07T02:00:00.123456789Z', realized_proceeds_minor: 200, note: '' } as const satisfies components['schemas']['DisposalData']
+const disposalRecord = { item_unit_id: 'unit', revision: 7, original: disposalRecordData, current: disposalRecordData } as const satisfies components['schemas']['DisposalRecord']
+const voidedDisposalRecord = { ...disposalRecord, revision: 8, current: null } as const satisfies components['schemas']['DisposalRecord']
+const disposalVoidDecision = { asset_revision: 13, action: 'void', replacement: null, reason: 'Void finance without reviving the Unit' } as const satisfies components['schemas']['DisposalCorrectionWrite']
+const disposalReplacementDecision = { ...disposalVoidDecision, action: 'replace', replacement: { kind: 'other', currency: 'JPY', disposed_at: '1999-01-01T00:00:00Z', realized_proceeds_minor: 0 } } as const satisfies components['schemas']['DisposalCorrectionWrite']
+const correctionOriginalLine = { id: 'line', revision: 9, purchase_id: 'purchase', item_id: 'item', item_unit_id: 'unit', quantity_base: 3, paid_minor: 100, note: '' } as const satisfies components['schemas']['PurchaseLine']
+const lineVoidEntry = { id: 'correction', revision: 1, purchase_id: 'purchase', action: 'void', reason: 'Void the incorrect attribution', created_at: '2026-11-07T02:00:00.000000001Z', before: correctionOriginalLine, after: null } as const satisfies components['schemas']['PurchaseLineCorrection']
+const lineReplacementEntry = { ...lineVoidEntry, action: 'replace', after: { ...correctionOriginalLine, id: 'new-line', revision: 1, item_unit_id: null, quantity_base: 2, paid_minor: 0 } } as const satisfies components['schemas']['PurchaseLineCorrection']
+const disposalVoidEntry = { id: 'correction', revision: 1, item_unit_id: 'unit', action: 'void', reason: 'Void finance', created_at: '2026-11-07T02:00:00.000000001Z', before: disposalRecord, after: voidedDisposalRecord } as const satisfies components['schemas']['DisposalCorrection']
+const disposalReplacementEntry = { ...disposalVoidEntry, action: 'replace', before: voidedDisposalRecord, after: { ...disposalRecord, revision: 9 } } as const satisfies components['schemas']['DisposalCorrection']
+const correctionTransportCalls = [
+  purchaseTransport.GET('/purchases/{id}/line-corrections', { params: { path: { id: 'purchase' }, query: { limit: 50 } } }),
+  purchaseTransport.POST('/purchases/{id}/line-corrections', { params: { path: { id: 'purchase' }, header: correctionHeaders }, body: lineVoidDecision }),
+  purchaseTransport.POST('/purchases/{id}/line-corrections', { params: { path: { id: 'purchase' }, header: correctionHeaders }, body: lineReplacementDecision }),
+  purchaseTransport.GET('/units/{id}/disposal-record', { params: { path: { id: 'unit' } } }),
+  purchaseTransport.GET('/units/{id}/disposal-corrections', { params: { path: { id: 'unit' }, query: { limit: 50, cursor: 'original-live-continuation' } } }),
+  purchaseTransport.POST('/units/{id}/disposal-corrections', { params: { path: { id: 'unit' }, header: correctionHeaders }, body: disposalVoidDecision }),
+  purchaseTransport.POST('/units/{id}/disposal-corrections', { params: { path: { id: 'unit' }, header: correctionHeaders }, body: disposalReplacementDecision }),
+]
+// @ts-expect-error A void needs explicit null, not an omitted replacement decision.
+const implicitLineVoid: components['schemas']['PurchaseLineCorrectionWrite'] = { line_id: 'line', line_revision: 9, item_revision: 11, action: 'void', reason: 'Explicit reason' }
+// @ts-expect-error Replacement cannot silently become void.
+const nullLineReplacement: components['schemas']['PurchaseLineCorrectionWrite'] = { ...lineVoidDecision, action: 'replace' }
+// @ts-expect-error The old Line proof does not replace the old Item interpretation proof.
+const unprovenOldCorrectionItem: components['schemas']['PurchaseLineCorrectionWrite'] = { line_id: 'line', line_revision: 9, action: 'void', replacement: null, reason: 'Explicit reason' }
+// @ts-expect-error Replacement keeps explicit nullable Unit intent through the actual typed transport.
+const implicitReplacementUnit = purchaseTransport.POST('/purchases/{id}/line-corrections', { params: { path: { id: 'purchase' }, header: correctionHeaders }, body: { ...lineReplacementDecision, replacement: { item_id: 'item', item_revision: 11, quantity_base: 2, paid_minor: 0 } } })
+// @ts-expect-error A named replacement Unit has quantity one, not a bulk allocation.
+const bulkReplacementUnit = purchaseTransport.POST('/purchases/{id}/line-corrections', { params: { path: { id: 'purchase' }, header: correctionHeaders }, body: { ...lineReplacementDecision, replacement: { ...lineReplacementDecision.replacement, item_unit_id: 'unit', quantity_base: 2 } } })
+// @ts-expect-error A real request marker object is never a null wire decision.
+const markedLineVoid = purchaseTransport.POST('/purchases/{id}/line-corrections', { params: { path: { id: 'purchase' }, header: correctionHeaders }, body: { ...lineVoidDecision, replacement: { $write: null } } })
+// @ts-expect-error Correction-entry reply revision is always its actual independent one.
+const mutableLineCorrectionEntry: components['schemas']['PurchaseLineCorrection'] = { ...lineVoidEntry, revision: 2 }
+// @ts-expect-error A replacement is a new Line with independent revision one.
+const rebasedLineCorrectionReply: components['schemas']['PurchaseLineCorrection'] = { ...lineReplacementEntry, after: { ...lineReplacementEntry.after, revision: 10 } }
+// @ts-expect-error Current disposal absence after void is explicit rather than omitted.
+const implicitDisposalRecord: components['schemas']['DisposalRecord'] = { item_unit_id: 'unit', revision: 8, original: disposalRecordData }
+// @ts-expect-error Original disposal source cannot be null or reconstructed from the current decision.
+const absentOriginalDisposalRecord: components['schemas']['DisposalRecord'] = { ...voidedDisposalRecord, original: null }
+// @ts-expect-error Pure financial correction does not acquire another physical Unit body proof.
+const physicalDisposalCorrection: components['schemas']['DisposalCorrectionWrite'] = { ...disposalVoidDecision, unit_revision: 13 }
+// @ts-expect-error Original Asset interpretation is independently required in the body.
+const implicitCorrectionAsset: components['schemas']['DisposalCorrectionWrite'] = { action: 'void', replacement: null, reason: 'Explicit reason' }
+// @ts-expect-error Replacement cannot mean null financial decision.
+const nullDisposalReplacement: components['schemas']['DisposalCorrectionWrite'] = { ...disposalVoidDecision, action: 'replace' }
+// @ts-expect-error Non-sale correction still requires literal zero proceeds in the actual client request.
+const paidNonSaleCorrection = purchaseTransport.POST('/units/{id}/disposal-corrections', { params: { path: { id: 'unit' }, header: correctionHeaders }, body: { ...disposalReplacementDecision, replacement: { ...disposalReplacementDecision.replacement, realized_proceeds_minor: 1 } } })
+// @ts-expect-error A real marker object is not a disposal void on the wire.
+const markedDisposalVoid = purchaseTransport.POST('/units/{id}/disposal-corrections', { params: { path: { id: 'unit' }, header: correctionHeaders }, body: { ...disposalVoidDecision, replacement: { $write: null } } })
+// @ts-expect-error Financial correction requires the original subject If-Match too.
+const unprovenDisposalCorrection = purchaseTransport.POST('/units/{id}/disposal-corrections', { params: { path: { id: 'unit' }, header: authHeaders }, body: disposalVoidDecision })
+// @ts-expect-error A void history entry must retain explicit null current state afterward.
+const activeDisposalVoidReply: components['schemas']['DisposalCorrection'] = { ...disposalVoidEntry, after: disposalRecord }
+// @ts-expect-error Reinstatement must retain an actual complete current financial decision.
+const nullDisposalReplacementReply: components['schemas']['DisposalCorrection'] = { ...disposalVoidEntry, action: 'replace' }
+// @ts-expect-error Live history pages require an explicit terminal continuation.
+const incompleteCorrectionPage: components['schemas']['PurchaseLineCorrectionList'] = { data: [lineVoidEntry] }
+void [disposalRecord, voidedDisposalRecord, lineVoidEntry, lineReplacementEntry, disposalVoidEntry, disposalReplacementEntry, correctionTransportCalls,
+  implicitLineVoid, nullLineReplacement, unprovenOldCorrectionItem, implicitReplacementUnit, bulkReplacementUnit, markedLineVoid,
+  mutableLineCorrectionEntry, rebasedLineCorrectionReply, implicitDisposalRecord, absentOriginalDisposalRecord, physicalDisposalCorrection,
+  implicitCorrectionAsset, nullDisposalReplacement, paidNonSaleCorrection, markedDisposalVoid, unprovenDisposalCorrection,
+  activeDisposalVoidReply, nullDisposalReplacementReply, incompleteCorrectionPage]
