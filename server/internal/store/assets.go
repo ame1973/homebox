@@ -305,11 +305,18 @@ func (value Cost) validateDomainResult() error {
 		value.Revision < 1 || value.Revision > maxSafeInteger {
 		return ErrDomainState
 	}
-	switch value.Kind {
-	case "maintenance", "repair", "accessory", "fee", "refund", "adjustment":
-		return nil
-	default:
+	if !validCostKind(value.Kind) {
 		return ErrDomainState
+	}
+	return nil
+}
+
+func validCostKind(value string) bool {
+	switch value {
+	case "maintenance", "repair", "accessory", "fee", "refund", "adjustment":
+		return true
+	default:
+		return false
 	}
 }
 
