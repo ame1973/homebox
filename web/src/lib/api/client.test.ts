@@ -88,6 +88,7 @@ describe('safe domain error boundary', () => {
     ['QUANTITY_OVERFLOW', 409], ['UNIT_HAS_HISTORY', 409], ['UNIT_DISPOSED', 409], ['ASSET_LIFECYCLE_REQUIRED', 409],
     ['INVALID_PURCHASE_URL', 400], ['PURCHASE_CURRENCY_LOCKED', 409],
     ['PURCHASE_CURRENCY_CONFLICT', 409], ['ASSET_COST_BASIS_CONFLICT', 409], ['ASSET_TOTAL_OVERFLOW', 409],
+    ['INVALID_ASSET_URL', 400], ['ASSET_CURRENCY_CONFLICT', 409], ['ASSET_HISTORY_LOCKED', 409],
     ['ARBITRARY_PRIVATE_DIAGNOSTIC', 503],
   ] as const)('retains only allowlisted metadata for %s', async (code, status) => {
     const { ApiError, requestData } = await import('./client')
