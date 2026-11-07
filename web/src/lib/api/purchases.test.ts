@@ -352,7 +352,7 @@ describe('complete independent purchase replies', () => {
 
   it('keeps financial conflicts safe, preserves caller metadata and reconciles only an explicit identical request', async () => {
     const api = await import('./purchases')
-    for (const code of ['REVISION_CONFLICT', 'IDEMPOTENCY_CONFLICT', 'IDEMPOTENCY_EXPIRED', 'PURCHASE_CURRENCY_LOCKED', 'PURCHASE_CURRENCY_CONFLICT', 'ASSET_COST_BASIS_CONFLICT', 'ASSET_LIFECYCLE_REQUIRED', 'TRACKING_MODE_CONFLICT']) {
+    for (const code of ['REVISION_CONFLICT', 'IDEMPOTENCY_CONFLICT', 'IDEMPOTENCY_EXPIRED', 'PURCHASE_CURRENCY_LOCKED', 'PURCHASE_CURRENCY_CONFLICT', 'ASSET_COST_BASIS_CONFLICT', 'ASSET_LIFECYCLE_REQUIRED', 'ASSET_TOTAL_OVERFLOW', 'TRACKING_MODE_CONFLICT']) {
       fetchMock.mockResolvedValueOnce(reply({ error: { code, request_id: 'safe-request', message: 'private amount/source', details: { path: '/private/homebox.sqlite' } } }, undefined, 409))
       const error = await api.createPurchaseLine(purchase.id, allocation, lineContext()).catch((error: unknown) => error)
       expect(error).toMatchObject({ code, status: 409, requestId: 'safe-request' })

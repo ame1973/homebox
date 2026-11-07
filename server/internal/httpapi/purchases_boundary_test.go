@@ -243,7 +243,7 @@ func TestPurchaseErrorsAreStaticSafeAndNeverChangeCookiesOrETags(t *testing.T) {
 		{store.ErrDomainInput, 422, "VALIDATION_ERROR"}, {store.ErrNotFound, 404, "NOT_FOUND"}, {store.ErrInvalidCursor, 400, "INVALID_CURSOR"},
 		{store.ErrPreconditionRequired, 409, "PRECONDITION_REQUIRED"}, {store.ErrRevisionConflict, 409, "REVISION_CONFLICT"}, {store.ErrIdempotencyExpired, 409, "IDEMPOTENCY_EXPIRED"},
 		{store.ErrPurchaseCurrencyLocked, 409, "PURCHASE_CURRENCY_LOCKED"}, {store.ErrPurchaseCurrency, 409, "PURCHASE_CURRENCY_CONFLICT"}, {store.ErrPurchaseAssetBasis, 409, "ASSET_COST_BASIS_CONFLICT"},
-		{store.ErrPurchaseAssetLifecycle, 409, "ASSET_LIFECYCLE_REQUIRED"}, {store.ErrUnitTracking, 409, "TRACKING_MODE_CONFLICT"},
+		{store.ErrAssetOverflow, 409, "ASSET_TOTAL_OVERFLOW"}, {store.ErrUnitTracking, 409, "TRACKING_MODE_CONFLICT"},
 		{store.ErrDomainState, 503, "SERVICE_UNAVAILABLE"}, {store.ErrRevisionOverflow, 503, "SERVICE_UNAVAILABLE"}, {errors.New("private /data/homebox.sqlite password=secret"), 503, "SERVICE_UNAVAILABLE"},
 	} {
 		w := httptest.NewRecorder()

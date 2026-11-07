@@ -166,8 +166,8 @@ func writePurchaseError(w http.ResponseWriter, err error, requestID string) {
 		status, code, message = http.StatusConflict, "PURCHASE_CURRENCY_CONFLICT", "Use a supported finite-minor-unit currency compatible with the reviewed financial source."
 	case errors.Is(err, store.ErrPurchaseAssetBasis):
 		status, code, message = http.StatusConflict, "ASSET_COST_BASIS_CONFLICT", "A manual asset acquisition basis cannot also receive a purchase allocation."
-	case errors.Is(err, store.ErrPurchaseAssetLifecycle):
-		status, code, message = http.StatusConflict, "ASSET_LIFECYCLE_REQUIRED", "Use the separate asset financial workflow for backed acquisition."
+	case errors.Is(err, store.ErrAssetOverflow):
+		status, code, message = http.StatusConflict, "ASSET_TOTAL_OVERFLOW", "The proposed asset totals exceed the exact safe financial range. Review the financial source; nothing was allocated."
 	case errors.Is(err, store.ErrUnitTracking):
 		status, code, message = http.StatusConflict, "TRACKING_MODE_CONFLICT", "A named Unit allocation requires an individually tracked Item."
 	}

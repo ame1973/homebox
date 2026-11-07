@@ -191,11 +191,16 @@ test.describe('real retained purchase collections and financial guards', () => {
       }
       for (let index = 0; index < 204; index++) { const line = { id: `extra-${index}`, purchase_id: 'new', item_id: 'new', item_unit_id: null, quantity_base: index + 1, paid_minor: index, note: '' }; allocation.run(line.id, line.purchase_id, line.item_id, null, line.quantity_base, line.paid_minor, ''); baseline('purchase_line', line.id, line) }
       const purchase = { id: 'asset-purchase', merchant_name: '實際資產採購', purchased_at: now, currency: 'JPY', receipt_note: '' }; header.run(purchase.id, purchase.merchant_name, now, 'JPY', '', now); baseline('purchase', purchase.id, purchase)
-      for (const [id, basis, currency] of [['manual', 'manual', 'JPY'], ['foreign', 'purchase', 'USD'], ['compatible', 'purchase', 'JPY']] as const) {
+      for (const [id, basis, currency] of [['manual', 'manual', 'JPY'], ['foreign', 'purchase', 'USD'], ['compatible', 'purchase', 'JPY'], ['overflow', 'purchase', 'JPY']] as const) {
         const unit = { id, item_id: 'asset-item', location_id: null, asset_code: `AST-${id}`, serial_number: null, notes: '', status: 'stored' }
         db.prepare('INSERT INTO item_units(id,item_id,asset_code,created_at,updated_at) VALUES(?,?,?,?,?)').run(id, unit.item_id, unit.asset_code, now, now); baseline('unit', id, unit); counter.run('search_doc', JSON.stringify(['unit', id]))
         db.prepare('INSERT INTO asset_profiles(item_unit_id,cost_basis,manual_acquisition_minor,currency,created_at,updated_at) VALUES(?,?,?,?,?,?)').run(id, basis, basis === 'manual' ? 0 : null, currency, now, now)
+        baseline('asset', id, { item_unit_id: id, cost_basis: basis, currency, manual_acquisition_minor: basis === 'manual' ? 0 : null, in_service_at: null, retired_at: null, estimated_residual_minor: null, usage_unit: 'times' })
       }
+      const overflow = { id: 'overflow-purchase', merchant_name: '既有安全範圍上限', purchased_at: now, currency: 'JPY', receipt_note: '' }
+      header.run(overflow.id, overflow.merchant_name, now, overflow.currency, '', now); baseline('purchase', overflow.id, overflow)
+      const overflowLine = { id: 'overflow-line', purchase_id: overflow.id, item_id: 'asset-item', item_unit_id: 'overflow', quantity_base: 1, paid_minor: Number.MAX_SAFE_INTEGER, note: '' }
+      allocation.run(overflowLine.id, overflow.id, overflowLine.item_id, overflowLine.item_unit_id, 1, overflowLine.paid_minor, ''); baseline('purchase_line', overflowLine.id, overflowLine)
       db.exec('COMMIT'); expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
     } finally { db.close() }
   } } })
@@ -204,11 +209,29 @@ test.describe('real retained purchase collections and financial guards', () => {
     await page.goto('/items/new/purchases'); await expect(page.getByText(`${text.associatedCount}205`, { exact: true })).toBeVisible(); expect(reads.filter((url) => url.pathname.endsWith('/purchases') && url.searchParams.has('cursor'))).toHaveLength(2)
     await page.getByRole('link', { name: '"既有商家 0"', exact: true }).click(); await expect(page).toHaveURL(`${application.url}/purchases/new/view`); await expect(page.getByText(`${text.lineCount}205`, { exact: true })).toBeVisible(); await expect(page.getByText('"ZZZ"', { exact: true })).toBeVisible(); expect(reads.filter((url) => url.pathname.endsWith('/lines') && url.searchParams.has('cursor'))).toHaveLength(2); await accessible(page)
   })
-  test('displays all three genuine authoritative asset basis/currency/unfinished-producer guards without financial or physical changes', async ({ page, application }) => {
+  test('displays genuine authoritative manual-basis, currency and exact-total guards without financial or physical changes', async ({ page, application }) => {
     await provision(page, application); const writes = watch(page); await page.goto('/purchases/asset-purchase/allocate/asset-item')
-    for (const [id, guidance] of [['manual', text.basisConflict], ['foreign', text.currencyConflict], ['compatible', text.assetRequired]] as const) {
+    for (const [id, guidance] of [['manual', text.basisConflict], ['foreign', text.currencyConflict], ['overflow', text.totalOverflow]] as const) {
       await fillLine(page, id); await page.getByRole('button', { name: text.review, exact: true }).click(); await page.getByRole('alertdialog').getByRole('button', { name: text.confirmLine, exact: true }).click(); await expect(page.getByRole('alertdialog')).toContainText(guidance); await page.getByRole('alertdialog').getByRole('button', { name: text.cancel, exact: true }).click(); await expect(page.getByRole('button', { name: text.review, exact: true })).toBeEnabled()
     }
     expect(writes).toHaveLength(3); expect((await (await page.request.get('/api/v1/purchases/asset-purchase/lines')).json()).data).toEqual([]); expect((await currentPurchase(page, 'asset-purchase')).revision).toBe(1); expect((await currentItem(page, 'asset-item')).revision).toBe(1)
+  })
+  test('reviews zero and positive acquisition allocations for an existing compatible Asset without changing its physical Unit', async ({ page, application }) => {
+    await provision(page, application); const writes = watch(page)
+    const original = await (await page.request.get('/api/v1/units/compatible')).json() as Unit
+    for (const amount of ['0', '123']) {
+      await page.goto('/purchases/asset-purchase/allocate/asset-item'); await fillLine(page, 'compatible'); await input(page, text.fields.paid_minor).fill(amount)
+      await page.getByRole('button', { name: text.review, exact: true }).click(); await expect(page.getByRole('alertdialog')).toContainText(text.allocationReviewHelp)
+      await confirm(page, text.confirmLine); await expect(page).toHaveURL(`${application.url}/purchases/asset-purchase`); await expect(page.getByRole('heading', { name: text.detail, exact: true })).toBeVisible()
+    }
+    const response = await page.request.get('/api/v1/purchases/asset-purchase/lines'); expect(response.status()).toBe(200)
+    const lines = (await response.json()) as components['schemas']['PurchaseLineList']
+    expect(lines.next_cursor).toBeNull(); expect(lines.data).toHaveLength(2); expect(new Set(lines.data.map((line) => line.id)).size).toBe(2)
+    expect(lines.data.map((line) => line.paid_minor).sort((left, right) => left - right)).toEqual([0, 123])
+    for (const line of lines.data) expect(line).toMatchObject({ revision: 1, item_id: 'asset-item', item_unit_id: 'compatible', quantity_base: 1, note: '  整筆分攤 é\n保留空白  ' })
+    expect((await currentPurchase(page, 'asset-purchase')).revision).toBe(3); expect((await currentItem(page, 'asset-item')).revision).toBe(3)
+    expect(await (await page.request.get('/api/v1/units/compatible')).json()).toEqual(original)
+    expect(writes).toHaveLength(2); expect(writes.map((request) => request.proof)).toEqual(['"1"', '"2"'])
+    expect(writes.map((request) => JSON.parse(request.body ?? '{}').item_revision)).toEqual([1, 2]); await accessible(page)
   })
 })

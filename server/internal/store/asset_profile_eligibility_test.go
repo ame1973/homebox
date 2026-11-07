@@ -156,7 +156,7 @@ func TestAssetProfileNoopAtSafeLimitsAndEquivalentRetirementRemainExact(t *testi
 	}
 }
 
-func TestAssetProfilePresenceActivatesExistingHoldingAndPurchaseGuardsWithoutEnablingIntegration(t *testing.T) {
+func TestAssetProfilePresenceGuardsPhysicalLifecycleAndManualAcquisition(t *testing.T) {
 	fixture := holdingsFixture(t)
 	service := assetReader(t, fixture)
 	if _, err := service.PutProfile(t.Context(), fixture.token, "profile-guard-opt-in", fixture.unit.ID, fixture.unit.Revision, manualProfileInput(fixture.individual.Revision, 0)); err != nil {
@@ -174,18 +174,18 @@ func TestAssetProfilePresenceActivatesExistingHoldingAndPurchaseGuardsWithoutEna
 		t.Fatal("ordinary status bypassed the dedicated financial lifecycle", value, err)
 	}
 	requireAssetProfileState(t, fixture.store, before)
-	purchase, p := purchaseCommands(t)
-	input := AssetProfileWrite{ItemRevision: purchase.individual.Revision, CostBasis: "purchase", Currency: "JPY", UsageUnit: "times"}
-	if _, err := assetReader(t, purchase.holdingFixture).PutProfile(t.Context(), purchase.token, "profile-purchase-gate", purchase.unit.ID, purchase.unit.Revision, input); err != nil {
-		t.Fatal(err)
-	}
-	item, err := purchase.catalog.Get(t.Context(), purchase.token, purchase.individual.ID)
+	purchases, err := NewPurchases(fixture.auth)
 	if err != nil {
 		t.Fatal(err)
 	}
-	before = assetProfileState(t, purchase.store)
-	if value, err := p.CreateLine(t.Context(), purchase.token, "profile-still-gated-line", purchase.purchase.ID, purchase.purchase.Revision, PurchaseLineCreate{ItemID: item.ID, ItemRevision: item.Revision, ItemUnitID: &purchase.unit.ID, QuantityBase: 1, PaidMinor: 0}); !errors.Is(err, ErrPurchaseAssetLifecycle) || value != (PurchaseLine{}) {
-		t.Fatal("profile-only producer implicitly enabled unsupported acquisition integration", value, err)
+	purchase := createPurchaseCommand(t, purchases, fixture.token, "profile-manual-purchase", "JPY")
+	item, err := fixture.catalog.Get(t.Context(), fixture.token, fixture.individual.ID)
+	if err != nil {
+		t.Fatal(err)
 	}
-	requireAssetProfileState(t, purchase.store, before)
+	before = assetProfileState(t, fixture.store)
+	if value, err := purchases.CreateLine(t.Context(), fixture.token, "profile-manual-line", purchase.ID, purchase.Revision, PurchaseLineCreate{ItemID: item.ID, ItemRevision: item.Revision, ItemUnitID: &fixture.unit.ID, QuantityBase: 1, PaidMinor: 0}); !errors.Is(err, ErrPurchaseAssetBasis) || value != (PurchaseLine{}) {
+		t.Fatal("manual zero basis implicitly gained a second acquisition interpretation", value, err)
+	}
+	requireAssetProfileState(t, fixture.store, before)
 }

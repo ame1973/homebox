@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"time"
 
 	"homebox/internal/currency"
@@ -14,7 +15,6 @@ var (
 	ErrPurchaseCurrency       = errors.New("currency is unsupported for new money or conflicts with allocated financial source")
 	ErrPurchaseCurrencyLocked = errors.New("purchase currency cannot change after allocation")
 	ErrPurchaseAssetBasis     = errors.New("manual asset acquisition cannot also use a purchase allocation")
-	ErrPurchaseAssetLifecycle = errors.New("asset-backed acquisition requires the dedicated asset financial producer")
 )
 
 type PurchaseCreate struct {
@@ -255,6 +255,7 @@ func (p *Purchases) CreateLine(ctx context.Context, token, key, purchaseID strin
 		if _, ok := currency.MinorUnits(purchase.Currency); !ok {
 			return PurchaseLine{}, ErrPurchaseCurrency
 		}
+		var asset *Asset
 		if input.ItemUnitID != nil {
 			if item.TrackingMode != "individual" {
 				return PurchaseLine{}, ErrUnitTracking
@@ -266,7 +267,8 @@ func (p *Purchases) CreateLine(ctx context.Context, token, key, purchaseID strin
 			if unit.ItemID != item.ID {
 				return PurchaseLine{}, ErrDomainInput
 			}
-			if err = m.requirePurchaseAssetBasis(purchase, unit); err != nil {
+			asset, err = m.purchaseAsset(purchase, unit)
+			if err != nil {
 				return PurchaseLine{}, err
 			}
 		}
@@ -274,7 +276,7 @@ func (p *Purchases) CreateLine(ctx context.Context, token, key, purchaseID strin
 		if err != nil {
 			return PurchaseLine{}, err
 		}
-		_, err = m.tx.ExecContext(ctx, `INSERT INTO purchase_lines(id,purchase_id,item_id,item_unit_id,quantity_base,paid_minor,note,created_at,mutation_event_id) VALUES(?,?,?,?,?,?,?,?,?)`, id, purchaseID, input.ItemID, input.ItemUnitID, input.QuantityBase, input.PaidMinor, input.Note, stamp(m.now), m.eventID)
+		err = requireDomainRow(m.tx.ExecContext(ctx, `INSERT INTO purchase_lines(id,purchase_id,item_id,item_unit_id,quantity_base,paid_minor,note,created_at,mutation_event_id) VALUES(?,?,?,?,?,?,?,?,?)`, id, purchaseID, input.ItemID, input.ItemUnitID, input.QuantityBase, input.PaidMinor, input.Note, stamp(m.now), m.eventID))
 		if err != nil {
 			return PurchaseLine{}, err
 		}
@@ -291,31 +293,45 @@ func (p *Purchases) CreateLine(ctx context.Context, token, key, purchaseID strin
 		if err = m.touchItemSearch(input.ItemID, true); err != nil {
 			return PurchaseLine{}, err
 		}
-		return loadPurchaseLine(ctx, m.tx, id)
+		if asset != nil {
+			if err = m.finishAssetEvent(*asset); err != nil {
+				return PurchaseLine{}, err
+			}
+			stored, err := loadAsset(ctx, m.tx, asset.ItemUnitID)
+			if err != nil {
+				return PurchaseLine{}, err
+			}
+			if stored.Revision != asset.Revision+1 || !reflect.DeepEqual(stored.AssetData, asset.AssetData) {
+				return PurchaseLine{}, ErrDomainState
+			}
+		}
+		stored, err := loadPurchaseLine(ctx, m.tx, id)
+		if err != nil {
+			return PurchaseLine{}, err
+		}
+		expected := PurchaseLineData{id, purchaseID, input.ItemID, input.ItemUnitID, input.QuantityBase, input.PaidMinor, input.Note}
+		if stored.Revision != 1 || !reflect.DeepEqual(stored.PurchaseLineData, expected) {
+			return PurchaseLine{}, ErrDomainState
+		}
+		return stored, nil
 	})
 }
 
-// Reading a retained profile is not implicit opt-in, conversion or profile repair.
-// Even compatible backed acquisition waits for its own aggregate producer: never
-// change asset costs without atomic asset authority/current/outbox publication.
-func (m *mutationTx) requirePurchaseAssetBasis(purchase Purchase, unit Unit) error {
-	var basis, code string
-	var manual sql.NullInt64
-	err := m.tx.QueryRowContext(m.ctx, "SELECT cost_basis,currency,manual_acquisition_minor FROM asset_profiles WHERE item_unit_id=?", unit.ID).Scan(&basis, &code, &manual)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
+// The original Item proof freezes profile changes too: every financial producer
+// advances that aggregate. Never opt in, change basis/currency or repair authority.
+func (m *mutationTx) purchaseAsset(purchase Purchase, unit Unit) (*Asset, error) {
+	asset, err := loadAsset(m.ctx, m.tx, unit.ID)
+	if errors.Is(err, ErrNotFound) {
+		return nil, nil
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if !validCurrencyCode(code) || (basis != "purchase" && basis != "manual") || (basis == "purchase" && manual.Valid) || (basis == "manual" && (!manual.Valid || manual.Int64 < 0 || manual.Int64 > maxSafeInteger)) {
-		return ErrDomainState
+	if asset.CostBasis == "manual" {
+		return nil, ErrPurchaseAssetBasis
 	}
-	if basis == "manual" {
-		return ErrPurchaseAssetBasis
+	if asset.Currency != purchase.Currency {
+		return nil, ErrPurchaseCurrency
 	}
-	if code != purchase.Currency {
-		return ErrPurchaseCurrency
-	}
-	return ErrPurchaseAssetLifecycle
+	return &asset, nil
 }

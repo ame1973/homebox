@@ -300,7 +300,7 @@ it('returns through login to a safe allocation route with empty financial fields
   await ready(); expect(work.router.state.location.pathname).toBe('/purchases/purchase/allocate/quantity'); expect(field(text.fields.quantity_base)).toHaveValue(''); expect(field(text.fields.paid_minor)).toHaveValue('')
   expect(work.router.state.location.state).toMatchObject({ purchaseList: '/purchases?currency=JPY', catalogList: '/items?status=active' }); expect(work.router.state.location.state).not.toHaveProperty('paid_minor')
 })
-it.each(['PURCHASE_CURRENCY_CONFLICT', 'ASSET_COST_BASIS_CONFLICT', 'ASSET_LIFECYCLE_REQUIRED'] as const)('shows an authoritative safe financial guard without turning it into physical receipt: %s', async (code) => {
+it.each(['PURCHASE_CURRENCY_CONFLICT', 'ASSET_COST_BASIS_CONFLICT', 'ASSET_LIFECYCLE_REQUIRED', 'ASSET_TOTAL_OVERFLOW'] as const)('shows an authoritative safe financial guard without turning it into physical receipt: %s', async (code) => {
   vi.mocked(api.createPurchaseLine).mockRejectedValue(new ApiError(code, { status: 409 })); mount('/purchases/purchase/allocate/item'); await ready(); fillLine(true); await click(text.review)
   await userEvent.setup().click(within(screen.getByRole('alertdialog')).getByRole('button', { name: text.confirmLine })); await waitFor(() => expect(within(screen.getByRole('alertdialog')).getByRole('alert')).toBeVisible())
   expect(within(screen.getByRole('alertdialog')).getByRole('button', { name: text.confirmLine })).toBeDisabled(); expect(holdings.fetchStockPage).not.toHaveBeenCalled()

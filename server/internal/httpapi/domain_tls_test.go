@@ -11,11 +11,13 @@ import (
 	"testing"
 	"testing/fstest"
 	"time"
+
+	"homebox/internal/store"
 )
 
 // Each caller receives an independent private store, limiter, TLS socket and
 // cookie jar. Credentials never enter diagnostic captures or request URLs.
-func domainTLSFixture(t *testing.T) (func(method, path, body, key, revision string) *httptest.ResponseRecorder, func()) {
+func domainTLSFixture(t *testing.T, captureSession ...func(*store.Auth, string)) (func(method, path, body, key, revision string) *httptest.ResponseRecorder, func()) {
 	t.Helper()
 	auth := newTestAuth(t)
 	setupAccount(t, auth, true)
@@ -87,6 +89,9 @@ func domainTLSFixture(t *testing.T) (func(method, path, body, key, revision stri
 			t.Fatal("actual session could not obtain its in-memory CSRF proof")
 		}
 		csrf = token.Token
+		for _, capture := range captureSession {
+			capture(auth, cookies[0].Value)
+		}
 	}
 	login()
 	return call, login

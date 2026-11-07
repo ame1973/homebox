@@ -100,7 +100,7 @@ func TestPurchaseCommandsRejectInvalidInputBeforeAnyDomainSideEffect(t *testing.
 }
 
 func TestPurchaseAllocationTrackingOwnershipAndAssetDependenciesAreExplicitGuards(t *testing.T) {
-	for _, mode := range []string{"quantity Unit", "foreign Unit", "missing Unit", "manual asset", "foreign asset currency", "compatible asset", "unsafe manual source", "invalid asset currency"} {
+	for _, mode := range []string{"quantity Unit", "foreign Unit", "missing Unit", "manual asset", "foreign asset currency", "missing asset authority", "unsafe manual source", "invalid asset currency"} {
 		t.Run(mode, func(t *testing.T) {
 			fixture, p := purchaseCommands(t)
 			s := fixture.store
@@ -121,7 +121,7 @@ func TestPurchaseAllocationTrackingOwnershipAndAssetDependenciesAreExplicitGuard
 			default:
 				basis, code := "purchase", "JPY"
 				var manual any
-				want = ErrPurchaseAssetLifecycle
+				want = ErrDomainState
 				if mode == "manual asset" {
 					basis = "manual"
 					manual = int64(0)
@@ -141,6 +141,9 @@ func TestPurchaseAllocationTrackingOwnershipAndAssetDependenciesAreExplicitGuard
 					want = ErrDomainState
 				}
 				execSQL(t, s.db, "INSERT INTO asset_profiles(item_unit_id,cost_basis,currency,manual_acquisition_minor,created_at,updated_at) VALUES(?,?,?,?, 'legacy','legacy')", fixture.unit.ID, basis, code, manual)
+				if mode != "missing asset authority" {
+					execSQL(t, s.db, "INSERT INTO projection_revisions(entity_type,entity_id,revision) VALUES('asset',?,1)", fixture.unit.ID)
+				}
 			}
 			before := purchaseCommandState(t, s)
 			if value, err := p.CreateLine(t.Context(), fixture.token, "guarded-allocation", fixture.purchase.ID, fixture.purchase.Revision, input); !errors.Is(err, want) || value != (PurchaseLine{}) {

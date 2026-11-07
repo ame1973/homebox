@@ -44,7 +44,7 @@ A sent timeout/abort/malformed reply may have committed. Stop waiting does not u
 
 Dirty Back/navigation/reload has a stay/leave warning; Escape closes an unsent review or stops local pending waiting. Inputs remain volatile, not persistent drafts. An already initialized editor can retain input while offline, but a new offline visit does not invent a current authority from cached data. Reconnection refreshes reads only. Session loss clears private query/mutation/form context and returns to a whitelisted path after login; unsent amounts/secrets do not travel through history state. Long reviews use visible static focus, wrapping text and one keyboard-accessible outer scroller at enlarged text sizes.
 
-QR printing, camera, photos, public history, asset-backed financial producers, offline replica/persistent drafts and full sync remain separate implementation/acceptance gates. No placeholder controls claim those capabilities.
+QR printing, camera, photos, public history, dedicated Asset HTTP/browser workflows, offline replica/persistent drafts and full sync remain separate implementation/acceptance gates. No placeholder controls claim those capabilities.
 
 ## Distinct physical identities
 
@@ -252,7 +252,7 @@ Migration 0012 rebuilds only inventory-event storage to remove its live Unit FK 
 
 Shared Unit search publication uses the same retained asset-code/serial/notes bounds as the Unit source (10,000 code points), not an obsolete 128-character asset-code restriction. Unit and catalog invalidators rebuild from final approved source, preserve exact valid wide/control text and withhold every partial result on invalid UTF-8/bounds or materialization failure. They never copy a poisoned legacy cache or broaden a Unit's private identifiers into its owner/siblings.
 
-Future asset/batch producers must still validate their own original proof, apply physical/accounting rules, append actual immutable history and stage every required dependency inside the same transaction. The payload builder does not infer or authorize those workflows or generic deletion of zero balances. Public history reads, foreground review UI and complete sync remain separate implementation gates.
+Financial and batch producers must still validate their own original proof, apply physical/accounting rules, append actual immutable history and stage every required dependency inside the same transaction. The payload builder does not infer or authorize those workflows or generic deletion of zero balances. Public history reads, foreground review UI and complete sync remain separate implementation gates.
 
 ## Verification and remaining implementation
 
@@ -292,4 +292,4 @@ SDK tests separately drive all twelve adapters with exact one-request transport,
 
 Responsive route/component tests additionally exercise complete Item collections, all nine reviewed writers, nullable/partial fields, no-op suppression, original independent proofs, selected paths, manual count/measurement/Unit adoption, missing source, safe login returns, stale-cache initialization, read/session failures, offline input and original-key reconciliation. Real Go screen workflows cover every operation, genuine concurrent changes, altered location labels, changed measurement acknowledgement, archived equal counts/new-zero placement and committed malformed receipt/deletion replies. Back/Escape, actual logout/login/scoped-list returns and 200% long reviews with light/dark axe are separate browser checks; screenshot inspection is not treated as physical-device evidence.
 
-Still pending are public history reads, asset-backed lifecycle producers, QR/camera/media, physical holdings acceptance and complete sync. These are not marked passed by the Go/HTTP/SDK/screen tests above. Physical NAS/phone/operator TLS/VPN/off-host recovery gates remain blocked until actually performed.
+Still pending are public history reads, dedicated Asset lifecycle HTTP/browser workflows, QR/camera/media, physical holdings acceptance and complete sync. These are not marked passed by the Go/HTTP/SDK/screen tests above. Physical NAS/phone/operator TLS/VPN/off-host recovery gates remain blocked until actually performed.

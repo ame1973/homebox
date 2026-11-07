@@ -58,7 +58,7 @@ it.each([true, false])('provides an actionable actual empty header state, associ
   expect(screen.getByRole('heading', { name: associated ? text.emptyAssociated : text.empty })).toBeVisible()
 })
 it.each([
-  ['PURCHASE_CURRENCY_LOCKED', text.currencyLocked], ['PURCHASE_CURRENCY_CONFLICT', text.currencyConflict], ['ASSET_COST_BASIS_CONFLICT', text.basisConflict], ['ASSET_LIFECYCLE_REQUIRED', text.assetRequired], ['TRACKING_MODE_CONFLICT', text.allocationError], ['INVALID_PURCHASE_URL', messages.locations.validation], ['INVALID_RESPONSE', text.invalidRead], ['INVALID_QUERY', text.invalidRead], ['INVALID_CURSOR', text.invalidRead], ['NOT_FOUND', text.missingHelp], ['REVISION_CONFLICT', messages.locations.conflict], ['RATE_LIMITED', messages.locations.rate], ['UNKNOWN_ERROR', messages.locations.busy],
+  ['PURCHASE_CURRENCY_LOCKED', text.currencyLocked], ['PURCHASE_CURRENCY_CONFLICT', text.currencyConflict], ['ASSET_COST_BASIS_CONFLICT', text.basisConflict], ['ASSET_LIFECYCLE_REQUIRED', text.assetRequired], ['ASSET_TOTAL_OVERFLOW', text.totalOverflow], ['TRACKING_MODE_CONFLICT', text.allocationError], ['INVALID_PURCHASE_URL', messages.locations.validation], ['INVALID_RESPONSE', text.invalidRead], ['INVALID_QUERY', text.invalidRead], ['INVALID_CURSOR', text.invalidRead], ['NOT_FOUND', text.missingHelp], ['REVISION_CONFLICT', messages.locations.conflict], ['RATE_LIMITED', messages.locations.rate], ['UNKNOWN_ERROR', messages.locations.busy],
 ] as const)('renders only static safe purchase error guidance for %s', (code, guidance) => {
   render(<PurchaseError error={new ApiError(code, { retryAfterSeconds: 7 })} />)
   expect(screen.getByRole('alert')).toHaveTextContent(guidance)

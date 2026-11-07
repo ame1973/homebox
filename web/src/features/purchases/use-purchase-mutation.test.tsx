@@ -44,7 +44,7 @@ it('requires explicit review and single-flight confirmation, invalidating depend
   expect(work.result.current.canLeave()).toBe(true)
   work.dispose()
 })
-it.each(['NETWORK_ERROR', 'REQUEST_TIMEOUT', 'INVALID_RESPONSE', 'REVISION_CONFLICT', 'PURCHASE_CURRENCY_LOCKED', 'PURCHASE_CURRENCY_CONFLICT', 'ASSET_COST_BASIS_CONFLICT', 'ASSET_LIFECYCLE_REQUIRED', 'IDEMPOTENCY_EXPIRED'] as const)('retains exact original money, measurement, nullable intent and key after sent %s', async (code) => {
+it.each(['NETWORK_ERROR', 'REQUEST_TIMEOUT', 'INVALID_RESPONSE', 'REVISION_CONFLICT', 'PURCHASE_CURRENCY_LOCKED', 'PURCHASE_CURRENCY_CONFLICT', 'ASSET_COST_BASIS_CONFLICT', 'ASSET_LIFECYCLE_REQUIRED', 'ASSET_TOTAL_OVERFLOW', 'IDEMPOTENCY_EXPIRED'] as const)('retains exact original money, measurement, nullable intent and key after sent %s', async (code) => {
   const work = fixture()
   const uncertain = ['NETWORK_ERROR', 'REQUEST_TIMEOUT', 'INVALID_RESPONSE', 'IDEMPOTENCY_EXPIRED'].includes(code)
   vi.mocked(sendPurchaseCommand).mockRejectedValueOnce(new ApiError(code, { status: uncertain ? undefined : 409 }))
