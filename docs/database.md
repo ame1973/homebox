@@ -28,6 +28,7 @@ The default command timeout is two minutes. Set a larger positive timeout when m
 - Use a local POSIX filesystem. The Linux preflight rejects known SMB/CIFS/NFS filesystem types. This does not replace verification of the actual NAS storage configuration.
 - A process-lifetime lock allows one HomeBox owner per database. Stop the owning process before using these offline maintenance commands. Do not bypass this lock with another SQLite writer.
 - The database uses WAL, `synchronous=FULL`, a 5-second busy timeout, and foreign keys on every connection. Write transactions begin immediately, before reads that validate a mutation.
+- Mandatory domain current/outbox publication, reply/audit insertion and active-session activity updates must affect exactly one actual row. A nil driver error or stale insert identity cannot prove publication after a skipped write. Failure withholds the whole result and rolls back source/counters/publication/receipts, including no-op acknowledgements, reads and original-key replay. Cache deletion for a retained tombstone may legitimately affect zero rows; it is not a missing required insert.
 - Database paths are treated as literal filesystem paths, not user-provided SQLite DSNs. Database and lock-file symlinks are rejected.
 
 Do not store the database in the public web directory, a network share, or a container's ephemeral writable layer. Keep private data out of Git.

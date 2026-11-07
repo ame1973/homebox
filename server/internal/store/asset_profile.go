@@ -170,18 +170,7 @@ func canonicalAssetInstant(input, retained *string) *string {
 // Every financial source/context statement must affect exactly one real row;
 // RAISE(IGNORE) must not turn a missing write or before-image into success.
 func (m *mutationTx) execAssetRow(statement string, args ...any) error {
-	result, err := m.tx.ExecContext(m.ctx, statement, args...)
-	if err != nil {
-		return err
-	}
-	count, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if count != 1 {
-		return ErrDomainState
-	}
-	return nil
+	return requireDomainRow(m.tx.ExecContext(m.ctx, statement, args...))
 }
 
 func (m *mutationTx) recordAssetProfileChange(before *Asset, after Asset, input assetProfileCommand) error {

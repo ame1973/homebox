@@ -113,13 +113,13 @@ func runDomainMutation[T domainResult](ctx context.Context, a *Auth, token, key,
 		if err = m.flush(); err != nil {
 			return zero, err
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO api_idempotency(key,operation,request_sha256,response_status,response_json,created_at,expires_at)
- VALUES(?,?,?,200,?,?,?)`, scopedKey, operation, fingerprint, string(encoded), stamp(now), stamp(now.Add(domainReplyLifetime)))
+		err = requireDomainRow(tx.ExecContext(ctx, `INSERT INTO api_idempotency(key,operation,request_sha256,response_status,response_json,created_at,expires_at)
+ VALUES(?,?,?,200,?,?,?)`, scopedKey, operation, fingerprint, string(encoded), stamp(now), stamp(now.Add(domainReplyLifetime))))
 		if err != nil {
 			return zero, err
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO mutation_events(id,admin_id,dataset_epoch,operation,idempotency_key,occurred_at,reason,result_json,note)
- VALUES(?,?,?,?,?,?,?,?,?)`, eventID, session.Admin.ID, epoch, operation, scopedKey, stamp(now), m.reason, string(encoded), m.note)
+		err = requireDomainRow(tx.ExecContext(ctx, `INSERT INTO mutation_events(id,admin_id,dataset_epoch,operation,idempotency_key,occurred_at,reason,result_json,note)
+ VALUES(?,?,?,?,?,?,?,?,?)`, eventID, session.Admin.ID, epoch, operation, scopedKey, stamp(now), m.reason, string(encoded), m.note))
 		if err != nil {
 			return zero, err
 		}
@@ -183,8 +183,23 @@ func finishDomainSession(ctx context.Context, a *Auth, tx *sql.Tx, token string,
 	if current.ID != initial.ID || current.Admin != initial.Admin {
 		return ErrAuthentication
 	}
-	_, err = tx.ExecContext(ctx, "UPDATE sessions SET last_seen_at=? WHERE id=?", stamp(now), current.ID)
-	return err
+	return requireDomainRow(tx.ExecContext(ctx, "UPDATE sessions SET last_seen_at=? WHERE id=?", stamp(now), current.ID))
+}
+
+// Mandatory single-row writes must not silently succeed after RAISE(IGNORE).
+// Zero-row cache deletion is different and deliberately does not use this guard.
+func requireDomainRow(result sql.Result, err error) error {
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count != 1 {
+		return ErrDomainState
+	}
+	return nil
 }
 
 func readDomain[T any](ctx context.Context, a *Auth, token string, read func(*sql.Tx) (T, error)) (T, error) {
@@ -264,16 +279,16 @@ func (m *mutationTx) flush() error {
 				return err
 			}
 			payload = string(encoded)
-			_, err = m.tx.ExecContext(m.ctx, `INSERT INTO current_projections(entity_type,entity_id,entity_revision,payload_json,updated_at)
+			err = requireDomainRow(m.tx.ExecContext(m.ctx, `INSERT INTO current_projections(entity_type,entity_id,entity_revision,payload_json,updated_at)
  VALUES(?,?,?,?,?) ON CONFLICT(entity_type,entity_id) DO UPDATE SET entity_revision=excluded.entity_revision,
- payload_json=excluded.payload_json,updated_at=excluded.updated_at`, key.kind, key.id, pending.revision, payload, stamp(m.now))
+ payload_json=excluded.payload_json,updated_at=excluded.updated_at`, key.kind, key.id, pending.revision, payload, stamp(m.now)))
 			if err != nil {
 				return err
 			}
 		}
 		inserted, err := m.tx.ExecContext(m.ctx, `INSERT INTO sync_changes(entity_type,entity_id,operation,entity_revision,projection_json,created_at)
  VALUES(?,?,?,?,?,?)`, key.kind, key.id, operation, pending.revision, payload, stamp(m.now))
-		if err != nil {
+		if err = requireDomainRow(inserted, err); err != nil {
 			return err
 		}
 		seq, err := inserted.LastInsertId()
