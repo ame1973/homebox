@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { apiClient, requestData } from './client'
-import { createHeaders, deleteAckSchema, idSchema, input, pageQuerySchema, pathIDSchema, resourceRequest, revisionHeaders, revisionSchema, text,
+import { createHeaders, cursorSchema, deleteAckSchema, idSchema, input, pageQuerySchema, pathIDSchema, resourceRequest, revisionHeaders, revisionSchema, text,
   type CreateContext, type RevisionWriteContext, type RootWriteContext } from './domain'
 import type { components, operations } from './schema'
 
@@ -23,9 +23,9 @@ export const categoryCreateSchema: z.ZodType<components['schemas']['CategoryCrea
 export const categoryPatchSchema: z.ZodType<components['schemas']['CategoryWrite']> = z.strictObject({ name: nameSchema.optional(), parent_id: parentSchema.optional() })
   .refine((patch) => Object.values(patch).some((value) => value !== undefined))
 export const tagWriteSchema: z.ZodType<components['schemas']['TagWrite']> = z.strictObject({ name: nameSchema })
-const categoriesPageSchema: z.ZodType<CategoriesPage> = z.strictObject({ data: z.array(categorySchema).max(100), next_cursor: text(1, 2048).nullable().optional() })
+const categoriesPageSchema: z.ZodType<CategoriesPage> = z.strictObject({ data: z.array(categorySchema).max(100), next_cursor: cursorSchema().nullable().optional() })
   .refine((page) => new Set(page.data.map((category) => category.id)).size === page.data.length)
-const tagsPageSchema: z.ZodType<TagsPage> = z.strictObject({ data: z.array(tagSchema).max(100), next_cursor: text(1, 2048).nullable().optional() })
+const tagsPageSchema: z.ZodType<TagsPage> = z.strictObject({ data: z.array(tagSchema).max(100), next_cursor: cursorSchema().nullable().optional() })
   .refine((page) => new Set(page.data.map((tag) => tag.id)).size === page.data.length)
 
 // Live metadata is explicitly paged by the caller, never silently read as a

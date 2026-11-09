@@ -861,3 +861,45 @@ void [disposalRecord, voidedDisposalRecord, lineVoidEntry, lineReplacementEntry,
   mutableLineCorrectionEntry, rebasedLineCorrectionReply, implicitDisposalRecord, absentOriginalDisposalRecord, physicalDisposalCorrection,
   implicitCorrectionAsset, nullDisposalReplacement, paidNonSaleCorrection, markedDisposalVoid, unprovenDisposalCorrection,
   activeDisposalVoidReply, nullDisposalReplacementReply, incompleteCorrectionPage]
+
+// Financial correction adapters retain every original source, never loose counters.
+declare const financialSDK: typeof import('../src/lib/api/financial-corrections')
+const originalCorrectionItem = { ...currentItem, id: 'item', revision: 11 }
+const replacementCorrectionItem = { ...currentItem, id: 'other-item', revision: 17, tracking_mode: 'quantity' as const }
+const purchaseCorrectionContext = { ...writeContext, purchase: reviewedPurchase, line: correctionOriginalLine, item: originalCorrectionItem, replacementItem: null }
+const replacementCorrectionContext = { ...purchaseCorrectionContext, replacementItem: replacementCorrectionItem }
+const disposalCorrectionContext = { ...writeContext, disposal: disposalRecord, asset: { ...retainedAsset, revision: 13 } }
+const correctionSDKCalls = [
+  financialSDK.fetchPurchaseCorrectionsPage('purchase', { limit: 50 }, new AbortController().signal),
+  financialSDK.correctPurchaseLine('purchase', lineVoidDecision, purchaseCorrectionContext),
+  financialSDK.correctPurchaseLine('purchase', lineReplacementDecision, replacementCorrectionContext),
+  financialSDK.fetchDisposalRecord('unit', new AbortController().signal),
+  financialSDK.fetchDisposalCorrectionsPage('unit', {}, new AbortController().signal),
+  financialSDK.correctDisposal('unit', disposalVoidDecision, disposalCorrectionContext),
+  financialSDK.correctDisposal('unit', disposalReplacementDecision, { ...disposalCorrectionContext, disposal: voidedDisposalRecord }),
+]
+// @ts-expect-error A reviewed Purchase alone is not the original Line/Item context.
+const ownerlessSDKCorrection = financialSDK.correctPurchaseLine('purchase', lineVoidDecision, { ...writeContext, purchase: reviewedPurchase })
+// @ts-expect-error Void still explicitly records the absence of a replacement Item.
+const implicitSDKReplacementContext = financialSDK.correctPurchaseLine('purchase', lineVoidDecision, { ...writeContext, purchase: reviewedPurchase, line: correctionOriginalLine, item: originalCorrectionItem })
+// @ts-expect-error A loose or substituted counter cannot override the reviewed Purchase.
+const overriddenSDKCorrectionProof = financialSDK.correctPurchaseLine('purchase', lineVoidDecision, { ...purchaseCorrectionContext, expectedRevision: 9 })
+// @ts-expect-error Void retains a literal-null replacement rather than a marker.
+const markedSDKCorrection = financialSDK.correctPurchaseLine('purchase', { ...lineVoidDecision, replacement: { $write: null } }, purchaseCorrectionContext)
+// @ts-expect-error A replacement must explicitly state its nullable Unit intent.
+const implicitSDKCorrectionUnit = financialSDK.correctPurchaseLine('purchase', { ...lineReplacementDecision, replacement: { item_id: 'other-item', item_revision: 17, quantity_base: 2, paid_minor: 0 } }, replacementCorrectionContext)
+// @ts-expect-error A named replacement Unit cannot carry a bulk quantity.
+const bulkSDKCorrectionUnit = financialSDK.correctPurchaseLine('purchase', { ...lineReplacementDecision, replacement: { ...lineReplacementDecision.replacement, item_unit_id: 'unit', quantity_base: 2 } }, replacementCorrectionContext)
+// @ts-expect-error Financial disposal correction retains the actual record, not a loose proof.
+const ownerlessSDKDisposalCorrection = financialSDK.correctDisposal('unit', disposalVoidDecision, { ...writeContext, asset: retainedAsset, expectedRevision: 7 })
+// @ts-expect-error The original Asset is independently required with the DisposalRecord.
+const assetlessSDKDisposalCorrection = financialSDK.correctDisposal('unit', disposalVoidDecision, { ...writeContext, disposal: disposalRecord })
+// @ts-expect-error Disposal financial writes never acquire an extra physical proof.
+const physicalSDKDisposalCorrection = financialSDK.correctDisposal('unit', { ...disposalVoidDecision, unit_revision: 13 }, disposalCorrectionContext)
+// @ts-expect-error Non-sale replacement cannot carry nonzero proceeds.
+const paidSDKNonSaleCorrection = financialSDK.correctDisposal('unit', { ...disposalReplacementDecision, replacement: { ...disposalReplacementDecision.replacement, realized_proceeds_minor: 1 } }, disposalCorrectionContext)
+// @ts-expect-error Owned correction history accepts paging only.
+const filteredSDKCorrectionHistory = financialSDK.fetchDisposalCorrectionsPage('unit', { currency: 'JPY' }, new AbortController().signal)
+void [correctionSDKCalls, ownerlessSDKCorrection, implicitSDKReplacementContext, overriddenSDKCorrectionProof, markedSDKCorrection,
+  implicitSDKCorrectionUnit, bulkSDKCorrectionUnit, ownerlessSDKDisposalCorrection, assetlessSDKDisposalCorrection,
+  physicalSDKDisposalCorrection, paidSDKNonSaleCorrection, filteredSDKCorrectionHistory]

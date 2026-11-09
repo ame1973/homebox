@@ -212,9 +212,9 @@ describe('eleven stateless financial adapters', () => {
       await api.fetchAssetCostsPage(id, {}, signal())
       expect(decodeURIComponent(new URL(captured().url).pathname)).toBe(`/api/v1/units/${id}/costs`)
     }
-    const cursor = '😀'.repeat(1364) + 'x'.repeat(9)
+    const cursor = '😀'.repeat(512)
     for (const fetchPage of [(q: { cursor: string }) => api.fetchAssetsPage(q, signal()), (q: { cursor: string }) => api.fetchAssetUsagePage(unit.id, q, signal()), (q: { cursor: string }) => api.fetchAssetCostsPage(unit.id, q, signal())]) {
-      await fetchPage({ cursor }); expect(new URL(captured().url).search.slice(1)).toHaveLength(16_384)
+      await fetchPage({ cursor }); expect(new URL(captured().url).search.slice(1)).toHaveLength(6151)
       await expect(fetchPage({ cursor: cursor + 'x' })).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
     }
     fetchMock.mockResolvedValueOnce(reply(summary))

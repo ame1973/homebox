@@ -1,6 +1,6 @@
 import { itemPageQuerySchema, type ItemPageQuery } from './api/catalog'
 import { ApiError, validText } from './api/client'
-import { input, pathIDSchema } from './api/domain'
+import { input, pathIDSchema, validCursor } from './api/domain'
 import { purchasePageQuerySchema, type PurchasePageQuery } from './api/purchases'
 import { catalogQuery } from './catalog-navigation'
 
@@ -53,7 +53,7 @@ export function purchaseReturnPath(value: unknown): string | undefined {
   } catch { return undefined }
 }
 export function purchaseCursorTrail(value: unknown): (string | null)[] {
-  return Array.isArray(value) && value.every((cursor) => cursor === null || typeof cursor === 'string' && validText(cursor, 1, 2048)) ? [...value] : []
+  return Array.isArray(value) && value.every((cursor) => cursor === null || typeof cursor === 'string' && validCursor(cursor)) ? [...value] : []
 }
 export function purchaseNavigationState(candidate: unknown, cursors: unknown, item: unknown) {
   const safe = purchaseReturnPath(candidate)

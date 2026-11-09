@@ -82,7 +82,7 @@ describe('seven stateless purchase transports', () => {
     } finally { vi.useRealTimers() }
   })
 
-  it('preserves exact filters, imported IDs, encoded cursors and the actual raw query budget', async () => {
+  it('preserves exact filters, imported IDs and decoded UTF-8 cursor bounds', async () => {
     const api = await import('./purchases')
     fetchMock.mockImplementation(async () => reply({ data: [], next_cursor: null }))
     const query = { from: '0001-01-01', to: '9999-12-31', currency: 'ZZZ', category_id: '分類 +?#', location_id: '位置 +?#',
@@ -100,11 +100,10 @@ describe('seven stateless purchase transports', () => {
       request = fetchMock.mock.lastCall?.[0] as Request
       expect(decodeURIComponent(new URL(request.url).pathname)).toBe(`/api/v1/items/${id}/purchases`)
     }
-    // 1,364 encoded astral characters plus nine ASCII characters fill 16 KiB
-    // exactly, including cursor=. No custom serializer or production override.
-    const cursor = '😀'.repeat(1364) + 'x'.repeat(9)
+    // Cursor limits apply to decoded UTF-8 bytes; percent encoding is separate.
+    const cursor = '😀'.repeat(512)
     await api.fetchPurchasesPage({ cursor }, signal())
-    expect(new URL(capturedRequest().url).search.slice(1)).toHaveLength(16_384)
+    expect(new URL(capturedRequest().url).search.slice(1)).toHaveLength(6151)
     await expect(api.fetchPurchasesPage({ cursor: cursor + 'x' }, signal())).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
     await api.fetchItemPurchasesPage(item.id, { cursor }, signal())
     await api.fetchPurchaseLinesPage(purchase.id, { cursor }, signal())

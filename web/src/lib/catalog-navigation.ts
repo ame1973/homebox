@@ -1,6 +1,5 @@
 import { itemPageQuerySchema, type ItemPageQuery } from './api/catalog'
-import { validText } from './api/client'
-import { input, pathIDSchema } from './api/domain'
+import { input, pathIDSchema, validCursor } from './api/domain'
 
 export const catalogRowKinds = ['barcodes', 'aliases', 'attributes'] as const
 export const catalogOwnedKinds = [...catalogRowKinds, 'tags'] as const
@@ -21,7 +20,7 @@ export function catalogNavigationState(candidate: unknown, cursors: unknown) {
   const catalogList = typeof candidate === 'string' && candidate.split('?')[0] === '/items' && catalogReturnPath(candidate) ? candidate : '/items'
   // ponytail: visited cursor history grows per page; use bidirectional server
   // continuations if unusually deep navigation reaches browser history limits.
-  const catalogCursors: (string | null)[] = Array.isArray(cursors) && cursors.every((cursor) => cursor === null || typeof cursor === 'string' && validText(cursor, 1, 2048)) ? cursors : []
+  const catalogCursors: (string | null)[] = Array.isArray(cursors) && cursors.every((cursor) => cursor === null || typeof cursor === 'string' && validCursor(cursor)) ? cursors : []
   return { catalogList, catalogCursors }
 }
 

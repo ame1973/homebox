@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { apiClient, requestData } from './client'
-import { createHeaders, deleteAckSchema, idSchema, input, pageQuerySchema, pathIDSchema, resourceRequest, revisionHeaders, revisionSchema, text,
+import { createHeaders, cursorSchema, deleteAckSchema, idSchema, input, pageQuerySchema, pathIDSchema, resourceRequest, revisionHeaders, revisionSchema, text,
   type RevisionWriteContext, type RootWriteContext } from './domain'
 import type { components, operations } from './schema'
 
@@ -34,7 +34,7 @@ export const itemCreateSchema: z.ZodType<components['schemas']['ItemCreate']> = 
 export const itemPatchSchema: z.ZodType<components['schemas']['ItemWrite']> = optionalFields
   .refine((patch) => Object.values(patch).some((value) => value !== undefined))
 export const itemArchiveSchema: z.ZodType<components['schemas']['ItemArchiveInput']> = z.strictObject({ reason: fields.notes.optional() })
-const pageSchema: z.ZodType<ItemsPage> = z.strictObject({ data: z.array(itemSchema).max(100), next_cursor: text(1, 2048).nullable() })
+const pageSchema: z.ZodType<ItemsPage> = z.strictObject({ data: z.array(itemSchema).max(100), next_cursor: cursorSchema().nullable() })
   .refine((page) => new Set(page.data.map((item) => item.id)).size === page.data.length)
 export const civilDateSchema = z.iso.date().refine((value) => !value.startsWith('0000-'))
 export const itemPageQuerySchema: z.ZodType<ItemPageQuery> = z.strictObject({

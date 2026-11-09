@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { apiClient, requestData, type WriteContext } from './client'
 import { civilDateSchema, itemMeasurementFields, itemSchema, type Item, type ItemWriteContext } from './catalog'
-import { deleteAckSchema, idSchema, input, pageQuerySchema, pathIDSchema, resourceRequest, revisionHeaders, revisionSchema, text,
+import { cursorSchema, deleteAckSchema, idSchema, input, pageQuerySchema, pathIDSchema, resourceRequest, revisionHeaders, revisionSchema, text,
   type RevisionWriteContext } from './domain'
 import type { components, operations } from './schema'
 
@@ -51,13 +51,13 @@ export const stockAdjustSchema: z.ZodType<components['schemas']['StockAdjustInpu
   ...stockInput, quantity_base: z.int().min(0), target_location_id: idSchema, reason: text(1, 10000),
 })
 export const stockPageQuerySchema: z.ZodType<StockPageQuery> = z.strictObject({
-  ...pageQuerySchema.shape, cursor: text(1, 4096).optional(), from: civilDateSchema.optional(), to: civilDateSchema.optional(),
+  ...pageQuerySchema.shape, cursor: cursorSchema(4096).optional(), from: civilDateSchema.optional(), to: civilDateSchema.optional(),
   item_id: idSchema.optional(), currency: z.string().regex(/^[A-Z]{3}(?![\s\S])/).optional(), category_id: idSchema.optional(), location_id: idSchema.optional(),
   scope: z.enum(['direct', 'subtree']).optional(), status: z.enum(['active', 'archived']).optional(), merchant: text(1, 300).optional(),
 }).refine((query) => query.from === undefined || query.to === undefined || query.from <= query.to)
-const unitsPageSchema: z.ZodType<UnitsPage> = z.strictObject({ data: z.array(unitSchema).max(100), next_cursor: text(1, 2048).nullable() })
+const unitsPageSchema: z.ZodType<UnitsPage> = z.strictObject({ data: z.array(unitSchema).max(100), next_cursor: cursorSchema().nullable() })
   .refine((page) => new Set(page.data.map((value) => value.id)).size === page.data.length)
-const stockPageSchema: z.ZodType<StockPage> = z.strictObject({ data: z.array(stockSchema).max(100), next_cursor: text(1, 4096).nullable() })
+const stockPageSchema: z.ZodType<StockPage> = z.strictObject({ data: z.array(stockSchema).max(100), next_cursor: cursorSchema(4096).nullable() })
   .refine((page) => new Set(page.data.map((value) => JSON.stringify([value.item_id, value.location_id]))).size === page.data.length)
 
 function validLivePage(page: Readonly<{ data: readonly unknown[]; next_cursor: string | null }>, response: Response, query: UnitPageQuery) {

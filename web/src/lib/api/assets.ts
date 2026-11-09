@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { apiClient, requestData, type WriteContext } from './client'
 import { itemSchema, type Item } from './catalog'
-import { idSchema, input, pathIDSchema, resourceRequest, revisionHeaders, revisionSchema, text } from './domain'
+import { cursorSchema, idSchema, input, pathIDSchema, resourceRequest, revisionHeaders, revisionSchema, text } from './domain'
 import { unitSchema, type Unit } from './holdings'
 import { canonicalInstant, ownedQuerySchema, purchaseInstantSchema, purchasePageQuerySchema, validLivePage } from './purchases'
 import type { components, operations } from './schema'
@@ -38,7 +38,8 @@ const costFields = { amount_minor: revisionSchema, currency, kind: z.enum(['main
   direction: z.enum(['expense', 'credit']), occurred_at: purchaseInstantSchema }
 export const costSchema: z.ZodType<Cost> = z.strictObject({ id: idSchema, item_unit_id: idSchema, revision: revisionSchema, ...costFields, note, correction_of: idSchema.nullable() })
 const disposalFields = { kind: z.enum(['sold', 'donated', 'recycled', 'discarded', 'other']), disposed_at: purchaseInstantSchema, realized_proceeds_minor: amount, currency, note }
-export const disposalSchema: z.ZodType<Disposal> = z.strictObject({ item_unit_id: idSchema, revision: revisionSchema, ...disposalFields })
+export const disposalDataSchema = z.strictObject({ item_unit_id: idSchema, ...disposalFields })
+export const disposalSchema: z.ZodType<Disposal> = disposalDataSchema.extend({ revision: revisionSchema })
 export const assetProfileWriteSchema: z.ZodType<components['schemas']['AssetWrite']> = z.union([
   z.strictObject({ ...profileFields, item_revision: revisionSchema, asset_revision: revisionSchema.nullable(), cost_basis: z.literal('manual'), manual_acquisition_minor: amount }),
   z.strictObject({ ...profileFields, item_revision: revisionSchema, asset_revision: revisionSchema.nullable(), cost_basis: z.literal('purchase'), manual_acquisition_minor: z.null() }),
@@ -58,11 +59,11 @@ export const assetDisposalSchema: z.ZodType<components['schemas']['DisposalWrite
 ])
 export const assetPageQuerySchema: z.ZodType<AssetPageQuery> = purchasePageQuerySchema
 export const assetSummaryQuerySchema: z.ZodType<AssetSummaryQuery> = z.strictObject({ as_of: purchaseInstantSchema.optional() })
-const assetsPageSchema: z.ZodType<AssetsPage> = z.strictObject({ data: z.array(assetSchema).max(100), next_cursor: text(1, 2048).nullable() })
+const assetsPageSchema: z.ZodType<AssetsPage> = z.strictObject({ data: z.array(assetSchema).max(100), next_cursor: cursorSchema().nullable() })
   .refine((page) => new Set(page.data.map((asset) => asset.item_unit_id)).size === page.data.length)
-const usagePageSchema: z.ZodType<UsagePage> = z.strictObject({ data: z.array(usageSchema).max(100), next_cursor: text(1, 2048).nullable() })
+const usagePageSchema: z.ZodType<UsagePage> = z.strictObject({ data: z.array(usageSchema).max(100), next_cursor: cursorSchema().nullable() })
   .refine((page) => new Set(page.data.map((event) => event.id)).size === page.data.length)
-const costsPageSchema: z.ZodType<CostsPage> = z.strictObject({ data: z.array(costSchema).max(100), next_cursor: text(1, 2048).nullable() })
+const costsPageSchema: z.ZodType<CostsPage> = z.strictObject({ data: z.array(costSchema).max(100), next_cursor: cursorSchema().nullable() })
   .refine((page) => new Set(page.data.map((event) => event.id)).size === page.data.length)
 
 function consistentSummary(value: AssetCostSummary) {

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { apiClient, requestData } from './client'
-import { createHeaders, deleteAckSchema, idSchema, input, pageQuerySchema, pathIDSchema, resourceRequest, revisionHeaders, revisionSchema, text,
+import { createHeaders, cursorSchema, deleteAckSchema, idSchema, input, pageQuerySchema, pathIDSchema, resourceRequest, revisionHeaders, revisionSchema, text,
   type CreateContext, type RevisionWriteContext, type RootWriteContext } from './domain'
 import type { components, operations } from './schema'
 
@@ -28,7 +28,7 @@ const patchSchema: z.ZodType<components['schemas']['LocationWrite']> = z.strictO
 }).refine((patch) => Object.values(patch).some((value) => value !== undefined))
 const moveSchema: z.ZodType<components['schemas']['LocationMove']> = z.strictObject({ target_parent_id: fields.parent_id })
 const archiveSchema: z.ZodType<components['schemas']['LocationArchiveInput']> = z.strictObject({ archive_children: z.boolean().optional(), reason: fields.description.optional() })
-const pageSchema: z.ZodType<LocationsPage> = z.strictObject({ data: z.array(locationSchema).max(100), next_cursor: text(1, 2048).nullable().optional() })
+const pageSchema: z.ZodType<LocationsPage> = z.strictObject({ data: z.array(locationSchema).max(100), next_cursor: cursorSchema().nullable().optional() })
   .refine((page) => new Set(page.data.map((location) => location.id)).size === page.data.length)
 
 export async function fetchLocation(id: string, signal: AbortSignal): Promise<Location> {

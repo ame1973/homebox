@@ -50,7 +50,7 @@ A sent timeout, canceled wait or malformed reply may already have committed. The
 
 ## Financial correction HTTP operations
 
-The five protected [audited financial correction HTTP operations](financial-corrections.md) now expose Purchase allocation history/decisions and retained DisposalRecord plus disposal financial history/decisions. Disposal finance retains the original and independently versioned nullable current decision through explicit void/reinstatement, validates the complete linked financial chain and never revives/moves/disposes a Unit again or infers retirement. Purchase correction validates proposed old/new Asset totals and current acquisition effects without changing physical state. All five correction SDK/reviewed-screen workflows remain unfinished; the eleven existing Asset browser operations do not silently supply them. Retirement-date correction remains separate required work.
+The five protected [audited financial correction HTTP operations](financial-corrections.md) now expose Purchase allocation history/decisions and retained DisposalRecord plus disposal financial history/decisions. Disposal finance retains the original and independently versioned nullable current decision through explicit void/reinstatement, validates the complete linked financial chain and never revives/moves/disposes a Unit again or infers retirement. Purchase correction validates proposed old/new Asset totals and current acquisition effects without changing physical state. Stateless adapters for all five operations are available; reviewed correction screens remain unfinished, and the eleven existing Asset browser operations do not silently supply them. Retirement-date correction remains separate required work.
 
 ## Domain boundaries
 

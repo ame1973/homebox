@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { apiClient, requestData, type RequestSender } from './client'
 import { itemSchema, type Item, type ItemWriteContext } from './catalog'
 import { tagSchema } from './taxonomy'
-import { deleteAckSchema, idSchema, input, pageQuerySchema, pathIDSchema, resourceRequest, revisionHeaders, revisionSchema, text,
+import { cursorSchema, deleteAckSchema, idSchema, input, pageQuerySchema, pathIDSchema, resourceRequest, revisionHeaders, revisionSchema, text,
   type RevisionWriteContext } from './domain'
 import type { components, operations } from './schema'
 
@@ -49,7 +49,7 @@ export const itemTagsSchema: z.ZodType<components['schemas']['ItemTagsInput']> =
 })
 
 function ownedPage<T extends { id: string }>(row: z.ZodType<T>, query: OwnedPageQuery, signal: AbortSignal, send: RequestSender): Promise<{ data: T[]; next_cursor: string | null }> {
-  const schema = z.strictObject({ data: z.array(row).max(100), next_cursor: text(1, 2048).nullable() })
+  const schema = z.strictObject({ data: z.array(row).max(100), next_cursor: cursorSchema().nullable() })
     .refine((page) => new Set(page.data.map((value) => value.id)).size === page.data.length)
   const limit = query.limit ?? 50
   return requestData(signal, send, schema, 8_000, (page, response) =>

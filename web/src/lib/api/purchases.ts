@@ -2,7 +2,7 @@ import { createQuerySerializer } from 'openapi-fetch'
 import { z } from 'zod'
 import { apiClient, requestData, validText, type WriteContext } from './client'
 import { itemPageQuerySchema, itemSchema, type Item } from './catalog'
-import { createHeaders, idSchema, input, pageQuerySchema, pathIDSchema, resourceRequest, revisionHeaders, revisionSchema, text,
+import { createHeaders, cursorSchema, idSchema, input, pageQuerySchema, pathIDSchema, resourceRequest, revisionHeaders, revisionSchema, text,
   type RootWriteContext } from './domain'
 import type { components, operations } from './schema'
 
@@ -40,7 +40,7 @@ export const purchasePatchSchema: z.ZodType<PurchasePatchInput> = z.union([
   partialHeader.required({ merchant_name: true }), partialHeader.required({ purchased_at: true }),
   partialHeader.required({ currency: true }), partialHeader.required({ receipt_note: true }),
 ])
-export const purchaseLineSchema: z.ZodType<PurchaseLine> = z.strictObject({
+export const purchaseLineSchema = z.strictObject({
   id: idSchema, revision: revisionSchema, purchase_id: idSchema, item_id: idSchema, item_unit_id: idSchema.nullable(),
   quantity_base: revisionSchema, paid_minor: z.int().min(0), note: text(0, 10000),
 })
@@ -57,9 +57,9 @@ const withinQueryBudget = (query: PurchasePageQuery) => Object.values(query).eve
 export const purchasePageQuerySchema: z.ZodType<PurchasePageQuery> = itemPageQuerySchema
   .refine((query) => !Object.hasOwn(query, 'q') && withinQueryBudget(query))
 export const ownedQuerySchema = pageQuerySchema.refine(withinQueryBudget)
-const purchasesPageSchema: z.ZodType<PurchasesPage> = z.strictObject({ data: z.array(purchaseSchema).max(100), next_cursor: text(1, 2048).nullable() })
+const purchasesPageSchema: z.ZodType<PurchasesPage> = z.strictObject({ data: z.array(purchaseSchema).max(100), next_cursor: cursorSchema().nullable() })
   .refine((page) => new Set(page.data.map((purchase) => purchase.id)).size === page.data.length)
-const linesPageSchema: z.ZodType<PurchaseLinesPage> = z.strictObject({ data: z.array(purchaseLineSchema).max(100), next_cursor: text(1, 2048).nullable() })
+const linesPageSchema: z.ZodType<PurchaseLinesPage> = z.strictObject({ data: z.array(purchaseLineSchema).max(100), next_cursor: cursorSchema().nullable() })
   .refine((page) => new Set(page.data.map((line) => line.id)).size === page.data.length)
 export function validLivePage(page: Readonly<{ data: readonly unknown[]; next_cursor: string | null }>, response: Response, query: PurchaseOwnedPageQuery) {
   const limit = query.limit ?? 50

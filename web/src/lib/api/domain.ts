@@ -9,7 +9,11 @@ export const text = (minimum: number, maximum: number) => z.string().refine((val
 export const idSchema = text(1, 128)
 export const revisionSchema = z.int().min(1)
 export const pathIDSchema = idSchema.refine((id) => !['.', '..'].includes(id) && !['/', '\\', '\0'].some((character) => id.includes(character)))
-export const pageQuerySchema = z.strictObject({ cursor: text(1, 2048).optional(), limit: z.int().min(1).max(100).optional() })
+// Server cursor limits count decoded UTF-8 bytes, not JavaScript characters.
+// Check Unicode first so TextEncoder cannot silently repair a lone surrogate.
+export const validCursor = (value: string, maximum = 2048) => validText(value, 1, maximum) && new TextEncoder().encode(value).byteLength <= maximum
+export const cursorSchema = (maximum = 2048) => z.string().refine((value) => validCursor(value, maximum))
+export const pageQuerySchema = z.strictObject({ cursor: cursorSchema().optional(), limit: z.int().min(1).max(100).optional() })
 export const deleteAckSchema = z.strictObject({ ok: z.literal(true), operation_id: idSchema, revision: revisionSchema })
 
 // Parse original canonical decimal text; never trim, round or coerce a display
