@@ -1,6 +1,6 @@
 # Audited Financial Corrections
 
-**Availability: private Purchase and Disposal correction persistence/services and executable contracts.** Migrations 0017/0018 and the private `Purchases.CorrectLine/PageLineCorrections` and `Assets.GetDisposalRecord/CorrectDisposal/PageDisposalCorrections` methods implement their financial decisions and authenticated history inside the Go store boundary. They are exercised directly, not exposed through HTTP or browser controls. All five operations below have contracts/generated transport types, but their HTTP handlers, stateless browser adapters and reviewed operating screens remain unfinished. Do not call these paths as working features. The existing [seven purchase operations](purchases.md) and [eleven Asset financial operations](assets.md) remain available; their browser/socket tests do not establish the new correction workflows.
+**Availability: all five protected financial-correction HTTP operations are implemented.** Migrations 0017/0018 and the private `Purchases.CorrectLine/PageLineCorrections` and `Assets.GetDisposalRecord/CorrectDisposal/PageDisposalCorrections` services provide their authoritative decisions and authenticated history. The HTTP handlers enforce the existing protected session/Origin/CSRF/version/key boundary, strict nested JSON, original independent proofs and final SQL authorization. Verified TLS/cookie-jar tests and a compiled-server/socket contract check exercise the actual endpoints. Stateless browser adapters, reviewed source/forms/commands and operating screens for these five operations remain unfinished; the existing [seven purchase operations](purchases.md) and [eleven Asset financial operations](assets.md) do not provide those correction screens.
 
 This closes an interface gap in the read-only source requirements without weakening posted-history immutability. The root OpenAPI now contains 142 operations and 177 schemas, preserving all original 103 operation identities and every existing schema, including all version-one offline payloads. Specification revision v0.9.3 is not an application release.
 
@@ -13,9 +13,9 @@ This closes an interface gap in the read-only source requirements without weaken
 
 A physical return or movement is a separately reviewed inventory command. Neither financial correction automatically creates stock, decrements a quantity, changes a Unit's operational status or converts between currencies. Retirement-date correction remains separate unfinished work; these operations do not clear or overwrite a recorded retirement.
 
-## Contracted operations
+## Protected HTTP operations
 
-Paths are relative to `/api/v1`. All five require an active completed administrator session and `Cache-Control: no-store`. The two writes additionally require the exact Origin, CSRF token, compatible application version, original idempotency key and original subject proofs. Request JSON is at most 128 KiB, with no duplicate/unknown fields, invalid Unicode, lossy numeric parsing or query parameters. Authorization and source validation must be repeated inside SQL after body reading.
+Paths are relative to `/api/v1`. All five require an active completed administrator session and return `Cache-Control: no-store`. The two writes additionally require `Content-Type: application/json`, the exact configured Origin, CSRF token, compatible application version, original idempotency key and original subject proofs. Request JSON is at most 128 KiB, with no duplicate/unknown fields at either object level, invalid Unicode, lossy numeric parsing or query parameters. Authorization and source validation are repeated inside SQL after body reading. Reads accept no body or content encoding. See [HTTP Authentication and Transport](http-authentication.md) for session establishment and transport configuration.
 
 | Method | Path | Original proof or read scope | Response |
 | --- | --- | --- | --- |
@@ -24,6 +24,13 @@ Paths are relative to `/api/v1`. All five require an active completed administra
 | GET | `/units/{id}/disposal-record` | Actual retained original disposal, including a financially voided one | `DisposalRecord`, actual independent Disposal ETag |
 | GET | `/units/{id}/disposal-corrections` | Actual original disposal; independent owned live page | `DisposalCorrectionList`, no ETag |
 | POST | `/units/{id}/disposal-corrections` | DisposalRecord If-Match plus original Asset body revision | `DisposalCorrection`, independent entry ETag |
+
+### Review and send
+
+1. For a Purchase correction, read the actual Purchase and its current Lines, and read each applicable owning/replacement Item. Retain the Purchase ETag, the original Line's `revision` and the original Item `revision`; replacement has its own reviewed Item revision and explicit nullable Unit decision. Send the complete request under the original Purchase `If-Match`.
+2. For Disposal finance, read `/units/{id}/disposal-record` and `/units/{id}/asset`. Retain the actual DisposalRecord ETag and the Asset `revision`. Send both original proofs with the complete replacement or explicit null void. After a void, read the retained record again before explicitly reinstating; the current `/disposal` 404 is not a proof.
+3. For either POST, send `Origin`, `X-CSRF-Token`, `X-HomeBox-Client-Version`, a new 8–128-character `Idempotency-Key` and the quoted original `If-Match`. Preserve the exact body and key for explicit reconciliation if the outcome is uncertain; never automatically resubmit, refresh proofs or install a frozen response as current state.
+4. After success, reread the relevant current resources and complete history. A response ETag belongs to the new immutable correction entry, not to its Purchase or Disposal subject. History lists do not return an ETag. A fresh double void with current prerequisite proofs is rejected; `PURCHASE_LINE_VOIDED` identifies an already voided allocation, while an already voided disposal returns `ASSET_HISTORY_LOCKED`.
 
 Correction-entry revision one belongs to an actual newly stored immutable entry. It is never the Purchase, Line, Asset or Disposal proof. A history page, summary `source_revision`, coincident counter or failed read cannot provide a subject proof. Do not compute a new proof by adding one to a reply; read and review the actual subject resource for a different command.
 
@@ -37,7 +44,7 @@ The request freezes three distinct existing scopes:
 
 For replacement, the nested complete `PurchaseLineWrite` additionally supplies the new target Item ID/revision and explicit nullable Unit decision. The old and new Item may differ; neither proof is silently borrowed, fetched or rebased. A named replacement Unit belongs to that target Item and has quantity one. A null Unit supports an explicitly unallocated attribution. `paid_minor` is the whole new allocation, not a per-unit amount, adjustment delta or multiplier.
 
-Illustrative **contract-only** void body, with the separately reviewed Purchase If-Match:
+Example void request body, with the separately reviewed Purchase If-Match:
 
 ```json
 {
@@ -50,7 +57,7 @@ Illustrative **contract-only** void body, with the separately reviewed Purchase 
 }
 ```
 
-Illustrative **contract-only** replacement body:
+Example replacement request body:
 
 ```json
 {
@@ -86,7 +93,7 @@ Migration 0017 adds one immutable, indexed correction journal with actual Purcha
 
 Current Line pages skip validated voided rows before slicing, including large raw gaps. Item-associated Purchase, catalog/Stock purchase filters, exact-Unit Asset filters/acquisition and approved search publication classify actual retained source rather than blindly excluding journal matches in SQL. Invalid/missing referenced context fails closed instead of resurrecting the old attribution. The original Line counter advances to its independent tombstone; actual Purchase/old/new Item counters must have advanced beyond their stored original proofs. Detailed history completes its own live pages and never becomes a new offline entity or subject proof. Global Purchase headers and historical currency/deletion guards remain retained even when no allocation is currently active.
 
-These are private service capabilities, not a CLI financial-write interface or authorization to edit SQLite manually. The five new HTTP handlers, transport parsing and reviewed browser workflows still need separate implementation and evidence.
+The protected Purchase correction/history handlers delegate to these services. They do not create a CLI financial-write interface or authorize direct database edits. Browser adapters and reviewed correction screens remain separate required work.
 
 ## Retained disposal record and financial correction
 
@@ -99,9 +106,11 @@ The existing current-disposal GET remains a current effective resource, not a su
 
 Original and current owners must match the subject. Null means financially voided only when the actual retained record says so; zero proceeds with a nonnull current decision is a different fact. Genuine absence of original source is 404, and a failed/current-disposal-404 read is never a proof for reinstatement. Read actual source/correction history and real counters, never the current projection cache.
 
+The existing Asset lifecycle screen reads only the effective current disposal. When that read is absent, it says there is no currently effective financial decision, not that no history exists. It warns that the screen cannot reinstate a voided disposal; the ordinary disposal command is rejected when retained history exists. The separate retained-record/correction browser workflow remains unfinished, so review and correction currently require the protected HTTP interface above.
+
 The correction request uses the original DisposalRecord `If-Match` and separately required original Asset `asset_revision`. It has no physical Unit or Item body proof. Whole Unit/Item data can remain review context, but their counters do not become additional financial write preconditions.
 
-Illustrative **contract-only** void body:
+Example void request body, with the separately reviewed retained DisposalRecord If-Match:
 
 ```json
 {
@@ -126,7 +135,7 @@ Migration 0018 adds an indexed immutable journal tied to the actual original Dis
 
 `Assets.CorrectDisposal` snapshots the complete replacement before fingerprinting and binds the original retained subject revision plus Asset revision. Each fresh eligible decision advances Disposal/Asset/Item once, validates the proposed complete history and atomically publishes the current disposal upsert or tombstone, audit and frozen original reply. Equivalent current dates retain their exact spelling; after a void, an equivalent original date retains the original spelling. A changed date is normalized without losing nanoseconds. Original-key reconciliation follows completed authorization but precedes later source/proof/policy checks; an expired claim remains reserved. An ignored or rewritten required write, corrupt final context, unsafe proposed total, late authorization or failed COMMIT withholds success and rolls back every effect. A finance void cannot authorize ordinary disposal creation or physical retirement through the retained historical reference.
 
-These private capabilities are not a CLI financial-write interface and do not authorize direct database edits. The five new correction HTTP handlers, strict transport parsing and reviewed browser workflows remain separate required work.
+The protected retained-record/correction/history handlers delegate to these services. They do not create a CLI financial-write interface or authorize direct database edits. Stateless browser adapters and reviewed correction screens remain separate required work.
 
 ## Exact input, history and foreground recovery
 
@@ -140,7 +149,7 @@ A future browser workflow must complete and bracket only its selected source/his
 
 Current financial effects use the existing `purchase_line` and `disposal` upserts/tombstones, with all normative version-one payloads unchanged. A voided old Line cannot reappear from raw retained history during materialization; a corrected disposal publishes its actual current decision. The normative replica remains 22 kinds. Detailed authenticated correction/audit history is not a second offline authoritative ledger or a new projection kind. Old frozen replies/outbox bytes and retained original source remain exact. See [Offline Replica and Safe Draft Protocol](../contracts/sync.md).
 
-Run the executable contract/type checks and private Purchase and Disposal transaction tests from the repository root:
+Run the executable contract/type, private transaction and protected HTTP checks from the repository root:
 
 ```sh
 uv run --frozen python -m unittest tests.test_financial_corrections_contracts -v
@@ -149,8 +158,10 @@ npm --prefix web run typecheck
 npm --prefix web test -- --coverage.enabled=false src/lib/api/client.test.ts
 go -C server test ./internal/store -run '^TestPurchaseLineCorrection' -count=1
 go -C server test ./internal/store -run '^TestDisposalCorrection' -count=1
+go -C server test ./internal/httpapi -run '^(TestFinancialCorrection|TestPurchaseCorrectionHTTP|TestDisposalCorrectionHTTP)' -count=1
+go -C server test ./internal/httpapi -run '^$' -fuzz FuzzFinancialCorrectionsJSON -fuzztime=3s -parallel=2
 ```
 
-Negative schemas and strict actual-client type fixtures cover required proofs/null/zero, distinct original-versus-replacement intent, one named Unit, independent immutable entry revisions, bounded retained record/history, exact safe numbers/dates/reasons and unchanged offline shapes. Actual private Go Purchase tests separately cover void/replacement, immutable exact context, independent original proofs, complete 205-entry history/current-page gaps, current evidence/totals, zero versus void, old/new Asset effects, safe proposed versus unsafe old totals, original/fresh-login/expired-key behavior and SQL/ignored/rewritten/authorization/COMMIT rollback. Disposal tests exercise 105 actual linked decisions and complete pages, explicit zero/void/reinstatement, broad retained dates and money, source/counter/chain corruption, complete proposed totals, independent original proofs, replay/concurrency and statement/late-authorization/COMMIT rollback. Fresh/certified schema-16/17 upgrades retain exact old source/current/frozen bytes/epoch and verified recovery snapshots; late checksum failures retain the old schema. The shared safe client recognizes `PURCHASE_LINE_VOIDED` without exposing arbitrary server messages/details. Private services and schema checks do not establish the new HTTP/browser workflows.
+Negative schemas and strict actual-client type fixtures cover required proofs/null/zero, distinct original-versus-replacement intent, one named Unit, independent immutable entry revisions, bounded retained record/history, exact safe numbers/dates/reasons and unchanged offline shapes. Actual private Go Purchase tests separately cover void/replacement, immutable exact context, independent original proofs, complete 205-entry history/current-page gaps, current evidence/totals, zero versus void, old/new Asset effects, safe proposed versus unsafe old totals, original/fresh-login/expired-key behavior and SQL/ignored/rewritten/authorization/COMMIT rollback. Disposal tests exercise 105 actual linked decisions and complete pages, explicit zero/void/reinstatement, broad retained dates and money, source/counter/chain corruption, complete proposed totals, independent original proofs, replay/concurrency and statement/late-authorization/COMMIT rollback. Fresh/certified schema-16/17 upgrades retain exact old source/current/frozen bytes/epoch and verified recovery snapshots; late checksum failures retain the old schema. The shared safe client recognizes `PURCHASE_LINE_VOIDED` without exposing arbitrary server messages/details. Verified TLS/cookie-jar HTTP tests exercise all five operations, exact original proofs, zero/void/reinstatement, fresh-login reconciliation, body-time revocation/source races and actual 51-entry default pages. Strict nested-reader tests and fuzzing cover required null/zero, duplicate/unknown members, Unicode and exact safe integers. A separately compiled actual server on disposable private loopback validates real replies against root schemas; this is not a physical-device test. The new browser adapters and reviewed screens are not implemented or established by those HTTP checks.
 
-Still required: all five correction HTTP handlers and strict parser/TLS/socket evidence, stateless adapters, complete reviewed source/form/command/controller composition, responsive actual-Go browser workflows and any remaining retirement-date correction. Full sync/PWA, media, camera, worker/search, analytics, encrypted backup/restore, deployment and physical acceptance also remain separate complete-product gates. No existing automated suite is relabeled as testing these unimplemented handlers, physical devices, hosted CI or a production deployment.
+Still required: stateless correction browser adapters, complete reviewed source/form/command/controller composition, responsive actual-Go browser workflows and any remaining retirement-date correction. Full sync/PWA, media, camera, worker/search, analytics, encrypted backup/restore, deployment and physical acceptance also remain separate complete-product gates. No existing automated suite is relabeled as testing these unimplemented browser workflows, physical devices, hosted CI or a production deployment.

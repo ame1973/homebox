@@ -22,8 +22,8 @@ func purchaseRoute(path string) (route, id, allow string) {
 		return "resource", parts[1], "GET, PATCH"
 	}
 	if len(parts) == 3 && parts[1] != "" {
-		if parts[0] == "purchases" && parts[2] == "lines" {
-			return "lines", parts[1], "GET, POST"
+		if parts[0] == "purchases" && (parts[2] == "lines" || parts[2] == "line-corrections") {
+			return parts[2], parts[1], "GET, POST"
 		}
 		if parts[0] == "items" && parts[2] == "purchases" {
 			return "item", parts[1], http.MethodGet
@@ -83,16 +83,25 @@ func (a *authAPI) servePurchases(w http.ResponseWriter, r *http.Request, request
 			} else {
 				writeJSON(w, value)
 			}
-		case "lines":
+		case "lines", "line-corrections":
 			cursor, size, ok := boundedMetadataQuery(w, r, requestID, 50, 16<<10)
 			if !ok {
 				return true
 			}
-			value, err := a.purchases.PageLines(r.Context(), token, id, cursor, size)
-			if err != nil {
-				writePurchaseError(w, err, requestID)
+			if route == "lines" {
+				value, err := a.purchases.PageLines(r.Context(), token, id, cursor, size)
+				if err != nil {
+					writePurchaseError(w, err, requestID)
+				} else {
+					writeJSON(w, value)
+				}
 			} else {
-				writeJSON(w, value)
+				value, err := a.purchases.PageLineCorrections(r.Context(), token, id, cursor, size)
+				if err != nil {
+					writePurchaseError(w, err, requestID)
+				} else {
+					writeJSON(w, value)
+				}
 			}
 		}
 		return true
@@ -128,6 +137,13 @@ func (a *authAPI) servePurchases(w http.ResponseWriter, r *http.Request, request
 		}
 		value, err := a.purchases.CreateLine(r.Context(), token, key, id, revision, input)
 		writePurchaseResult(w, value, value.Revision, err, requestID)
+	case "line-corrections":
+		input, ok := readPurchaseLineCorrection(w, r, requestID)
+		if !ok {
+			return true
+		}
+		value, err := a.purchases.CorrectLine(r.Context(), token, key, id, revision, input)
+		writePurchaseResult(w, value, value.Revision, err, requestID)
 	}
 	return true
 }
@@ -157,9 +173,11 @@ func writePurchaseError(w http.ResponseWriter, err error, requestID string) {
 	case errors.Is(err, store.ErrPreconditionRequired):
 		status, code, message = http.StatusConflict, "PRECONDITION_REQUIRED", "Send the original reviewed Purchase revision."
 	case errors.Is(err, store.ErrRevisionConflict):
-		status, code, message = http.StatusConflict, "REVISION_CONFLICT", "The reviewed Purchase or Item interpretation changed. Refresh and review before submitting again."
+		status, code, message = http.StatusConflict, "REVISION_CONFLICT", "The reviewed Purchase, Line or Item interpretation changed. Refresh and review before submitting again."
 	case errors.Is(err, store.ErrIdempotencyExpired):
 		status, code, message = http.StatusConflict, "IDEMPOTENCY_EXPIRED", "The original acknowledgement expired. Review current state before using a new key."
+	case errors.Is(err, store.ErrPurchaseLineVoided):
+		status, code, message = http.StatusConflict, "PURCHASE_LINE_VOIDED", "The reviewed allocation has already been financially voided. Review its correction history."
 	case errors.Is(err, store.ErrPurchaseCurrencyLocked):
 		status, code, message = http.StatusConflict, "PURCHASE_CURRENCY_LOCKED", "An allocated purchase cannot change currency, including zero-paid history."
 	case errors.Is(err, store.ErrPurchaseCurrency):

@@ -153,6 +153,15 @@ it.each(['usage', 'costs', 'retire', 'dispose'] as const)('reviews and explicitl
   if (kind === 'costs') expect(api.recordAssetCost).toHaveBeenCalledWith('unit', expect.objectContaining({ amount_minor: 2, direction: 'credit', correction_of: cost.id }), expect.anything())
   if (kind === 'dispose') expect(source.asset?.retired_at).toBeNull()
 })
+it.each(['retire', 'dispose'] as const)('describes absent current disposal without claiming absent history in the %s editor and review', async (kind) => {
+  source = { ...source, unit: { ...source.unit, status: 'disposed' } }
+  mount(`/assets/unit/${kind}`); await ready()
+  const explanation = '目前沒有生效的處置財務決定；這不代表沒有歷史紀錄。'
+  expect(screen.getByText(explanation, { exact: true })).toBeVisible(); expect(screen.queryByText('原先已確認尚無處置紀錄', { exact: true })).not.toBeInTheDocument()
+  eventValues(kind); await click(text.review)
+  expect(within(await screen.findByRole('alertdialog')).getByText(explanation, { exact: true })).toBeVisible()
+  expect(api.retireAsset).not.toHaveBeenCalled(); expect(api.disposeAsset).not.toHaveBeenCalled()
+})
 it('saves a complete changed profile from its original independent Unit/Item/Asset snapshots', async () => {
   const work = mount('/assets/unit/edit'); await ready(); fill(text.fields.manual_acquisition_minor, '123'); await click(text.review)
   await confirm(work, text.confirms['put-profile'], '/assets/unit', text.detail)

@@ -24,8 +24,10 @@ func assetRoute(path string) (route, id, allow string) {
 	switch parts[2] {
 	case "asset":
 		return "asset", parts[1], "GET, PUT"
-	case "usage", "costs", "disposal":
+	case "usage", "costs", "disposal", "disposal-corrections":
 		return parts[2], parts[1], "GET, POST"
+	case "disposal-record":
+		return "disposal-record", parts[1], http.MethodGet
 	case "retire":
 		return "retire", parts[1], http.MethodPost
 	case "cost-summary":
@@ -48,7 +50,7 @@ func (a *authAPI) serveAssets(w http.ResponseWriter, r *http.Request, requestID 
 		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "The method is not supported for this route.", requestID)
 		return true
 	}
-	queryAllowed := r.Method == http.MethodGet && (route == "collection" || route == "usage" || route == "costs" || route == "summary")
+	queryAllowed := r.Method == http.MethodGet && (route == "collection" || route == "usage" || route == "costs" || route == "disposal-corrections" || route == "summary")
 	if r.URL.RawPath != "" || strings.ContainsAny(id, "\\\x00") || id == "." || id == ".." || id != "" && !boundedString(id, 1, 128) ||
 		!queryAllowed && (r.URL.RawQuery != "" || r.URL.ForceQuery) {
 		writeError(w, http.StatusBadRequest, "INVALID_ASSET_URL", "Use an exact asset path and only documented read parameters.", requestID)
@@ -99,6 +101,20 @@ func (a *authAPI) serveAssets(w http.ResponseWriter, r *http.Request, requestID 
 		case "disposal":
 			value, err := a.assetFinance.GetDisposal(r.Context(), token, id)
 			writeAssetResult(w, value, value.Revision, err, requestID)
+		case "disposal-record":
+			value, err := a.assetFinance.GetDisposalRecord(r.Context(), token, id)
+			writeAssetResult(w, value, value.Revision, err, requestID)
+		case "disposal-corrections":
+			cursor, size, ok := boundedMetadataQuery(w, r, requestID, 50, 16<<10)
+			if !ok {
+				return true
+			}
+			value, err := a.assetFinance.PageDisposalCorrections(r.Context(), token, id, cursor, size)
+			if err != nil {
+				writeAssetError(w, err, requestID)
+			} else {
+				writeJSON(w, value)
+			}
 		case "summary":
 			asOf, ok := assetSummaryQuery(w, r, requestID)
 			if !ok {
@@ -156,6 +172,13 @@ func (a *authAPI) serveAssets(w http.ResponseWriter, r *http.Request, requestID 
 		}
 		value, err := a.assetFinance.Dispose(r.Context(), token, key, id, revision, input)
 		writeAssetResult(w, value, value.Revision, err, requestID)
+	case "disposal-corrections":
+		input, ok := readDisposalCorrection(w, r, requestID)
+		if !ok {
+			return true
+		}
+		value, err := a.assetFinance.CorrectDisposal(r.Context(), token, key, id, revision, input)
+		writeAssetResult(w, value, value.Revision, err, requestID)
 	}
 	return true
 }
@@ -183,9 +206,9 @@ func writeAssetError(w http.ResponseWriter, err error, requestID string) {
 	case errors.Is(err, store.ErrInvalidCursor):
 		status, code, message = http.StatusBadRequest, "INVALID_CURSOR", "Refresh the collection; its continuation is invalid, expired or differently scoped."
 	case errors.Is(err, store.ErrPreconditionRequired):
-		status, code, message = http.StatusConflict, "PRECONDITION_REQUIRED", "Supply the original reviewed Unit or Asset proof required by this operation."
+		status, code, message = http.StatusConflict, "PRECONDITION_REQUIRED", "Supply the original reviewed Disposal, Unit or Asset proof required by this operation."
 	case errors.Is(err, store.ErrRevisionConflict):
-		status, code, message = http.StatusConflict, "REVISION_CONFLICT", "The original reviewed Unit, Item, Asset or profile presence changed. Refresh and review before a new command."
+		status, code, message = http.StatusConflict, "REVISION_CONFLICT", "The original reviewed Disposal, Unit, Item, Asset or profile presence changed. Refresh and review before a new command."
 	case errors.Is(err, store.ErrIdempotencyExpired):
 		status, code, message = http.StatusConflict, "IDEMPOTENCY_EXPIRED", "The original acknowledgement expired. Review current source before using a new key."
 	case errors.Is(err, store.ErrAssetCurrency):
@@ -193,7 +216,7 @@ func writeAssetError(w http.ResponseWriter, err error, requestID string) {
 	case errors.Is(err, store.ErrAssetOverflow):
 		status, code, message = http.StatusConflict, "ASSET_TOTAL_OVERFLOW", "Complete proposed asset totals exceed the exact safe financial range. Review the source without automatic conversion or replay."
 	case errors.Is(err, store.ErrAssetHistory):
-		status, code, message = http.StatusConflict, "ASSET_HISTORY_LOCKED", "A recorded lifecycle decision requires an audited correction or void, not an overwrite."
+		status, code, message = http.StatusConflict, "ASSET_HISTORY_LOCKED", "The recorded lifecycle or financial decision cannot be repeated or overwritten. Review its retained history."
 	case errors.Is(err, store.ErrUnitAssetLifecycle):
 		status, code, message = http.StatusConflict, "ASSET_LIFECYCLE_REQUIRED", "Retirement changes require the separately reviewed financial and physical lifecycle operation."
 	case errors.Is(err, store.ErrUnitDisposed):

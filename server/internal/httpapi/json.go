@@ -55,6 +55,11 @@ func readJSONObject(w http.ResponseWriter, r *http.Request, requestID string, li
 	if !ok {
 		return nil, false
 	}
+	return parseJSONObject(w, requestID, body, fields...)
+}
+
+// Nested financial decisions use the same strict object rules as the outer body.
+func parseJSONObject(w http.ResponseWriter, requestID string, body []byte, fields ...string) (map[string]json.RawMessage, bool) {
 	if !utf8.Valid(body) || !json.Valid(body) || !validJSONSurrogates(body) {
 		writeError(w, http.StatusBadRequest, "INVALID_JSON", "The request must contain one valid UTF-8 JSON object.", requestID)
 		return nil, false

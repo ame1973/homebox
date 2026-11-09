@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"homebox/internal/store"
@@ -65,6 +66,10 @@ func readPurchaseLine(w http.ResponseWriter, r *http.Request, requestID string) 
 	if !ok {
 		return store.PurchaseLineCreate{}, false
 	}
+	return purchaseLineFields(w, requestID, values)
+}
+
+func purchaseLineFields(w http.ResponseWriter, requestID string, values map[string]json.RawMessage) (store.PurchaseLineCreate, bool) {
 	item, ok := jsonString(values["item_id"], 1, 128)
 	if !ok {
 		return store.PurchaseLineCreate{}, purchaseValidation(w, requestID)

@@ -162,21 +162,31 @@ func readAssetDisposal(w http.ResponseWriter, r *http.Request, requestID string)
 	if !ok {
 		return store.AssetDisposalWrite{}, false
 	}
-	var input store.AssetDisposalWrite
-	input.UnitRevision, ok = exactSafeInteger(values["unit_revision"])
-	if !ok || input.UnitRevision < 1 {
+	revision, ok := exactSafeInteger(values["unit_revision"])
+	if !ok || revision < 1 {
 		return store.AssetDisposalWrite{}, assetValidation(w, requestID)
 	}
+	financial, ok := disposalFinancialFields(w, requestID, values)
+	if !ok {
+		return store.AssetDisposalWrite{}, false
+	}
+	return store.AssetDisposalWrite{UnitRevision: revision, Kind: financial.Kind, DisposedAt: financial.DisposedAt,
+		RealizedProceedsMinor: financial.RealizedProceedsMinor, Currency: financial.Currency, Note: financial.Note}, true
+}
+
+func disposalFinancialFields(w http.ResponseWriter, requestID string, values map[string]json.RawMessage) (store.DisposalFinancialWrite, bool) {
+	var input store.DisposalFinancialWrite
+	var ok bool
 	input.RealizedProceedsMinor, ok = exactSafeInteger(values["realized_proceeds_minor"])
 	if !ok || input.RealizedProceedsMinor < 0 {
-		return store.AssetDisposalWrite{}, assetValidation(w, requestID)
+		return store.DisposalFinancialWrite{}, assetValidation(w, requestID)
 	}
 	if !assetTextFields(w, requestID, values, assetTextField{"kind", 4, 9, false, &input.Kind}, assetTextField{"disposed_at", 20, 35, false, &input.DisposedAt},
 		assetTextField{"currency", 3, 3, false, &input.Currency}, assetTextField{"note", 0, 10000, true, &input.Note}) {
-		return store.AssetDisposalWrite{}, false
+		return store.DisposalFinancialWrite{}, false
 	}
 	if !slices.Contains([]string{"sold", "donated", "recycled", "discarded", "other"}, input.Kind) || input.Kind != "sold" && input.RealizedProceedsMinor != 0 {
-		return store.AssetDisposalWrite{}, assetValidation(w, requestID)
+		return store.DisposalFinancialWrite{}, assetValidation(w, requestID)
 	}
 	return input, true
 }

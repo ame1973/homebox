@@ -195,6 +195,30 @@ test('adopts financial disposal of an already disposed Unit without another phys
   expect(await (await page.request.get(`/api/v1/units/${unit.id}`)).json()).toEqual(disposed); expect(writes[0]?.proof).toBe('"1"'); expect(JSON.parse(writes[0]?.body ?? '{}')).toMatchObject({ unit_revision: 2, realized_proceeds_minor: 0 }); expect(await (await page.request.get(`/api/v1/units/${unit.id}/disposal`)).json()).toMatchObject({ revision: 1, kind: 'donated', realized_proceeds_minor: 0 })
 })
 
+test('does not mistake financially voided disposal for absent history or recreate its physical decision', async ({ page, application }) => {
+  await provision(page, application); const { unit } = await seed(page, application.url), path = `/api/v1/units/${unit.id}`
+  const originalReply = await page.request.post(`${path}/disposal`, { headers: await writeContext(page, application.url, (await currentAsset(page, unit.id)).revision), data: { unit_revision: unit.revision, kind: 'sold', disposed_at: instant, currency: 'JPY', realized_proceeds_minor: 200 } }); expect(originalReply.status()).toBe(200)
+  const original: components['schemas']['Disposal'] = await originalReply.json(), beforeReply = await page.request.get(`${path}/disposal-record`); expect(beforeReply.status()).toBe(200)
+  const before: components['schemas']['DisposalRecord'] = await beforeReply.json(); expect(beforeReply.headers().etag).toBe(`"${before.revision}"`); expect(before.current).toMatchObject({ realized_proceeds_minor: 200 })
+  const physical: Unit = await (await page.request.get(path)).json(), asset = await currentAsset(page, unit.id); expect(physical).toMatchObject({ status: 'disposed', revision: 2 })
+  const voidReply = await page.request.post(`${path}/disposal-corrections`, { headers: await writeContext(page, application.url, before.revision), data: { asset_revision: asset.revision, action: 'void', replacement: null, reason: 'Financial decision voided for review' } }); expect(voidReply.status()).toBe(200)
+  const decision: components['schemas']['DisposalCorrection'] = await voidReply.json(); expect(decision.before).toEqual(before); expect(decision.after.current).toBeNull(); expect(decision.after.revision).toBe(before.revision + 1)
+  expect((await page.request.get(`${path}/disposal`)).status()).toBe(404)
+  const retainedReply = await page.request.get(`${path}/disposal-record`); expect(retainedReply.status()).toBe(200); expect(retainedReply.headers().etag).toBe(`"${decision.after.revision}"`)
+  const retained: components['schemas']['DisposalRecord'] = await retainedReply.json(); expect(retained).toEqual(decision.after); expect(retained.original).toMatchObject({ item_unit_id: unit.id, kind: original.kind, realized_proceeds_minor: 200 }); expect(retained.current).toBeNull()
+  const historyReply = await page.request.get(`${path}/disposal-corrections`); expect(historyReply.status()).toBe(200)
+  const history: components['schemas']['DisposalCorrectionList'] = await historyReply.json(); expect(history.data).toEqual([decision]); expect(history.next_cursor).toBeNull()
+  const current = await currentAsset(page, unit.id), writes = watchDomainWrites(page, ['/api/v1/units'])
+  await page.goto(`/assets/${unit.id}/dispose`); await expect(page.getByText('目前沒有生效的處置財務決定；這不代表沒有歷史紀錄。', { exact: true })).toBeVisible(); await expect(page.getByText(text.disposalHelp, { exact: true }).first()).toBeVisible()
+  await select(page, text.dispose).selectOption('sold'); await input(page, text.fields.realized_proceeds_minor).fill('100'); await input(page, text.fields.disposed_at).fill(instant); await page.getByRole('button', { name: text.review, exact: true }).click()
+  const dialog = page.getByRole('alertdialog'); await expect(dialog.getByText(text.noDisposal, { exact: true })).toBeVisible(); await accessible(page)
+  const rejection = page.waitForResponse((response) => new URL(response.url()).pathname === `${path}/disposal` && response.request().method() === 'POST')
+  await dialog.getByRole('button', { name: text.confirms['dispose-asset'], exact: true }).click(); const response = await rejection
+  expect(response.status()).toBe(409); expect((await response.json()).error.code).toBe('ASSET_HISTORY_LOCKED'); await expect(dialog.getByText(text.historyLocked, { exact: true })).toBeVisible()
+  expect(writes).toHaveLength(1); expect(writes[0]?.proof).toBe(`"${current.revision}"`); expect(JSON.parse(writes[0]?.body ?? '{}')).toMatchObject({ unit_revision: physical.revision })
+  expect(await (await page.request.get(path)).json()).toEqual(physical); expect(await currentAsset(page, unit.id)).toEqual(current); expect(await (await page.request.get(`${path}/disposal-record`)).json()).toEqual(retained); expect(await (await page.request.get(`${path}/disposal-corrections`)).json()).toEqual(history)
+})
+
 test('keeps exact maximum-safe financial table values readable at 200 percent text in both themes', async ({ page, application }, info) => {
   await provision(page, application); const { item, unit } = await seed(page, application.url), owner = await currentItem(page, item.id)
   expect((await page.request.put(`/api/v1/units/${unit.id}/asset`, { headers: await writeContext(page, application.url, unit.revision), data: { item_revision: owner.revision, asset_revision: 1, cost_basis: 'manual', currency: 'JPY', manual_acquisition_minor: Number.MAX_SAFE_INTEGER, in_service_at: null, retired_at: null, estimated_residual_minor: 0, usage_unit: 'times' } })).status()).toBe(200)
