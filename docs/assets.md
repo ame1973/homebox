@@ -50,7 +50,7 @@ A sent timeout, canceled wait or malformed reply may already have committed. The
 
 ## Financial correction contracts
 
-Separate [audited financial correction contracts](financial-corrections.md) now define retained DisposalRecord reads and financial correction/history operations, alongside Purchase allocation correction. They preserve the original disposal, distinguish explicit void from zero proceeds, retain an actual independent Disposal proof after void and never revive/move/dispose a Unit again or infer retirement. DisposalRecord/disposal correction persistence/services and all five new HTTP/SDK/reviewed-screen workflows remain unfinished. Private Purchase allocation correction/history services now validate proposed old/new Asset totals and current acquisition effects without changing physical state. The eleven currently implemented Asset operations do not silently supply the new correction workflows, and retirement-date correction remains separate required work.
+Separate [audited financial correction contracts](financial-corrections.md) define retained DisposalRecord reads and financial correction/history operations, alongside Purchase allocation correction. Private Disposal services now retain the original and independently versioned nullable current decision through explicit void/reinstatement, validate the complete linked financial chain and never revive/move/dispose a Unit again or infer retirement. Private Purchase allocation correction/history services validate proposed old/new Asset totals and current acquisition effects without changing physical state. All five new HTTP/SDK/reviewed-screen workflows remain unfinished; the eleven currently implemented Asset operations do not silently supply them. Retirement-date correction remains separate required work.
 
 ## Domain boundaries
 
@@ -78,7 +78,7 @@ Paths are relative to `/api/v1`. All eleven routes delegate to the private `Asse
 | GET | `/units/{id}/costs` | Completed session; signed owned page | `CostList`, no ETag |
 | POST | `/units/{id}/costs` | Asset If-Match | New `Cost`, independent event ETag |
 | POST | `/units/{id}/retire` | Asset If-Match plus original `unit_revision` | `Unit`, independent Unit ETag |
-| GET | `/units/{id}/disposal` | Completed session; actual retained disposal | `Disposal`, independent Disposal ETag |
+| GET | `/units/{id}/disposal` | Completed session; actual current financial disposal | `Disposal`, independent Disposal ETag |
 | POST | `/units/{id}/disposal` | Asset If-Match plus original `unit_revision` | New `Disposal`, independent Disposal ETag |
 | GET | `/units/{id}/cost-summary` | Completed session; optional exact `as_of` | `AssetCostSummary`, no resource ETag |
 

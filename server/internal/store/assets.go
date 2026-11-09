@@ -234,14 +234,14 @@ func loadCost(ctx context.Context, query queryer, id string) (Cost, error) {
 }
 
 func loadDisposal(ctx context.Context, query queryer, id string) (Disposal, error) {
-	value, err := scanDisposal(query.QueryRowContext(ctx, disposalSelect+" WHERE d.item_unit_id=?", id))
+	record, err := loadDisposalRecord(ctx, query, id)
 	if err != nil {
 		return Disposal{}, err
 	}
-	if err = validateAssetEventOwner(ctx, query, value.ItemUnitID); err != nil {
-		return Disposal{}, err
+	if record.Current == nil {
+		return Disposal{}, ErrNotFound
 	}
-	return value, nil
+	return Disposal{*record.Current, record.Revision}, nil
 }
 
 func validateAssetUnit(ctx context.Context, query queryer, id string) error {

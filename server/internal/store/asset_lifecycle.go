@@ -45,17 +45,6 @@ func (m *mutationTx) recordAssetLifecycleChange(value assetLifecycleContext) err
 	return m.execAssetRow("INSERT INTO asset_profile_changes(mutation_event_id,item_unit_id,context_json) VALUES(?,?,?)", m.eventID, value.After.ItemUnitID, string(encoded))
 }
 
-func currentAssetDisposal(ctx context.Context, query queryer, id string) (*Disposal, error) {
-	value, err := loadDisposal(ctx, query, id)
-	if errors.Is(err, ErrNotFound) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &value, nil
-}
-
 func (a *Assets) Retire(ctx context.Context, token, key, id string, revision int64, input AssetRetireWrite) (Unit, error) {
 	if !validDomainID(id) || input.UnitRevision < 1 || input.UnitRevision > maxSafeInteger ||
 		!validPurchaseInstant(input.RetiredAt) || !authString(input.Note, 0, 10000) {
@@ -78,11 +67,11 @@ func (a *Assets) Retire(ctx context.Context, token, key, id string, revision int
 		if err != nil {
 			return Unit{}, err
 		}
-		disposal, err := currentAssetDisposal(ctx, m.tx, id)
-		if err != nil {
+		_, err = loadDisposalRecord(ctx, m.tx, id)
+		if err != nil && !errors.Is(err, ErrNotFound) {
 			return Unit{}, err
 		}
-		if unit.Status == "disposed" || disposal != nil {
+		if unit.Status == "disposed" || err == nil {
 			return Unit{}, ErrUnitDisposed
 		}
 		paths, err := m.unitLocationPaths(unit.LocationID, nil)
@@ -173,9 +162,16 @@ func (a *Assets) Dispose(ctx context.Context, token, key, id string, revision in
 		if err != nil {
 			return Disposal{}, err
 		}
-		prior, err := currentAssetDisposal(ctx, m.tx, id)
-		if err != nil {
+		record, err := loadDisposalRecord(ctx, m.tx, id)
+		if err != nil && !errors.Is(err, ErrNotFound) {
 			return Disposal{}, err
+		}
+		var prior *Disposal
+		if err == nil {
+			if record.Current == nil {
+				return Disposal{}, ErrAssetHistory
+			}
+			prior = &Disposal{*record.Current, record.Revision}
 		}
 		paths, err := m.unitLocationPaths(unit.LocationID, nil)
 		if err != nil {
