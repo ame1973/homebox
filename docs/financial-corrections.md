@@ -1,6 +1,6 @@
 # Audited Financial Corrections
 
-**Availability: all five protected financial-correction HTTP operations, stateless browser adapters, bracketed correction sources, raw form/proposal models and volatile original-key commands/controller are implemented.** Migrations 0017/0018 and the private `Purchases.CorrectLine/PageLineCorrections` and `Assets.GetDisposalRecord/CorrectDisposal/PageDisposalCorrections` services provide their authoritative decisions and authenticated history. The HTTP handlers enforce the existing protected session/Origin/CSRF/version/key boundary, strict nested JSON, original independent proofs and final SQL authorization. Verified TLS/cookie-jar tests and a compiled-server/socket contract check exercise the actual endpoints. The adapters validate complete original contexts, exact replies and independent proofs without hidden refresh or replay; strict type/runtime and private actual-SDK/Go browser tests cover them. The responsive retained-Disposal history/correction screen is implemented; the separate Purchase allocation correction operating screens remain unfinished.
+**Availability: all five protected financial-correction HTTP operations, stateless browser adapters, bracketed correction sources, raw form/proposal models and volatile original-key commands/controller are implemented.** Migrations 0017/0018 and the private `Purchases.CorrectLine/PageLineCorrections` and `Assets.GetDisposalRecord/CorrectDisposal/PageDisposalCorrections` services provide their authoritative decisions and authenticated history. The HTTP handlers enforce the existing protected session/Origin/CSRF/version/key boundary, strict nested JSON, original independent proofs and final SQL authorization. Verified TLS/cookie-jar tests and a compiled-server/socket contract check exercise the actual endpoints. The adapters validate complete original contexts, exact replies and independent proofs without hidden refresh or replay; strict type/runtime and private actual-SDK/Go browser tests cover them. The responsive retained-Disposal history/correction screen and read-only Purchase correction history are implemented; Purchase allocation correction write controls remain unfinished.
 
 This closes an interface gap in the read-only source requirements without weakening posted-history immutability. The root OpenAPI now contains 142 operations and 177 schemas, preserving all original 103 operation identities and every existing schema, including all version-one offline payloads. Specification revision v0.9.3 is not an application release.
 
@@ -57,7 +57,7 @@ await correctPurchaseLine(purchase.id, {
 })
 ```
 
-The caller owns review, confirmation, refreshing current reads and preserving the original command for an explicit same-key reconciliation. The retained-Disposal screen now composes these adapters and forms; Purchase correction operating screens remain unfinished.
+The caller owns review, confirmation, refreshing current reads and preserving the original command for an explicit same-key reconciliation. The retained-Disposal screen composes these adapters and forms; Purchase correction history is read-only and its write controls remain unfinished.
 
 ## Complete correction review sources
 
@@ -67,7 +67,7 @@ The caller owns review, confirmation, refreshing current reads and preserving th
 
 `readDisposalCorrection` brackets the actual Unit, owning Item, Asset and retained DisposalRecord around the complete selected correction history. It validates the actual subject-revision chain and immutable original across unordered entry IDs, without assuming the first retained revision was one. An actual 404 or failed read remains an error, not a fabricated null current decision. A voided record remains reviewable; zero proceeds and void remain distinct. Neither a current-disposal 404 nor a summary or correction-entry revision is treated as a subject proof. Legacy retained currency/proceeds are not repriced or turned into new-money eligibility.
 
-These sources do not query unrelated histories, unselected Items, Stock or summary totals. Tests complete 205-entry scopes, reject mixed/failed intervals and exercise real concurrent Purchase and Disposal changes through the protected Go server. Purchase correction review controls and operating screens are still required.
+These sources do not query unrelated histories, unselected Items, Stock or summary totals. Tests complete 205-entry scopes, reject mixed/failed intervals and exercise real concurrent Purchase and Disposal changes through the protected Go server. The read-only Purchase history screen uses the complete history source; Purchase correction write controls are still required.
 
 ## Raw correction forms and proposals
 
@@ -90,6 +90,12 @@ Explicit adoption validates the newer complete source, keeps the same original L
 From an actual Asset detail, open `/assets/UNIT_ID/disposal-corrections`. The responsive screen shows the retained original, current effective financial decision or explicit void, the independent Disposal/Asset proofs and every actual correction ordered by subject revision. A missing or failed selected source remains unavailable; the screen does not invent a void or claim history is absent. Actual Unit and Item information is displayed as review context, never as another financial proof.
 
 Choose an explicit void or complete replacement/reinstatement, enter a reason and, for replacement, a new kind, exact offset instant and deliberate whole minor-unit proceeds. Non-sale zero must be typed; blank is never zero. Review the original/current/proposed data and confirm once. A financial void does not revive or move the Unit. When a source changes, compare the original and current data and explicitly adopt the current context; any invalid draft remains visible without conversion. If a sent result is uncertain, reopen and explicitly reconcile the original key/body/proofs even after current-source failure; reconnect never resubmits. Only validated Asset/catalog read scope survives login, while session loss purges the volatile financial command and draft. See [Asset browser usage](assets.md#correcting-retained-disposal-finance).
+
+## Purchase allocation correction history in the browser
+
+From an actual Purchase detail, open `/purchases/PURCHASE_ID/line-corrections`. The read-only screen completes current Lines and correction entries between matching Purchase reads, then shows each actual original and nullable replacement with independent IDs, exact base counts and whole minor-unit amounts, reason and server creation instant. A void has no replacement; active zero is not void. An empty current set does not imply absent retained history. Entry display order is not represented as chronological; follow the actual Line IDs to inspect replacement relationships.
+
+A failed or mixed initial read withholds the entire source; after an earlier complete read, offline or failed refreshes label that retained view as potentially stale rather than claiming current authority. Login returns preserve only validated Purchase/catalog read scope. This screen performs no financial writes; reviewed void/replacement controls and paged replacement-Item selection remain required.
 
 ## Purchase allocation correction
 
@@ -150,7 +156,7 @@ Migration 0017 adds one immutable, indexed correction journal with actual Purcha
 
 Current Line pages skip validated voided rows before slicing, including large raw gaps. Item-associated Purchase, catalog/Stock purchase filters, exact-Unit Asset filters/acquisition and approved search publication classify actual retained source rather than blindly excluding journal matches in SQL. Invalid/missing referenced context fails closed instead of resurrecting the old attribution. The original Line counter advances to its independent tombstone; actual Purchase/old/new Item counters must have advanced beyond their stored original proofs. Detailed history completes its own live pages and never becomes a new offline entity or subject proof. Global Purchase headers and historical currency/deletion guards remain retained even when no allocation is currently active.
 
-The protected Purchase correction/history handlers and stateless adapters delegate to these services. They do not create a CLI financial-write interface or authorize direct database edits. Reviewed Purchase correction screens remain separate required work.
+The protected Purchase correction/history handlers and stateless adapters delegate to these services. They do not create a CLI financial-write interface or authorize direct database edits. Reviewed Purchase correction write controls remain separate required work.
 
 ## Retained disposal record and financial correction
 
@@ -217,6 +223,8 @@ npm --prefix web test -- --coverage.enabled=false src/features/purchases/correct
 npm --prefix web test -- --coverage.enabled=false src/features/purchases/correction-form.test.ts src/features/assets/correction-form.test.ts
 npm --prefix web test -- --coverage.enabled=false src/features/financial-corrections/commands.test.ts src/features/financial-corrections/use-correction-mutation.test.tsx src/lib/reviewed-command.test.ts
 npm --prefix web test -- --coverage.enabled=false src/features/financial-corrections/disposal-editor-model.test.ts src/features/financial-corrections/disposal-page.test.tsx
+npm --prefix web test -- --coverage.enabled=false src/features/financial-corrections/purchase-history-page.test.tsx src/lib/purchase-navigation.test.ts
+npm --prefix web run test:e2e -- --project=phone tests/e2e/purchase-correction-history.spec.ts
 npm --prefix web run test:e2e -- --project=phone tests/e2e/disposal-corrections.spec.ts
 npm --prefix web run test:e2e -- --project=phone tests/e2e/financial-corrections-api.spec.ts
 go -C server test ./internal/store -run '^TestPurchaseLineCorrection' -count=1
@@ -229,4 +237,6 @@ Negative schemas and strict actual-client type fixtures cover required proofs/nu
 
 The responsive Disposal screen has separate actual-Go tests for zero, void, reinstatement, stale proofs, explicit adoption, genuinely committed malformed replies, source-read failure, safe login/offline behavior and enlarged paired-theme keyboard/axe checks. A 205-decision rendering case uses mocked valid source and is not real-server large-history evidence.
 
-Still required: responsive reviewed Purchase allocation correction screens and any remaining retirement-date correction. Full sync/PWA, media, camera, worker/search, analytics, encrypted backup/restore, deployment and physical acceptance also remain separate complete-product gates. No automated suite is relabeled as testing these unimplemented operating workflows, physical devices, hosted CI or a production deployment.
+The read-only Purchase history screen separately exercises actual linked zero/replacement/void data, a genuine mixed-read interval, safe login and enlarged paired-theme keyboard/axe behavior against Go. Its 205-entry rendering component case uses mocked valid source, not a real-server large-history UI fixture.
+
+Still required: responsive reviewed Purchase allocation correction write controls and any remaining retirement-date correction. Full sync/PWA, media, camera, worker/search, analytics, encrypted backup/restore, deployment and physical acceptance also remain separate complete-product gates. No automated suite is relabeled as testing these unimplemented operating workflows, physical devices, hosted CI or a production deployment.

@@ -173,6 +173,7 @@ it('preserves multiline merchant names through actual creation controls and unto
 it('reads all 205 independent Lines between matching Purchase reads without fetching their unrelated holdings', async () => {
   lines = new Map(Array.from({ length: 205 }, (_, index) => [`line-${index}`, { ...line, id: `line-${index}` }]))
   mount('/purchases/purchase'); expect(await screen.findByText(`${text.lineCount}205`)).toBeVisible()
+  expect(screen.getByRole('link', { name: messages.purchaseCorrectionHistory.title })).toHaveAttribute('href', '/purchases/purchase/line-corrections')
   expect(api.fetchPurchaseLinesPage).toHaveBeenCalledTimes(3); expect(api.fetchPurchase).toHaveBeenCalledTimes(2)
   expect(catalog.fetchItem).not.toHaveBeenCalled(); expect(holdings.fetchItemUnitsPage).not.toHaveBeenCalled(); expect(holdings.fetchStockPage).not.toHaveBeenCalled()
 })

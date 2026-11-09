@@ -11,6 +11,7 @@ export function purchaseRoute(id: string, mode: 'detail' | 'edit' = 'detail') {
   return `/purchases/${encodeURIComponent(identity)}${mode === 'edit' ? '/edit' : identity.toLowerCase() === 'new' ? '/view' : ''}`
 }
 export const purchaseAllocationRoute = (id: string, itemID: string) => `/purchases/${encodeURIComponent(input(pathIDSchema, id))}/allocate/${encodeURIComponent(input(pathIDSchema, itemID))}`
+export const purchaseCorrectionHistoryRoute = (id: string) => `/purchases/${encodeURIComponent(input(pathIDSchema, id))}/line-corrections`
 export function purchaseSelectionRoute(id: string, query: ItemPageQuery = {}) {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(input(itemPageQuerySchema, query))) if (value !== undefined) params.set(key, String(value))
@@ -39,7 +40,7 @@ export function purchaseReturnPath(value: unknown): string | undefined {
     const url = new URL(value, 'https://homebox.invalid')
     if (url.origin !== 'https://homebox.invalid' || url.pathname + url.search !== value) return undefined
     if (url.pathname === '/purchases') return purchaseQuery(url.search) === undefined ? undefined : value
-    const match = /^\/purchases\/([^/]+)(?:\/(edit|view|allocate)(?:\/([^/]+))?)?$/.exec(url.pathname)
+    const match = /^\/purchases\/([^/]+)(?:\/(edit|view|allocate|line-corrections)(?:\/([^/]+))?)?$/.exec(url.pathname)
     const item = /^\/items\/([^/]+)\/purchases$/.exec(url.pathname)
     if (item) return !url.search && pathIDSchema.safeParse(decodeURIComponent(item[1]!)).success ? value : undefined
     if (!match || !pathIDSchema.safeParse(decodeURIComponent(match[1]!)).success) return undefined
