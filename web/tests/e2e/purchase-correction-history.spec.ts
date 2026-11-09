@@ -86,6 +86,23 @@ test('returns through genuine login with only validated purchase read scope', as
   const state = await page.evaluate(() => window.history.state.usr); expect(state).toMatchObject({ purchaseList: '/purchases?currency=JPY&limit=1' }); for (const key of ['reason', 'key', 'command', 'csrfToken']) expect(state).not.toHaveProperty(key); expect(writes).toHaveLength(0)
 })
 
+test('changes offscreen contained action colors atomically in both directions', async ({ page, application }) => {
+  await provision(page, application); const { purchase, line } = await seed(page, application.url); await correct(page, application.url, purchase.id, line, 'replace', '保留正確對比')
+  await page.goto(`/purchases/${purchase.id}/line-corrections`); await page.locator('html').evaluate((element) => { element.style.fontSize = '200%' })
+  const action = page.getByRole('link', { name: new RegExp(`^${text.start}`) })
+  await expect(action).toBeVisible(); await expect(action.locator('..')).toHaveCSS('content-visibility', 'auto')
+  // A long transition makes any delayed offscreen interpolation observable without waiting.
+  await action.evaluate((element) => { element.style.transitionDuration = '10s'; return getComputedStyle(element).color })
+  for (const theme of ['dark', 'light'] as const) {
+    await page.getByRole('button', { name: messages.theme.label, exact: true }).click(); await page.getByRole('menuitemradio', { name: messages.theme[theme], exact: true }).click(); await expect(page.getByRole('menu')).toHaveCount(0)
+    const state = await action.evaluate((element) => ({
+      actual: getComputedStyle(element).color, expected: getComputedStyle(document.body).color,
+      transitions: element.getAnimations().filter((animation): animation is CSSTransition => animation instanceof CSSTransition).map((animation) => animation.transitionProperty),
+    }))
+    expect(state.actual).toBe(state.expected); expect(state.transitions).not.toContain('color'); expect(state.transitions).not.toContain('background-color')
+  }
+})
+
 test('keeps long exact financial history accessible at 200 percent text in both themes', async ({ page, application }, info) => {
   await provision(page, application); const { purchase, line } = await seed(page, application.url, '長財務物品名稱'.repeat(25)); await correct(page, application.url, purchase.id, line, 'replace', '長財務更正原因 é 😀 '.repeat(150), Number.MAX_SAFE_INTEGER)
   const writes = watchDomainWrites(page, ['/api/v1/purchases']); await page.goto(`/purchases/${purchase.id}/line-corrections`); await page.locator('html').evaluate((element) => { element.style.fontSize = '200%' })
