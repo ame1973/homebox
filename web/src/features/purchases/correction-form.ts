@@ -21,7 +21,7 @@ const replacement = z.discriminatedUnion('kind', [z.strictObject({ kind: z.liter
 const sourceSchema: z.ZodType<PurchaseCorrectionSource> = z.strictObject({ purchase: purchaseSchema, lines: z.array(purchaseLineSchema),
   corrections: z.array(purchaseCorrectionSchema), line: purchaseLineSchema, item: itemSchema, originalUnit, replacement })
 
-function reviewedSource(source: PurchaseCorrectionSource): PurchaseCorrectionSource {
+export function reviewedPurchaseCorrectionSource(source: unknown): PurchaseCorrectionSource {
   const checked = input(sourceSchema, source), { purchase, line, item, originalUnit, replacement } = checked
   input(pathIDSchema, purchase.id); input(pathIDSchema, item.id)
   const actual = checked.lines.find((candidate) => candidate.id === line.id)
@@ -52,7 +52,7 @@ export function purchaseCorrectionDefaults(): PurchaseCorrectionValues {
 // A replacement is a whole new attribution, never a delta or physical receipt.
 // Hidden raw fields survive a void choice but do not enter its wire body.
 export function purchaseCorrectionProposal(values: PurchaseCorrectionValues, source: PurchaseCorrectionSource): PurchaseCorrectionProposal {
-  const checked = input(purchaseCorrectionValues, values), original = reviewedSource(source)
+  const checked = input(purchaseCorrectionValues, values), original = reviewedPurchaseCorrectionSource(source)
   const fields = { line_id: original.line.id, line_revision: original.line.revision, item_revision: original.item.revision, reason: checked.reason }
   if (checked.action === 'void') {
     const body = { ...fields, action: 'void' as const, replacement: null }
@@ -70,7 +70,7 @@ export function purchaseCorrectionProposal(values: PurchaseCorrectionValues, sou
 // Only explicit review adopts a new Purchase/currency and replacement Item
 // interpretation. Never convert counts/money or erase an unavailable Unit choice.
 export function adoptPurchaseCorrection(values: PurchaseCorrectionValues, before: PurchaseCorrectionSource, current: PurchaseCorrectionSource) {
-  const previous = reviewedSource(before), next = reviewedSource(current)
+  const previous = reviewedPurchaseCorrectionSource(before), next = reviewedPurchaseCorrectionSource(current)
   if (previous.purchase.id !== next.purchase.id || previous.item.id !== next.item.id || !samePurchaseLine(previous.line, next.line)) throw new ApiError('VALIDATION_ERROR')
   return { values: input(purchaseCorrectionValues, values), source: next }
 }

@@ -14,7 +14,7 @@ export type DisposalCorrectionProposal = Readonly<{ source: DisposalCorrectionSo
 
 const sourceSchema: z.ZodType<DisposalCorrectionSource> = z.strictObject({ unit: unitSchema, item: itemSchema, asset: assetSchema,
   disposal: disposalRecordSchema, corrections: z.array(disposalCorrectionSchema) })
-function reviewedSource(source: DisposalCorrectionSource): DisposalCorrectionSource {
+export function reviewedDisposalCorrectionSource(source: unknown): DisposalCorrectionSource {
   const checked = input(sourceSchema, source), { unit, item, asset, disposal, corrections } = checked
   input(pathIDSchema, unit.id); input(pathIDSchema, item.id)
   if (unit.item_id !== item.id || item.tracking_mode !== 'individual' || asset.item_unit_id !== unit.id || disposal.item_unit_id !== unit.id ||
@@ -23,13 +23,13 @@ function reviewedSource(source: DisposalCorrectionSource): DisposalCorrectionSou
 }
 
 export function disposalCorrectionDefaults(source: DisposalCorrectionSource): DisposalCorrectionValues {
-  return { action: '', reason: '', kind: '', currency: reviewedSource(source).asset.currency, realized_proceeds_minor: '', disposed_at: '', note: '' }
+  return { action: '', reason: '', kind: '', currency: reviewedDisposalCorrectionSource(source).asset.currency, realized_proceeds_minor: '', disposed_at: '', note: '' }
 }
 
 // A retained null current decision is a financial void, not a missing history.
 // Replacement money/date are new explicit inputs, including non-sale zero.
 export function disposalCorrectionProposal(values: DisposalCorrectionValues, source: DisposalCorrectionSource): DisposalCorrectionProposal {
-  const checked = input(disposalCorrectionValues, values), original = reviewedSource(source)
+  const checked = input(disposalCorrectionValues, values), original = reviewedDisposalCorrectionSource(source)
   const fields = { asset_revision: original.asset.revision, reason: checked.reason }
   if (checked.action === 'void') {
     if (original.disposal.current === null) throw new ApiError('ASSET_HISTORY_LOCKED')
@@ -45,7 +45,7 @@ export function disposalCorrectionProposal(values: DisposalCorrectionValues, sou
 // Explicit adoption updates the currency interpretation, not the raw amount,
 // date, reason or kind. The first recorded disposal remains the same subject.
 export function adoptDisposalCorrection(values: DisposalCorrectionValues, before: DisposalCorrectionSource, current: DisposalCorrectionSource) {
-  const previous = reviewedSource(before), next = reviewedSource(current)
+  const previous = reviewedDisposalCorrectionSource(before), next = reviewedDisposalCorrectionSource(current)
   if (previous.unit.id !== next.unit.id || previous.item.id !== next.item.id || !sameDisposalData(previous.disposal.original, next.disposal.original)) throw new ApiError('VALIDATION_ERROR')
   return { values: { ...input(disposalCorrectionValues, values), currency: next.asset.currency }, source: next }
 }

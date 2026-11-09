@@ -949,3 +949,21 @@ const sourcelessDisposalProposal: import('../src/features/assets/correction-form
 // @ts-expect-error Disposal proceeds are raw text until reviewed.
 const numericDisposalDraft: import('../src/features/assets/correction-form').DisposalCorrectionValues = { ...rawDisposalCorrection, realized_proceeds_minor: 0 }
 void [correctionFormCalls, reviewedVoidProposal, reviewedReplacementProposal, reviewedDisposalProposal, numericCorrectionDraft, missingCorrectionUnitDraft, physicalVoidProposal, sourcelessDisposalProposal, numericDisposalDraft]
+
+// Correction commands freeze complete original sources and cannot attach credentials or invented proofs.
+declare const correctionCommands: typeof import('../src/features/financial-corrections/commands')
+const purchaseCorrectionCommand = correctionCommands.freezeCorrectionCommand({ kind: 'correct-purchase', ...reviewedReplacementProposal })
+const disposalCorrectionCommand = correctionCommands.freezeCorrectionCommand({ kind: 'correct-disposal', ...reviewedDisposalProposal })
+const sendCorrectionCalls = [correctionCommands.sendCorrectionCommand(purchaseCorrectionCommand, 'csrf', new AbortController().signal),
+  correctionCommands.sendCorrectionCommand(disposalCorrectionCommand, 'csrf', new AbortController().signal)]
+// @ts-expect-error A new review cannot supply a reused original key.
+const reusedCorrectionKey = correctionCommands.freezeCorrectionCommand({ kind: 'correct-purchase', ...reviewedVoidProposal, key: 'previous-key' })
+// @ts-expect-error Credentials are caller-owned and cannot be retained in a command.
+const credentialCorrectionCommand = correctionCommands.freezeCorrectionCommand({ kind: 'correct-disposal', ...reviewedDisposalProposal, csrfToken: 'secret' })
+// @ts-expect-error A financial void cannot invent a selected physical Unit.
+const physicalCorrectionCommand = correctionCommands.freezeCorrectionCommand({ kind: 'correct-purchase', ...reviewedVoidProposal, unit: holdingUnit })
+// @ts-expect-error A command must retain the complete reviewed original source.
+const unreviewedCorrectionCommand = correctionCommands.freezeCorrectionCommand({ kind: 'correct-disposal', body: disposalVoidDecision })
+// @ts-expect-error A subject proof or caller key alone is not a frozen command.
+const looseCorrectionSend = correctionCommands.sendCorrectionCommand({ kind: 'correct-disposal', body: disposalVoidDecision, key: 'previous-key' }, 'csrf', new AbortController().signal)
+void [sendCorrectionCalls, reusedCorrectionKey, credentialCorrectionCommand, physicalCorrectionCommand, unreviewedCorrectionCommand, looseCorrectionSend]

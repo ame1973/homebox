@@ -3,8 +3,18 @@ import { ApiError } from '@/lib/api/client'
 export type ReviewedCommand = Readonly<{ key: string }>
 
 // Review proposals are volatile copies, never persistent/offline write queues.
+// Freeze the nested domain objects/arrays too, so the reviewed body and proofs
+// cannot change between an uncertain delivery and explicit reconciliation.
 export function freezeReviewedCommand<T extends object>(input: T): Readonly<T> & ReviewedCommand {
-  return Object.freeze({ ...structuredClone(input), key: crypto.randomUUID() })
+  const command = { ...structuredClone(input), key: crypto.randomUUID() }
+  const pending: object[] = [command]
+  while (pending.length) {
+    const current = pending.pop()!
+    if (Object.isFrozen(current)) continue
+    Object.freeze(current)
+    for (const value of Object.values(current)) if (value !== null && typeof value === 'object') pending.push(value)
+  }
+  return command
 }
 
 export function uncertainMutationFailure(error: ApiError): boolean {

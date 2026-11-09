@@ -13,7 +13,7 @@ const test = applicationTest.extend<{}, { applicationWebDirectory: string }>({
     try {
       cpSync(fileURLToPath(new URL('../../dist', import.meta.url)), web, { recursive: true })
       // Bundle the actual SDK privately, without a production test entrypoint.
-      writeFileSync(entry, `export * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/financial-corrections.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/assets.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/purchases.ts', import.meta.url)))};\nexport {createItem,fetchItem,patchItem} from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/catalog.ts', import.meta.url)))};\nexport {createUnit,fetchUnit} from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/holdings.ts', import.meta.url)))};\nexport {readPurchaseCorrection,readPurchaseCorrectionHistory} from ${JSON.stringify(fileURLToPath(new URL('../../src/features/purchases/correction-model.ts', import.meta.url)))};\nexport {readDisposalCorrection} from ${JSON.stringify(fileURLToPath(new URL('../../src/features/assets/correction-model.ts', import.meta.url)))};\nexport {purchaseCorrectionDefaults,purchaseCorrectionProposal,adoptPurchaseCorrection} from ${JSON.stringify(fileURLToPath(new URL('../../src/features/purchases/correction-form.ts', import.meta.url)))};\nexport {disposalCorrectionDefaults,disposalCorrectionProposal,adoptDisposalCorrection} from ${JSON.stringify(fileURLToPath(new URL('../../src/features/assets/correction-form.ts', import.meta.url)))};\n`)
+      writeFileSync(entry, `export * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/financial-corrections.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/assets.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/purchases.ts', import.meta.url)))};\nexport {createItem,fetchItem,patchItem} from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/catalog.ts', import.meta.url)))};\nexport {createUnit,fetchUnit} from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/holdings.ts', import.meta.url)))};\nexport {readPurchaseCorrection,readPurchaseCorrectionHistory} from ${JSON.stringify(fileURLToPath(new URL('../../src/features/purchases/correction-model.ts', import.meta.url)))};\nexport {readDisposalCorrection} from ${JSON.stringify(fileURLToPath(new URL('../../src/features/assets/correction-model.ts', import.meta.url)))};\nexport {purchaseCorrectionDefaults,purchaseCorrectionProposal,adoptPurchaseCorrection} from ${JSON.stringify(fileURLToPath(new URL('../../src/features/purchases/correction-form.ts', import.meta.url)))};\nexport {disposalCorrectionDefaults,disposalCorrectionProposal,adoptDisposalCorrection} from ${JSON.stringify(fileURLToPath(new URL('../../src/features/assets/correction-form.ts', import.meta.url)))};\nexport {freezeCorrectionCommand,sendCorrectionCommand} from ${JSON.stringify(fileURLToPath(new URL('../../src/features/financial-corrections/commands.ts', import.meta.url)))};\n`)
       await build({ configFile: false, logLevel: 'silent', build: { outDir: sdk, minify: false, lib: { entry, formats: ['es'], fileName: 'financial-corrections-sdk' } } })
       cpSync(join(sdk, 'financial-corrections-sdk.js'), join(web, 'assets', 'financial-corrections-sdk.js'))
       await provideFixture(web)
@@ -359,5 +359,119 @@ test('reviews raw Disposal void and reinstatement proposals without changing the
     const requests = writes.filter((request) => request.key === key); expect(requests).toHaveLength(1)
     expect(JSON.parse(requests[0]!.body!)).not.toHaveProperty('unit_revision')
   }
+  expect(writes.filter((request) => request.path.startsWith('/api/v1/stock'))).toHaveLength(0)
+})
+
+test('reconciles an actually committed Purchase command with its deeply frozen original source and key after fresh login', async ({ page, application }) => {
+  const password = await provision(page, application); await page.goto('/')
+  const writes = watchDomainWrites(page, ['/api/v1/purchases', '/api/v1/stock'])
+  const initial = await page.evaluate(async () => {
+    const modulePath = '/assets/financial-corrections-sdk.js', api = await import(modulePath)
+    const csrf = await fetch('/api/v1/auth/csrf', { credentials: 'same-origin', cache: 'no-store' }); if (!csrf.ok) throw new Error('Financial session unavailable')
+    const csrfToken: string = (await csrf.json()).token, root = () => ({ csrfToken, idempotencyKey: crypto.randomUUID(), signal: new AbortController().signal }), read = () => new AbortController().signal
+    const item = await api.createItem({ name: 'Frozen correction Item', tracking_mode: 'quantity' }, root())
+    const purchase = await api.createPurchase({ merchant_name: 'Frozen correction', purchased_at: '2026-11-07T00:00:00Z', currency: 'JPY' }, root())
+    const line = await api.createPurchaseLine(purchase.id, { item_id: item.id, item_revision: item.revision, item_unit_id: null, quantity_base: 1, paid_minor: 0 }, { ...root(), purchase, item })
+    const source = await api.readPurchaseCorrection(purchase.id, line.id, item.id, read())
+    const proposal = api.purchaseCorrectionProposal({ ...api.purchaseCorrectionDefaults(), action: 'replace', reason: 'Reviewed original command', replacement_item_id: item.id, allocation: 'none', quantity_base: '2', paid_minor: '99' }, source)
+    const command = api.freezeCorrectionCommand({ kind: 'correct-purchase', ...proposal })
+    const immutable = { body: Object.isFrozen(command.body), replacement: Object.isFrozen(command.body.replacement), source: Object.isFrozen(command.source), lines: Object.isFrozen(command.source.lines),
+      bodyChanged: Reflect.set(command.body.replacement, 'paid_minor', 98), proofChanged: Reflect.set(command.source.item, 'revision', 99) }
+    return { command, immutable }
+  })
+  expect(initial.immutable).toEqual({ body: true, replacement: true, source: true, lines: true, bodyChanged: false, proofChanged: false })
+  let attempts = 0
+  await page.route((url) => url.pathname === `/api/v1/purchases/${initial.command.source.purchase.id}/line-corrections`, async (route) => {
+    if (route.request().method() !== 'POST' || route.request().headers()['idempotency-key'] !== initial.command.key) { await route.continue(); return }
+    const response = await route.fetch(); expect(response.status()).toBe(200); attempts++
+    if (attempts > 1) { await route.fulfill({ response }); return }
+    const body = await response.json(); body.after.paid_minor = 98; await route.fulfill({ response, body: JSON.stringify(body) })
+  })
+  const unknown = await page.evaluate(async (command) => {
+    const modulePath = '/assets/financial-corrections-sdk.js', api = await import(modulePath)
+    const csrf = await fetch('/api/v1/auth/csrf', { credentials: 'same-origin', cache: 'no-store' }); if (!csrf.ok) throw new Error('Financial session unavailable')
+    try { await api.sendCorrectionCommand(command, (await csrf.json()).token, new AbortController().signal); return null }
+    catch (error) { window.dispatchEvent(new Event('online')); return error instanceof Error && 'code' in error ? error.code : 'unexpected' }
+  }, initial.command)
+  expect(unknown).toBe('INVALID_RESPONSE'); expect(writes.filter((request) => request.key === initial.command.key)).toHaveLength(1)
+  const later = await page.evaluate(async (command) => {
+    const modulePath = '/assets/financial-corrections-sdk.js', api = await import(modulePath)
+    const csrf = await fetch('/api/v1/auth/csrf', { credentials: 'same-origin', cache: 'no-store' }); if (!csrf.ok) throw new Error('Financial session unavailable')
+    const token: string = (await csrf.json()).token, read = () => new AbortController().signal
+    const active = (await api.fetchPurchaseLinesPage(command.source.purchase.id, {}, read())).data[0]
+    const source = await api.readPurchaseCorrection(command.source.purchase.id, active.id, null, read())
+    const proposal = api.purchaseCorrectionProposal({ ...api.purchaseCorrectionDefaults(), action: 'void', reason: 'Later separate decision' }, source)
+    await api.sendCorrectionCommand(api.freezeCorrectionCommand({ kind: 'correct-purchase', ...proposal }), token, read())
+    return { history: await api.fetchPurchaseCorrectionsPage(command.source.purchase.id, {}, read()), lines: await api.fetchPurchaseLinesPage(command.source.purchase.id, {}, read()) }
+  }, initial.command)
+  expect(later.lines).toEqual({ data: [], next_cursor: null }); expect(later.history.data).toHaveLength(2)
+  expect((await page.request.post('/api/v1/auth/logout', { headers: await writeContext(page, application.url) })).status()).toBe(200)
+  expect((await page.request.post('/api/v1/auth/login', { headers: { Origin: application.url }, data: { username: 'owner', password } })).status()).toBe(200)
+  const replay = await page.evaluate(async (command) => {
+    const modulePath = '/assets/financial-corrections-sdk.js', api = await import(modulePath)
+    const csrf = await fetch('/api/v1/auth/csrf', { credentials: 'same-origin', cache: 'no-store' }); if (!csrf.ok) throw new Error('Fresh financial session unavailable')
+    const result = await api.sendCorrectionCommand(command, (await csrf.json()).token, new AbortController().signal)
+    return { result, lines: await api.fetchPurchaseLinesPage(command.source.purchase.id, {}, new AbortController().signal) }
+  }, initial.command)
+  expect(replay.result).toEqual(later.history.data.find((entry: { before: { id: string } }) => entry.before.id === initial.command.source.line.id))
+  expect(replay.lines).toEqual(later.lines); expect(attempts).toBe(2)
+  const requests = writes.filter((request) => request.key === initial.command.key); expect(requests).toHaveLength(2); expect(requests[1]).toEqual(requests[0])
+  expect(writes.filter((request) => request.path.startsWith('/api/v1/stock'))).toHaveLength(0)
+})
+
+test('reconciles an actually committed Disposal command after a later void without changing the physical Unit', async ({ page, application }) => {
+  const password = await provision(page, application); await page.goto('/')
+  const writes = watchDomainWrites(page, ['/api/v1/units', '/api/v1/stock'])
+  const initial = await page.evaluate(async () => {
+    const modulePath = '/assets/financial-corrections-sdk.js', api = await import(modulePath)
+    const csrf = await fetch('/api/v1/auth/csrf', { credentials: 'same-origin', cache: 'no-store' }); if (!csrf.ok) throw new Error('Financial session unavailable')
+    const csrfToken: string = (await csrf.json()).token, root = () => ({ csrfToken, idempotencyKey: crypto.randomUUID(), signal: new AbortController().signal }), read = () => new AbortController().signal
+    const owner = await api.createItem({ name: 'Frozen disposal Unit' }, root())
+    const unit = await api.createUnit(owner.id, { location_id: null }, { ...root(), expectedRevision: owner.revision }), item = await api.fetchItem(owner.id, read())
+    const asset = await api.putAssetProfile(unit.id, { item_revision: item.revision, asset_revision: null, cost_basis: 'manual', currency: 'JPY', manual_acquisition_minor: 100, in_service_at: null, retired_at: null, estimated_residual_minor: null, usage_unit: 'times' }, { ...root(), unit, item, asset: null })
+    await api.disposeAsset(unit.id, { unit_revision: unit.revision, kind: 'sold', disposed_at: '2026-11-07T12:00:00.123456789+08:00', currency: 'JPY', realized_proceeds_minor: 200 }, { ...root(), asset, unit, disposal: null })
+    const source = await api.readDisposalCorrection(unit.id, read())
+    const proposal = api.disposalCorrectionProposal({ ...api.disposalCorrectionDefaults(source), action: 'replace', reason: 'Reviewed zero proceeds', kind: 'sold', realized_proceeds_minor: '0', disposed_at: '2026-11-07T04:00:00.123456789Z' }, source)
+    const command = api.freezeCorrectionCommand({ kind: 'correct-disposal', ...proposal })
+    const immutable = { body: Object.isFrozen(command.body), replacement: Object.isFrozen(command.body.replacement), source: Object.isFrozen(command.source), original: Object.isFrozen(command.source.disposal.original),
+      bodyChanged: Reflect.set(command.body.replacement, 'realized_proceeds_minor', 1), proofChanged: Reflect.set(command.source.asset, 'revision', 99) }
+    return { command, immutable }
+  })
+  expect(initial.immutable).toEqual({ body: true, replacement: true, source: true, original: true, bodyChanged: false, proofChanged: false })
+  let attempts = 0
+  await page.route((url) => url.pathname === `/api/v1/units/${initial.command.source.unit.id}/disposal-corrections`, async (route) => {
+    if (route.request().method() !== 'POST' || route.request().headers()['idempotency-key'] !== initial.command.key) { await route.continue(); return }
+    const response = await route.fetch(); expect(response.status()).toBe(200); attempts++
+    if (attempts > 1) { await route.fulfill({ response }); return }
+    const body = await response.json(); body.after.current.realized_proceeds_minor = 1; await route.fulfill({ response, body: JSON.stringify(body) })
+  })
+  const unknown = await page.evaluate(async (command) => {
+    const modulePath = '/assets/financial-corrections-sdk.js', api = await import(modulePath)
+    const csrf = await fetch('/api/v1/auth/csrf', { credentials: 'same-origin', cache: 'no-store' }); if (!csrf.ok) throw new Error('Financial session unavailable')
+    try { await api.sendCorrectionCommand(command, (await csrf.json()).token, new AbortController().signal); return null }
+    catch (error) { window.dispatchEvent(new Event('online')); return error instanceof Error && 'code' in error ? error.code : 'unexpected' }
+  }, initial.command)
+  expect(unknown).toBe('INVALID_RESPONSE'); expect(writes.filter((request) => request.key === initial.command.key)).toHaveLength(1)
+  const later = await page.evaluate(async (command) => {
+    const modulePath = '/assets/financial-corrections-sdk.js', api = await import(modulePath)
+    const csrf = await fetch('/api/v1/auth/csrf', { credentials: 'same-origin', cache: 'no-store' }); if (!csrf.ok) throw new Error('Financial session unavailable')
+    const token: string = (await csrf.json()).token, read = () => new AbortController().signal
+    const source = await api.readDisposalCorrection(command.source.unit.id, read())
+    const proposal = api.disposalCorrectionProposal({ ...api.disposalCorrectionDefaults(source), action: 'void', reason: 'Later financial void' }, source)
+    await api.sendCorrectionCommand(api.freezeCorrectionCommand({ kind: 'correct-disposal', ...proposal }), token, read())
+    return { history: await api.fetchDisposalCorrectionsPage(command.source.unit.id, {}, read()), record: await api.fetchDisposalRecord(command.source.unit.id, read()) }
+  }, initial.command)
+  expect(later.record.current).toBeNull(); expect(later.history.data).toHaveLength(2)
+  expect((await page.request.post('/api/v1/auth/logout', { headers: await writeContext(page, application.url) })).status()).toBe(200)
+  expect((await page.request.post('/api/v1/auth/login', { headers: { Origin: application.url }, data: { username: 'owner', password } })).status()).toBe(200)
+  const replay = await page.evaluate(async (command) => {
+    const modulePath = '/assets/financial-corrections-sdk.js', api = await import(modulePath)
+    const csrf = await fetch('/api/v1/auth/csrf', { credentials: 'same-origin', cache: 'no-store' }); if (!csrf.ok) throw new Error('Fresh financial session unavailable')
+    const result = await api.sendCorrectionCommand(command, (await csrf.json()).token, new AbortController().signal)
+    return { result, record: await api.fetchDisposalRecord(command.source.unit.id, new AbortController().signal), physical: await api.fetchUnit(command.source.unit.id, new AbortController().signal) }
+  }, initial.command)
+  expect(replay.result).toEqual(later.history.data.find((entry: { before: { revision: number } }) => entry.before.revision === initial.command.source.disposal.revision))
+  expect(replay.record).toEqual(later.record); expect(replay.physical).toEqual(initial.command.source.unit); expect(attempts).toBe(2)
+  const requests = writes.filter((request) => request.key === initial.command.key); expect(requests).toHaveLength(2); expect(requests[1]).toEqual(requests[0])
   expect(writes.filter((request) => request.path.startsWith('/api/v1/stock'))).toHaveLength(0)
 })
