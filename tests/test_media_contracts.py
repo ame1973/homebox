@@ -9,7 +9,7 @@ from tests.test_contracts import API, PROJECTION, SCHEMAS, record, validator
 
 MAXIMUM = 9007199254740991
 MEDIA = {"id": "media-1", "revision": 7, "sha256": "a" * 64, "mime_type": "image/jpeg",
-         "width": 4000, "height": 3000, "bytes": 123456,
+         "verification": "verified", "width": 4000, "height": 3000, "bytes": 123456,
          "thumb_url": "/api/v1/media/media-1/thumbnail", "thumb_sha256": "b" * 64}
 LINK = {"id": "link-1", "revision": 3, "media_id": "media-1", "owner_type": "item",
         "owner_id": "item-1", "is_cover": True, "sort_order": -1, "description": "  Exact é\n"}
@@ -44,16 +44,37 @@ class MediaContractTests(unittest.TestCase):
         self.reject("MediaLinkView", {**LINK_VIEW, "media": {"id": "media-1"}})
         validator("MediaLink").validate({**LINK, "sort_order": -MAXIMUM, "description": "😀" * 10000})
 
-    def test_media_representation_requires_safe_actual_digest_and_paired_verified_thumbnail(self):
+    def test_media_representation_requires_safe_digest_and_paired_verified_thumbnail(self):
         for mime in ["image/jpeg", "image/png", "image/webp"]:
             validator("Media").validate({**MEDIA, "mime_type": mime})
         for patch in [{"sha256": "a" * 63}, {"sha256": "A" * 64}, {"sha256": "a" * 64 + "\n"},
-                      {"mime_type": "image/svg+xml"}, {"width": 0}, {"height": MAXIMUM + 1},
+                      {"mime_type": "image/svg+xml"}, {"mime_type": ""}, {"mime_type": "x" * 101},
+                      {"verification": "unknown"}, {"width": 0}, {"height": MAXIMUM + 1},
                       {"bytes": -1}, {"width": True}, {"thumb_url": None}, {"thumb_sha256": None},
                       {"thumb_url": "https://attacker.invalid/thumbnail"}, {"thumb_url": "//attacker.invalid/a"},
                       {"thumb_url": "/api/v1/media/media-1/thumbnail?secret=x"}, {"thumb_sha256": "b" * 63}]:
             self.reject("Media", {**MEDIA, **patch})
         validator("Media").validate({**MEDIA, "width": MAXIMUM, "height": MAXIMUM, "bytes": MAXIMUM})
+
+    def test_unverified_retained_metadata_is_visible_without_claiming_safe_bytes(self):
+        unverified = {**MEDIA, "verification": "unverified", "thumb_url": None, "thumb_sha256": None}
+        for mime in ["image/jpeg", "image/heic", "image/svg+xml", "x" * 100]:
+            validator("Media").validate({**unverified, "mime_type": mime})
+        for patch in [{"mime_type": ""}, {"mime_type": "x" * 101},
+                      {"thumb_url": MEDIA["thumb_url"], "thumb_sha256": MEDIA["thumb_sha256"]},
+                      {"thumb_url": MEDIA["thumb_url"]}, {"thumb_sha256": MEDIA["thumb_sha256"]}]:
+            self.reject("Media", {**unverified, **patch})
+        validator("MediaLinkView").validate({**LINK_VIEW, "media": {**unverified, "mime_type": "image/heic"}})
+
+    def test_upload_response_can_only_claim_a_supported_verified_image(self):
+        schema = API["paths"]["/media"]["post"]["responses"]["200"]["content"]["application/json"]["schema"]
+        check = Draft202012Validator({**schema, "components": API["components"]})
+        for mime in ["image/jpeg", "image/png", "image/webp"]:
+            check.validate({**MEDIA, "mime_type": mime})
+        for patch in [{"verification": "unverified", "thumb_url": None, "thumb_sha256": None},
+                      {"mime_type": "image/heic"}, {"mime_type": "image/svg+xml"}]:
+            with self.subTest(patch=patch), self.assertRaises(ValidationError):
+                check.validate({**MEDIA, **patch})
 
     def test_link_creation_requires_one_real_owner_and_its_original_proof(self):
         for field, owner in OWNERS.items():
@@ -169,6 +190,8 @@ class MediaContractTests(unittest.TestCase):
             self.assertEqual(0, read["x-max-query-bytes"])
             self.assertIn("authenticated", read["description"])
             self.assertIn("no-store", read["description"])
+            self.assertIn("integrity before serving", read["description"])
+            self.assertIn("unverified", read["description"])
 
     def test_resource_etags_are_independent_and_deletion_ack_is_not_a_file_cleanup_claim(self):
         for path, method in [("/media", "post"), ("/media/{id}", "get"), ("/media/{id}/view", "get"),
@@ -199,7 +222,7 @@ class MediaContractTests(unittest.TestCase):
         self.assertIn("verified by the runtime", SCHEMAS["MediaLinkView"]["description"])
 
     def test_existing_offline_media_payloads_remain_separate_from_http_embedding(self):
-        media_payload = {key: value for key, value in MEDIA.items() if key != "revision"}
+        media_payload = {key: value for key, value in MEDIA.items() if key not in {"revision", "verification"}}
         media_payload["perceptual_hash"] = None
         link_payload = {key: value for key, value in LINK.items() if key not in {"revision", "media"}}
         Draft202012Validator(PROJECTION).validate(record("media", media_payload, identity=MEDIA["id"]))
@@ -207,6 +230,7 @@ class MediaContractTests(unittest.TestCase):
         self.assertEqual({"id", "media_id", "owner_type", "owner_id", "is_cover", "sort_order", "description"},
                          set(PROJECTION["$defs"]["media_link"]["required"]))
         self.assertNotIn("media", PROJECTION["$defs"]["media_link"]["properties"])
+        self.assertNotIn("verification", PROJECTION["$defs"]["media"]["properties"])
         self.assertIn("MEDIA_COVER_CONFLICT", API["components"]["responses"]["Error409"]["description"])
 
 

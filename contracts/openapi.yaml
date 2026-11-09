@@ -4123,7 +4123,20 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Media'
+                allOf:
+                - $ref: '#/components/schemas/Media'
+                - type: object
+                  required:
+                  - verification
+                  - mime_type
+                  properties:
+                    verification:
+                      const: verified
+                    mime_type:
+                      enum:
+                      - image/jpeg
+                      - image/png
+                      - image/webp
           headers:
             Cache-Control:
               schema:
@@ -10713,7 +10726,7 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      description: Stream only authenticated, sanitized source bytes using their verified actual image MIME, no-store and nosniff. Never expose a filesystem path, caller filename, unvalidated type, API response through the service worker or unsanitized GPS metadata. A missing/unsafe object is not a fabricated empty image. The ETag is the independent Media membership revision. No body, encoding or query.
+      description: Stream only authenticated, verified and sanitized source bytes using their actual image MIME, no-store and nosniff. Check the actual private object's integrity before serving it; an unverified legacy record is not proof of a safe image or GPS removal and must not stream. Never expose a filesystem path, caller filename, unvalidated type, API response through the service worker or unsanitized GPS metadata. A missing/unsafe object is not a fabricated empty image. The ETag is the independent Media membership revision. No body, encoding or query.
       x-response-revision-scope: media
       x-max-body-bytes: 0
       x-max-query-bytes: 0
@@ -10764,7 +10777,7 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      description: Stream only an authenticated, verified sanitized JPEG thumbnail with its actual digest, no-store and nosniff. An unavailable thumbnail is not a proof that the original is absent; a missing or unsafe file is never fabricated. The ETag is the independent Media membership revision. No body, encoding or query.
+      description: Stream only an authenticated, verified sanitized JPEG thumbnail with its actual digest, no-store and nosniff. Check the actual private object's integrity before serving it; never stream a thumbnail for unverified legacy Media. An unavailable thumbnail is not a proof that the original is absent; a missing or unsafe file is never fabricated. The ETag is the independent Media membership revision. No body, encoding or query.
       x-response-revision-scope: media
       x-max-body-bytes: 0
       x-max-query-bytes: 0
@@ -13919,10 +13932,13 @@ components:
           maximum: 9007199254740991
         sha256: *id011
         mime_type:
+          type: string
+          minLength: 1
+          maxLength: 100
+        verification:
           enum:
-          - image/jpeg
-          - image/png
-          - image/webp
+          - verified
+          - unverified
         width: &mediaPositiveInteger
           type: integer
           minimum: 1
@@ -13945,6 +13961,7 @@ components:
       - revision
       - sha256
       - mime_type
+      - verification
       - width
       - height
       - bytes
@@ -13962,7 +13979,24 @@ components:
         else:
           properties:
             thumb_sha256: *id011
-      description: Actual sanitized image metadata and independent Media revision. sha256 and bytes describe stored sanitized content, never a caller-supplied digest. The revision also covers complete link membership, including owner deletion cascades, so a stale global deletion cannot absorb an unseen link. A verified thumbnail has a server-derived same-origin thumb_url and matching digest; unavailable or unverified thumbnail metadata is explicit null for both, never an invented file. Retained representation is not proof of new-upload eligibility. The runtime verifies URL identity, actual bytes and safe Unicode; original storage keys are private.
+      - if:
+          properties:
+            verification:
+              const: unverified
+        then:
+          properties:
+            thumb_url:
+              type: 'null'
+            thumb_sha256:
+              type: 'null'
+        else:
+          properties:
+            mime_type:
+              enum:
+              - image/jpeg
+              - image/png
+              - image/webp
+      description: Actual retained Media metadata and independent revision. A verified resource was validated and sanitized by the server; its MIME, dimensions, size and SHA-256 describe the stored sanitized bytes, never a caller-supplied digest. Unverified legacy metadata is retained as historical claims, not evidence of actual bytes, a safe format or GPS removal; an unverified thumbnail URL and digest are both null and unsafe original content must not be streamed. Previously retained bounded MIME values remain readable without treating them as eligible new uploads. The revision covers verification, metadata and complete link membership, including owner deletion cascades. A verified thumbnail has a server-derived same-origin URL and matching digest; unavailable metadata is explicit null for both. The runtime verifies URL identity, actual bytes and safe Unicode; original storage keys are private.
       x-runtime-validation: media-actual-bytes-membership-thumbnail-v1
     MediaLink:
       type: object

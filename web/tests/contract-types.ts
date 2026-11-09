@@ -969,8 +969,16 @@ const looseCorrectionSend = correctionCommands.sendCorrectionCommand({ kind: 'co
 void [sendCorrectionCalls, reusedCorrectionKey, credentialCorrectionCommand, physicalCorrectionCommand, unreviewedCorrectionCommand, looseCorrectionSend]
 
 // Shared media identities, owner intent and independent proofs remain explicit.
-const mediaMetadata = { id: 'media', revision: 4, sha256: 'a'.repeat(64), mime_type: 'image/jpeg', width: 4000, height: 3000, bytes: 120000,
-  thumb_url: null, thumb_sha256: null } satisfies components['schemas']['Media']
+const mediaMetadata = { id: 'media', revision: 4, sha256: 'a'.repeat(64), mime_type: 'image/jpeg', verification: 'verified', width: 4000, height: 3000, bytes: 120000,
+  thumb_url: null, thumb_sha256: null } as const satisfies components['schemas']['Media']
+const unverifiedMediaMetadata = { ...mediaMetadata, mime_type: 'image/heic', verification: 'unverified' } as const satisfies components['schemas']['Media']
+const uploadedMedia = mediaMetadata satisfies operations['post_media']['responses'][200]['content']['application/json']
+// @ts-expect-error A fresh upload cannot return an unverified legacy record.
+const unverifiedUpload: operations['post_media']['responses'][200]['content']['application/json'] = unverifiedMediaMetadata
+// @ts-expect-error Upload responses require one of the explicitly supported verified image formats.
+const unsupportedUpload: operations['post_media']['responses'][200]['content']['application/json'] = { ...mediaMetadata, mime_type: 'image/heic' }
+// @ts-expect-error Readable historical metadata must carry its verification status.
+const unknownMediaStatus: components['schemas']['Media'] = { id: 'media', revision: 4, sha256: 'a'.repeat(64), mime_type: 'image/jpeg', width: 1, height: 1, bytes: 1, thumb_url: null, thumb_sha256: null }
 const mediaLink = { id: 'link', revision: 1, media_id: 'media', owner_type: 'item', owner_id: 'item', is_cover: false,
   sort_order: -1, description: '' } satisfies components['schemas']['MediaLink']
 const mediaLinkView = { ...mediaLink, media: mediaMetadata } satisfies components['schemas']['MediaLinkView']
@@ -1018,5 +1026,5 @@ const partialMediaPage: components['schemas']['MediaLinkList'] = { data: [] }
 const missingMediaOwnerFilter: operations['get_media_links']['parameters']['query'] = { owner_type: 'item' }
 // @ts-expect-error A link patch cannot reassign its immutable Media.
 const reassignedMediaLink: components['schemas']['MediaLinkWrite'] = { media_id: 'other' }
-void [mediaPage, mediaOwnerInputs, mediaTransportCalls, unprovenMediaOwner, ownerlessMediaLink, multipleMediaOwners,
+void [mediaPage, mediaOwnerInputs, mediaTransportCalls, uploadedMedia, unverifiedUpload, unsupportedUpload, unknownMediaStatus, unprovenMediaOwner, ownerlessMediaLink, multipleMediaOwners,
   multipleRawMediaOwners, unprovenRawMediaOwner, unprovenMediaHeaders, embeddedMediaResource, partialMediaLink, incompleteMediaView, unsafeMediaView, partialMediaPage, missingMediaOwnerFilter, reassignedMediaLink]

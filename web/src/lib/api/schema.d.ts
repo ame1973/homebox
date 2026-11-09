@@ -1228,7 +1228,7 @@ export interface paths {
         };
         /**
          * GET /media/{id}/content
-         * @description Stream only authenticated, sanitized source bytes using their verified actual image MIME, no-store and nosniff. Never expose a filesystem path, caller filename, unvalidated type, API response through the service worker or unsanitized GPS metadata. A missing/unsafe object is not a fabricated empty image. The ETag is the independent Media membership revision. No body, encoding or query.
+         * @description Stream only authenticated, verified and sanitized source bytes using their actual image MIME, no-store and nosniff. Check the actual private object's integrity before serving it; an unverified legacy record is not proof of a safe image or GPS removal and must not stream. Never expose a filesystem path, caller filename, unvalidated type, API response through the service worker or unsanitized GPS metadata. A missing/unsafe object is not a fabricated empty image. The ETag is the independent Media membership revision. No body, encoding or query.
          */
         readonly get: operations["get_media_id_content"];
         readonly put?: never;
@@ -1272,7 +1272,7 @@ export interface paths {
         };
         /**
          * GET /media/{id}/thumbnail
-         * @description Stream only an authenticated, verified sanitized JPEG thumbnail with its actual digest, no-store and nosniff. An unavailable thumbnail is not a proof that the original is absent; a missing or unsafe file is never fabricated. The ETag is the independent Media membership revision. No body, encoding or query.
+         * @description Stream only an authenticated, verified sanitized JPEG thumbnail with its actual digest, no-store and nosniff. Check the actual private object's integrity before serving it; never stream a thumbnail for unverified legacy Media. An unavailable thumbnail is not a proof that the original is absent; a missing or unsafe file is never fabricated. The ETag is the independent Media membership revision. No body, encoding or query.
          */
         readonly get: operations["get_media_id_thumbnail"];
         readonly put?: never;
@@ -3029,19 +3029,20 @@ export interface components {
             readonly password: string;
             readonly username: string;
         };
-        /** @description Actual sanitized image metadata and independent Media revision. sha256 and bytes describe stored sanitized content, never a caller-supplied digest. The revision also covers complete link membership, including owner deletion cascades, so a stale global deletion cannot absorb an unseen link. A verified thumbnail has a server-derived same-origin thumb_url and matching digest; unavailable or unverified thumbnail metadata is explicit null for both, never an invented file. Retained representation is not proof of new-upload eligibility. The runtime verifies URL identity, actual bytes and safe Unicode; original storage keys are private. */
+        /** @description Actual retained Media metadata and independent revision. A verified resource was validated and sanitized by the server; its MIME, dimensions, size and SHA-256 describe the stored sanitized bytes, never a caller-supplied digest. Unverified legacy metadata is retained as historical claims, not evidence of actual bytes, a safe format or GPS removal; an unverified thumbnail URL and digest are both null and unsafe original content must not be streamed. Previously retained bounded MIME values remain readable without treating them as eligible new uploads. The revision covers verification, metadata and complete link membership, including owner deletion cascades. A verified thumbnail has a server-derived same-origin URL and matching digest; unavailable metadata is explicit null for both. The runtime verifies URL identity, actual bytes and safe Unicode; original storage keys are private. */
         readonly Media: {
             readonly bytes: number;
             readonly height: number;
             readonly id: string;
-            /** @enum {unknown} */
-            readonly mime_type: "image/jpeg" | "image/png" | "image/webp";
+            readonly mime_type: string;
             readonly revision: number;
             readonly sha256: string;
             readonly thumb_sha256: string | null;
             readonly thumb_url: null | string;
+            /** @enum {unknown} */
+            readonly verification: "verified" | "unverified";
             readonly width: number;
-        } & unknown;
+        } & (unknown & unknown);
         /** @description Frozen acknowledgement for the original Media identity after its metadata, actual links and projections commit. It does not claim that asynchronous private-file cleanup has already completed. */
         readonly MediaDeleteResult: {
             /** @constant */
@@ -7477,7 +7478,12 @@ export interface operations {
                     readonly [name: string]: unknown;
                 };
                 content: {
-                    readonly "application/json": components["schemas"]["Media"];
+                    readonly "application/json": components["schemas"]["Media"] & {
+                        /** @enum {unknown} */
+                        readonly mime_type: "image/jpeg" | "image/png" | "image/webp";
+                        /** @constant */
+                        readonly verification: "verified";
+                    };
                 };
             };
             readonly 400: components["responses"]["Error400"];
