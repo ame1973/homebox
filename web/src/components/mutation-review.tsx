@@ -28,7 +28,7 @@ export function MutationReviewDialog({ operation, title, help, confirmLabel, des
   return <AlertDialog open={operation.open} onOpenChange={(open) => { if (!open) operation.dismiss() }}>
     <AlertDialogContent onOpenAutoFocus={(event) => { event.preventDefault(); titleRef.current?.focus({ preventScroll: true }) }} onCloseAutoFocus={(event) => { event.preventDefault(); operation.restoreFocus() }} onEscapeKeyDown={(event) => event.preventDefault()}
       onKeyDownCapture={(event) => { if (event.key !== 'Escape') return; event.preventDefault(); event.stopPropagation(); if (pending) operation.abort(); else operation.dismiss() }}
-      className="max-h-[calc(100dvh-2rem)] w-[calc(100%_-_2rem)] max-w-xl animate-none! overflow-y-auto p-6">
+      className="max-h-[calc(100dvh-2rem)] w-[calc(100%_-_2rem)] max-w-xl animate-none! overflow-y-auto p-4 sm:p-6">
       <AlertDialogHeader className="place-items-start text-left"><AlertDialogTitle ref={titleRef} tabIndex={-1} className="rounded-sm text-xl [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-ring">{uncertain ? text.uncertain : title}</AlertDialogTitle>
         <AlertDialogDescription className="text-base leading-relaxed">{uncertain ? text.uncertainHelp : help}</AlertDialogDescription>
       </AlertDialogHeader>

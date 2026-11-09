@@ -3,7 +3,7 @@ import { input, pathIDSchema } from './api/domain'
 import { assetPageQuerySchema, assetSummaryQuerySchema, type AssetPageQuery, type AssetSummaryQuery } from './api/assets'
 import { purchaseCursorTrail, purchaseQuery } from './purchase-navigation'
 
-export const assetModes = ['detail', 'edit', 'usage', 'usage/new', 'costs', 'costs/new', 'retire', 'dispose', 'summary'] as const
+export const assetModes = ['detail', 'edit', 'usage', 'usage/new', 'costs', 'costs/new', 'retire', 'dispose', 'summary', 'disposal-corrections'] as const
 export type AssetRouteMode = typeof assetModes[number]
 export function assetRoute(id: string, mode: AssetRouteMode = 'detail') {
   if (!assetModes.includes(mode)) throw new ApiError('VALIDATION_ERROR')
@@ -41,7 +41,7 @@ export function assetReturnPath(value: unknown): string | undefined {
     const url = new URL(value, 'https://homebox.invalid')
     if (url.origin !== 'https://homebox.invalid' || url.pathname + url.search !== value) return undefined
     if (url.pathname === '/assets') return assetQuery(url.search) === undefined ? undefined : value
-    const match = /^\/assets\/([^/]+)(?:\/(edit|usage|costs|retire|dispose|summary)(\/new)?)?$/.exec(url.pathname)
+    const match = /^\/assets\/([^/]+)(?:\/(edit|usage|costs|retire|dispose|summary|disposal-corrections)(\/new)?)?$/.exec(url.pathname)
     if (!match || !pathIDSchema.safeParse(decodeURIComponent(match[1]!)).success || match[3] && match[2] !== 'usage' && match[2] !== 'costs') return undefined
     if (url.search && (match[2] !== 'summary' || assetSummaryQuery(url.search) === undefined)) return undefined
     return value

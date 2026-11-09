@@ -115,37 +115,48 @@ test('returns from real login and explicitly adopts concurrent metadata without 
   expect(JSON.parse(writes[0]?.body ?? '{}')).toEqual({ name: 'Local edit' })
 })
 
-test('reconciles a genuinely committed malformed catalog deletion only with the original request', async ({ page, application }) => {
+for (const rereadTiming of ['after', 'before', 'during'] as const) test(`reconciles a genuinely committed malformed catalog deletion when the 404 arrives ${rereadTiming} closing review`, async ({ page, application }) => {
   await provision(page, application)
   const item = await seed(page, application.url, 'Unknown deletion')
-  let attempts = 0
+  let attempts = 0, releaseRead: () => void = () => {}
+  const holdRead = new Promise<void>((resolve) => { releaseRead = resolve })
   const replies: string[] = []
   await page.route(`**/api/v1/items/${item.id}`, async (route) => {
-    if (route.request().method() !== 'DELETE') { await route.continue(); return }
+    if (route.request().method() !== 'DELETE') {
+      if (route.request().method() === 'GET' && attempts === 1) await holdRead
+      await route.continue(); return
+    }
     const response = await route.fetch()
     replies.push(await response.text())
     if (++attempts === 1) await route.fulfill({ response, body: '{"ok":false}' })
     else await route.fulfill({ response })
   })
-  const writes = watchDomainWrites(page, ['/api/v1/items'])
-  await page.goto(`/items/${item.id}`)
-  await page.getByRole('button', { name: text.delete, exact: true }).click()
-  await page.getByRole('alertdialog').getByRole('button', { name: text.confirmDelete, exact: true }).click()
-  await expect(page.getByRole('heading', { name: text.uncertain, exact: true })).toBeVisible()
-  await page.getByRole('alertdialog').getByRole('button', { name: text.cancel, exact: true }).click()
-  await expect(page.getByRole('alertdialog')).toHaveCount(0)
-  await expect(page.getByRole('button', { name: text.delete, exact: true })).toBeDisabled()
-  await page.getByRole('button', { name: text.readCurrent, exact: true }).click()
-  await page.context().setOffline(true)
-  await page.context().setOffline(false)
-  expect(writes).toHaveLength(1)
-  await page.getByRole('button', { name: text.openOriginal, exact: true }).click()
-  await page.getByRole('alertdialog').getByRole('button', { name: text.retryOriginal, exact: true }).click()
-  await expect(page.getByText(text.done, { exact: true })).toBeVisible()
-  expect(attempts).toBe(2)
-  expect(writes[1]).toEqual(writes[0])
-  expect(replies[1]).toBe(replies[0])
-  expect((await page.request.get(`/api/v1/items/${item.id}`)).status()).toBe(404)
+  try {
+    const writes = watchDomainWrites(page, ['/api/v1/items'])
+    await page.goto(`/items/${item.id}`)
+    await page.getByRole('button', { name: text.delete, exact: true }).click()
+    const reread = page.waitForResponse((response) => response.url() === `${application.url}/api/v1/items/${item.id}` && response.request().method() === 'GET' && response.status() === 404)
+    await page.getByRole('alertdialog').getByRole('button', { name: text.confirmDelete, exact: true }).click()
+    await expect(page.getByRole('alertdialog').getByRole('heading', { name: text.uncertain, exact: true })).toBeVisible()
+    if (rereadTiming !== 'after') releaseRead()
+    if (rereadTiming === 'before') await reread
+    await page.getByRole('alertdialog').getByRole('button', { name: text.cancel, exact: true }).click()
+    if (rereadTiming === 'after') releaseRead()
+    await reread
+    await expect(page.getByRole('alertdialog')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: text.delete, exact: true })).toBeDisabled()
+    await page.getByRole('button', { name: text.readCurrent, exact: true }).click()
+    await page.context().setOffline(true)
+    await page.context().setOffline(false)
+    expect(writes).toHaveLength(1)
+    await page.getByRole('button', { name: text.openOriginal, exact: true }).click()
+    await page.getByRole('alertdialog').getByRole('button', { name: text.retryOriginal, exact: true }).click()
+    await expect(page.getByText(text.done, { exact: true })).toBeVisible()
+    expect(attempts).toBe(2)
+    expect(writes[1]).toEqual(writes[0])
+    expect(replies[1]).toBe(replies[0])
+    expect((await page.request.get(`/api/v1/items/${item.id}`)).status()).toBe(404)
+  } finally { releaseRead() }
 })
 
 test('forwards all real filters and explicit signed pages without inventing totals or silently slicing matches', async ({ page, application }) => {

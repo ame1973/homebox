@@ -14,6 +14,7 @@ const OwnedPage = lazy(() => import('@/features/catalog/owned-page'))
 const HoldingPage = lazy(() => import('@/features/holdings/holding-page'))
 const PurchasePage = lazy(() => import('@/features/purchases/purchase-page'))
 const AssetPage = lazy(() => import('@/features/assets/asset-page'))
+const DisposalCorrectionPage = lazy(() => import('@/features/financial-corrections/disposal-page'))
 const UnitAlias = lazy(() => import('@/features/holdings/holding-page').then((module) => ({ default: module.UnitAlias })))
 const LocationsPage = lazy(() => import('@/features/locations/locations-page'))
 const LocationAlias = lazy(() => import('@/features/locations/locations-page').then((module) => ({ default: module.LocationAlias })))
@@ -30,8 +31,8 @@ export default function App() {
     <div className="safe-page mx-auto flex min-h-dvh max-w-5xl flex-col">
       <a href="#main" onClick={(event) => { event.preventDefault(); main.current?.focus() }} className="sr-only z-50 rounded-md bg-primary p-3 text-primary-foreground focus:not-sr-only focus:absolute focus:top-2">{messages.app.skip}</a>
       <header className="flex flex-wrap items-center justify-between gap-4 border-b py-4">
-        <Link to="/" aria-label={messages.app.home} className="flex min-h-11 items-center gap-3 rounded-md text-xl font-semibold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
-          <Package className="size-7 text-primary" aria-hidden="true" />HomeBox
+        <Link to="/" aria-label={messages.app.home} className="flex min-h-11 min-w-0 max-w-full items-center gap-2 rounded-md text-base font-semibold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring sm:gap-3 sm:text-xl">
+          <Package className="size-6 shrink-0 text-primary sm:size-7" aria-hidden="true" /><span className="min-w-0 [overflow-wrap:anywhere]">HomeBox</span>
         </Link>
         <nav aria-label={messages.app.navigation} className="flex max-w-full flex-wrap items-center gap-2">
           <Button variant="outline" asChild className="min-h-11 h-auto gap-2 whitespace-normal text-base aria-[current=page]:border-primary aria-[current=page]:bg-muted"><NavLink to="/locations"><MapPin className="size-4" aria-hidden="true" />{messages.locations.nav}</NavLink></Button>
@@ -98,6 +99,7 @@ export default function App() {
               <Route path="/assets/:id/costs/new" element={<AssetPage key={location.key} mode="costs-new" />} />
               <Route path="/assets/:id/retire" element={<AssetPage key={location.key} mode="retire" />} />
               <Route path="/assets/:id/dispose" element={<AssetPage key={location.key} mode="dispose" />} />
+              <Route path="/assets/:id/disposal-corrections" element={<DisposalCorrectionPage key={location.key} />} />
               <Route path="/assets/:id/summary" element={<AssetPage key={location.key} mode="summary" />} />
               <Route path="/u/:id" element={<UnitAlias />} />
               <Route path="/l/:id" element={<LocationAlias />} />

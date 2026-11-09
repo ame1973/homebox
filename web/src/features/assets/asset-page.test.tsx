@@ -127,6 +127,7 @@ it('reads the profile alone and links actual physical/purchase evidence without 
   mount('/assets/unit', { assetList: '/assets?currency=JPY', assetCursors: [null] })
   expect(await screen.findByRole('link', { name: text.edit })).toHaveAttribute('href', '/assets/unit/edit')
   expect(screen.getByRole('link', { name: text.evidence })).toHaveAttribute('href', '/items/item/purchases')
+  expect(screen.getByRole('link', { name: messages.disposalCorrections.title })).toHaveAttribute('href', '/assets/unit/disposal-corrections')
   expect(screen.getByRole('link', { name: text.back })).toHaveAttribute('href', '/assets?currency=JPY')
   expect(models.readAssetDetail).not.toHaveBeenCalled(); expect(models.readAssetUsage).not.toHaveBeenCalled(); expect(models.readAssetCosts).not.toHaveBeenCalled()
 })
