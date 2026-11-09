@@ -17,10 +17,10 @@ function unchanged<T extends object>(before: T, after: T): boolean {
 
 // Validate relationships between the complete current and immutable collections;
 // entry IDs are not chronological and retained original revisions are not guessed.
-function coherentHistory(owner: string, lines: readonly PurchaseLine[], entries: readonly PurchaseLineCorrection[]) {
+export function coherentPurchaseCorrectionHistory(owner: string, lines: readonly PurchaseLine[], entries: readonly PurchaseLineCorrection[]) {
   const live = new Map(lines.map((line) => [line.id, line]))
   const before = new Map<string, PurchaseLine>(), afterIDs = new Set<string>(), next = new Map<string, string | null>()
-  if (lines.some((line) => line.purchase_id !== owner)) return false
+  if (live.size !== lines.length || new Set(entries.map((entry) => entry.id)).size !== entries.length || lines.some((line) => line.purchase_id !== owner)) return false
   for (const entry of entries) {
     if (entry.purchase_id !== owner || entry.before.purchase_id !== owner || before.has(entry.before.id) || live.has(entry.before.id)) return false
     before.set(entry.before.id, entry.before)
@@ -48,7 +48,7 @@ function coherentHistory(owner: string, lines: readonly PurchaseLine[], entries:
 async function collections(purchaseID: string, signal: AbortSignal) {
   const lines = await readAllMetadata((query, signal) => fetchPurchaseLinesPage(purchaseID, query, signal), signal)
   const corrections = await readAllMetadata((query, signal) => fetchPurchaseCorrectionsPage(purchaseID, query, signal), signal)
-  if (!coherentHistory(purchaseID, lines, corrections)) throw new ApiError('INVALID_RESPONSE')
+  if (!coherentPurchaseCorrectionHistory(purchaseID, lines, corrections)) throw new ApiError('INVALID_RESPONSE')
   return { lines, corrections }
 }
 async function finishPurchase(before: Purchase, purchaseID: string, signal: AbortSignal) {

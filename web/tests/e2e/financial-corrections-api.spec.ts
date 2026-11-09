@@ -13,7 +13,7 @@ const test = applicationTest.extend<{}, { applicationWebDirectory: string }>({
     try {
       cpSync(fileURLToPath(new URL('../../dist', import.meta.url)), web, { recursive: true })
       // Bundle the actual SDK privately, without a production test entrypoint.
-      writeFileSync(entry, `export * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/financial-corrections.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/assets.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/purchases.ts', import.meta.url)))};\nexport {createItem,fetchItem,patchItem} from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/catalog.ts', import.meta.url)))};\nexport {createUnit,fetchUnit} from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/holdings.ts', import.meta.url)))};\nexport {readPurchaseCorrection,readPurchaseCorrectionHistory} from ${JSON.stringify(fileURLToPath(new URL('../../src/features/purchases/correction-model.ts', import.meta.url)))};\nexport {readDisposalCorrection} from ${JSON.stringify(fileURLToPath(new URL('../../src/features/assets/correction-model.ts', import.meta.url)))};\n`)
+      writeFileSync(entry, `export * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/financial-corrections.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/assets.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/purchases.ts', import.meta.url)))};\nexport {createItem,fetchItem,patchItem} from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/catalog.ts', import.meta.url)))};\nexport {createUnit,fetchUnit} from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/holdings.ts', import.meta.url)))};\nexport {readPurchaseCorrection,readPurchaseCorrectionHistory} from ${JSON.stringify(fileURLToPath(new URL('../../src/features/purchases/correction-model.ts', import.meta.url)))};\nexport {readDisposalCorrection} from ${JSON.stringify(fileURLToPath(new URL('../../src/features/assets/correction-model.ts', import.meta.url)))};\nexport {purchaseCorrectionDefaults,purchaseCorrectionProposal,adoptPurchaseCorrection} from ${JSON.stringify(fileURLToPath(new URL('../../src/features/purchases/correction-form.ts', import.meta.url)))};\nexport {disposalCorrectionDefaults,disposalCorrectionProposal,adoptDisposalCorrection} from ${JSON.stringify(fileURLToPath(new URL('../../src/features/assets/correction-form.ts', import.meta.url)))};\n`)
       await build({ configFile: false, logLevel: 'silent', build: { outDir: sdk, minify: false, lib: { entry, formats: ['es'], fileName: 'financial-corrections-sdk' } } })
       cpSync(join(sdk, 'financial-corrections-sdk.js'), join(web, 'assets', 'financial-corrections-sdk.js'))
       await provideFixture(web)
@@ -280,4 +280,84 @@ test('withholds mixed Disposal correction sources when a real financial void lan
   expect(changed).toBe(true); expect(raced).toEqual({ code: 'INVALID_RESPONSE' }); expect(writes).toHaveLength(0)
   const refreshed = await page.evaluate(async (id) => { const modulePath = '/assets/financial-corrections-sdk.js', api = await import(modulePath); return api.readDisposalCorrection(id, new AbortController().signal) }, initial.record.item_unit_id)
   expect(refreshed.disposal).toMatchObject({ revision: initial.record.revision + 1, original: initial.record.original, current: null }); expect(refreshed.corrections).toHaveLength(2); expect(refreshed.corrections).toContainEqual(initial.entry); expect(refreshed.unit).toEqual(initial.physical)
+})
+
+test('reviews raw Purchase correction proposals and explicitly adopts a changed replacement Item against real Go', async ({ page, application }) => {
+  await provision(page, application); await page.goto('/')
+  const writes = watchDomainWrites(page, ['/api/v1/purchases', '/api/v1/units', '/api/v1/stock'])
+  const result = await page.evaluate(async () => {
+    const modulePath = '/assets/financial-corrections-sdk.js', api = await import(modulePath)
+    const csrf = await fetch('/api/v1/auth/csrf', { credentials: 'same-origin', cache: 'no-store' }); if (!csrf.ok) throw new Error('Financial session unavailable')
+    const csrfToken: string = (await csrf.json()).token, root = () => ({ csrfToken, idempotencyKey: crypto.randomUUID(), signal: new AbortController().signal }), read = () => new AbortController().signal
+    const failure = async (work: () => unknown) => { try { await work(); return null } catch (error) { return error instanceof Error && 'code' in error ? error.code : 'unexpected' } }
+    const old = await api.createItem({ name: 'Raw original quantity', tracking_mode: 'quantity', unit_code: 'kg', base_unit: 'g', scale_factor: 1000 }, root())
+    const owner = await api.createItem({ name: 'Raw replacement Unit' }, root())
+    const unit = await api.createUnit(owner.id, { location_id: null, notes: 'Physical state stays unchanged' }, { ...root(), expectedRevision: owner.revision })
+    const target = await api.fetchItem(owner.id, read())
+    const purchase = await api.createPurchase({ merchant_name: 'Raw correction', purchased_at: '2026-11-07T00:00:00Z', currency: 'JPY' }, root())
+    const line = await api.createPurchaseLine(purchase.id, { item_id: old.id, item_revision: old.revision, item_unit_id: null, quantity_base: 1500, paid_minor: 0 }, { ...root(), purchase, item: old })
+    const original = await api.readPurchaseCorrection(purchase.id, line.id, target.id, read())
+    const defaults = api.purchaseCorrectionDefaults(), values = { ...defaults, action: 'replace', reason: 'Correct ownership', replacement_item_id: target.id, allocation: 'unit', item_unit_id: unit.id, quantity_base: '1', paid_minor: '0' }
+    const empty = await failure(() => api.purchaseCorrectionProposal(defaults, original))
+    const first = api.purchaseCorrectionProposal(values, original), staleContext = root()
+    await api.patchItem(target.id, { notes: 'Changed after review' }, { ...root(), expectedRevision: target.revision })
+    const stale = await failure(() => api.correctPurchaseLine(purchase.id, first.body, { ...staleContext, purchase: first.source.purchase, line: first.source.line, item: first.source.item, replacementItem: first.source.replacement.item }))
+    const current = await api.readPurchaseCorrection(purchase.id, line.id, target.id, read())
+    const adopted = api.adoptPurchaseCorrection({ ...values, paid_minor: '1e3' }, original, current)
+    const invalid = await failure(() => api.purchaseCorrectionProposal(adopted.values, adopted.source))
+    const reviewed = api.purchaseCorrectionProposal({ ...adopted.values, paid_minor: '0' }, adopted.source), send = root()
+    const correction = await api.correctPurchaseLine(purchase.id, reviewed.body, { ...send, purchase: reviewed.source.purchase, line: reviewed.source.line, item: reviewed.source.item, replacementItem: reviewed.source.replacement.item })
+    window.dispatchEvent(new Event('online'))
+    return { defaults, empty, stale, invalid, adopted: adopted.values, oldTarget: target, newTarget: current.replacement.item, reviewed, correction, unit,
+      physical: await api.fetchUnit(unit.id, read()), lines: await api.fetchPurchaseLinesPage(purchase.id, {}, read()), staleKey: staleContext.idempotencyKey, sentKey: send.idempotencyKey }
+  })
+  expect(result.defaults).toMatchObject({ action: '', allocation: '', quantity_base: '', paid_minor: '' }); expect(result.empty).toBe('VALIDATION_ERROR')
+  expect(result.stale).toBe('REVISION_CONFLICT'); expect(result.invalid).toBe('VALIDATION_ERROR'); expect(result.adopted).toMatchObject({ paid_minor: '1e3', item_unit_id: result.unit.id, quantity_base: '1' })
+  expect(result.newTarget.revision).toBe(result.oldTarget.revision + 1); expect(result.reviewed.body.replacement).toMatchObject({ item_id: result.newTarget.id, item_revision: result.newTarget.revision, item_unit_id: result.unit.id, quantity_base: 1, paid_minor: 0 })
+  expect(result.correction).toMatchObject({ action: 'replace', before: { quantity_base: 1500, paid_minor: 0 }, after: { item_id: result.newTarget.id, item_unit_id: result.unit.id, quantity_base: 1, paid_minor: 0 } })
+  expect(result.lines.data).toEqual([result.correction.after]); expect(result.physical).toEqual(result.unit)
+  for (const key of [result.staleKey, result.sentKey]) expect(writes.filter((request) => request.key === key)).toHaveLength(1)
+  expect(writes.filter((request) => request.path.startsWith('/api/v1/stock'))).toHaveLength(0)
+})
+
+test('reviews raw Disposal void and reinstatement proposals without changing the real physical Unit', async ({ page, application }) => {
+  await provision(page, application); await page.goto('/')
+  const writes = watchDomainWrites(page, ['/api/v1/units', '/api/v1/stock'])
+  const result = await page.evaluate(async () => {
+    const modulePath = '/assets/financial-corrections-sdk.js', api = await import(modulePath)
+    const csrf = await fetch('/api/v1/auth/csrf', { credentials: 'same-origin', cache: 'no-store' }); if (!csrf.ok) throw new Error('Financial session unavailable')
+    const csrfToken: string = (await csrf.json()).token, root = () => ({ csrfToken, idempotencyKey: crypto.randomUUID(), signal: new AbortController().signal }), read = () => new AbortController().signal
+    const failure = async (work: () => unknown) => { try { await work(); return null } catch (error) { return error instanceof Error && 'code' in error ? error.code : 'unexpected' } }
+    const owner = await api.createItem({ name: 'Raw disposal Unit' }, root())
+    const unit = await api.createUnit(owner.id, { location_id: null }, { ...root(), expectedRevision: owner.revision }), item = await api.fetchItem(owner.id, read())
+    const asset = await api.putAssetProfile(unit.id, { item_revision: item.revision, asset_revision: null, cost_basis: 'manual', currency: 'JPY', manual_acquisition_minor: 100, in_service_at: null, retired_at: null, estimated_residual_minor: null, usage_unit: 'times' }, { ...root(), unit, item, asset: null })
+    const posted = await api.disposeAsset(unit.id, { unit_revision: unit.revision, kind: 'sold', disposed_at: '2026-11-07T12:00:00.123456789+08:00', currency: 'JPY', realized_proceeds_minor: 200 }, { ...root(), asset, unit, disposal: null })
+    const original = await api.readDisposalCorrection(unit.id, read()), defaults = api.disposalCorrectionDefaults(original)
+    const empty = await failure(() => api.disposalCorrectionProposal(defaults, original))
+    const voidValues = { ...defaults, action: 'void', reason: 'Void financial decision', realized_proceeds_minor: 'unparsed draft' }
+    const reviewVoid = api.disposalCorrectionProposal(voidValues, original), voidContext = root()
+    const voidResult = await api.correctDisposal(unit.id, reviewVoid.body, { ...voidContext, asset: reviewVoid.source.asset, disposal: reviewVoid.source.disposal })
+    const current = await api.readDisposalCorrection(unit.id, read())
+    const doubleVoid = await failure(() => api.disposalCorrectionProposal(voidValues, current))
+    const raw = { ...defaults, action: 'replace', reason: 'Explicit reinstatement', kind: 'sold', realized_proceeds_minor: '', disposed_at: '2026-11-07T04:00:00.123456789Z' }
+    const missingZero = await failure(() => api.disposalCorrectionProposal(raw, current))
+    const adopted = api.adoptDisposalCorrection({ ...raw, realized_proceeds_minor: '1e3' }, original, current)
+    const invalid = await failure(() => api.disposalCorrectionProposal(adopted.values, adopted.source))
+    const reviewReplace = api.disposalCorrectionProposal({ ...adopted.values, realized_proceeds_minor: '0' }, adopted.source), replaceContext = root()
+    const replacement = await api.correctDisposal(unit.id, reviewReplace.body, { ...replaceContext, asset: reviewReplace.source.asset, disposal: reviewReplace.source.disposal })
+    window.dispatchEvent(new Event('online'))
+    return { defaults, empty, posted, original, voidResult, current, doubleVoid, missingZero, adopted: adopted.values, invalid, reviewReplace, replacement,
+      finalRecord: await api.fetchDisposalRecord(unit.id, read()), physical: await api.fetchUnit(unit.id, read()), voidKey: voidContext.idempotencyKey, replaceKey: replaceContext.idempotencyKey }
+  })
+  expect(result.defaults).toMatchObject({ action: '', realized_proceeds_minor: '', disposed_at: '', currency: 'JPY' }); expect(result.empty).toBe('VALIDATION_ERROR')
+  expect(result.voidResult.after.current).toBeNull(); expect(result.current.disposal).toMatchObject({ current: null, original: result.original.disposal.original })
+  expect(result.doubleVoid).toBe('ASSET_HISTORY_LOCKED'); expect(result.missingZero).toBe('VALIDATION_ERROR'); expect(result.invalid).toBe('VALIDATION_ERROR'); expect(result.adopted.realized_proceeds_minor).toBe('1e3')
+  expect(result.reviewReplace.body).toMatchObject({ asset_revision: result.current.asset.revision, action: 'replace', replacement: { realized_proceeds_minor: 0 } })
+  expect(result.replacement.after.current).toMatchObject({ realized_proceeds_minor: 0, disposed_at: result.posted.disposed_at }); expect(result.finalRecord).toEqual(result.replacement.after)
+  expect(result.physical).toEqual(result.original.unit); expect(result.physical.status).toBe('disposed')
+  for (const key of [result.voidKey, result.replaceKey]) {
+    const requests = writes.filter((request) => request.key === key); expect(requests).toHaveLength(1)
+    expect(JSON.parse(requests[0]!.body!)).not.toHaveProperty('unit_revision')
+  }
+  expect(writes.filter((request) => request.path.startsWith('/api/v1/stock'))).toHaveLength(0)
 })

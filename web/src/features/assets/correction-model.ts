@@ -15,7 +15,8 @@ function unchanged<T extends object>(before: T, after: T): boolean {
 
 // History pages are ordered by entry ID, not subject revision. Reconstruct only
 // links actually present in the returned decisions; never invent an old proof.
-function coherentHistory(record: DisposalRecord, entries: readonly DisposalCorrection[]) {
+export function coherentDisposalCorrectionHistory(record: DisposalRecord, entries: readonly DisposalCorrection[]) {
+  if (new Set(entries.map((entry) => entry.id)).size !== entries.length) return false
   if (!entries.length) return record.current !== null && sameDisposalData(record.current, record.original)
   const ordered = [...entries].sort((a, b) => a.before.revision - b.before.revision)
   const first = ordered[0]!
@@ -40,6 +41,6 @@ export async function readDisposalCorrection(unitID: string, signal: AbortSignal
   const afterDisposal = await fetchDisposalRecord(id, signal), afterAsset = await fetchAsset(id, signal)
   const afterItem = await fetchItem(item.id, signal), afterUnit = await fetchUnit(id, signal)
   if (signal.aborted) throw new ApiError('REQUEST_ABORTED')
-  if (!sameDisposalRecord(disposal, afterDisposal) || !unchanged(asset, afterAsset) || !unchanged(item, afterItem) || !unchanged(unit, afterUnit) || !coherentHistory(disposal, corrections)) throw new ApiError('INVALID_RESPONSE')
+  if (!sameDisposalRecord(disposal, afterDisposal) || !unchanged(asset, afterAsset) || !unchanged(item, afterItem) || !unchanged(unit, afterUnit) || !coherentDisposalCorrectionHistory(disposal, corrections)) throw new ApiError('INVALID_RESPONSE')
   return { unit: afterUnit, item: afterItem, asset: afterAsset, disposal: afterDisposal, corrections }
 }

@@ -795,7 +795,7 @@ void [ownedCreateHeaders, barcodeBody, aliasBody, aliasResource, attributeBody, 
   invalidDelete, missingRevision, invalidQuantity, authHeaders, noOrigin, noCSRF, rawCredentialAdmin, hashLogin,
   childLocationHeaders, rootLocationHeaders, locationWithoutOrigin, rootLocation, minimalLocation, minimalItem, rootMove, parentWrapper, textSortOrder, nullKind]
 
-// These are contract-only transports, not implemented correction SDK functions.
+// These transport fixtures check contracts independently of the browser SDK.
 const lineVoidDecision = { line_id: 'line', line_revision: 9, item_revision: 11, action: 'void', replacement: null, reason: 'Void the incorrect attribution' } as const satisfies components['schemas']['PurchaseLineCorrectionWrite']
 const lineReplacementDecision = { ...lineVoidDecision, action: 'replace', replacement: { item_id: 'other-item', item_revision: 17, item_unit_id: null, quantity_base: 2, paid_minor: 0 } } as const satisfies components['schemas']['PurchaseLineCorrectionWrite']
 const correctionHeaders = { ...authHeaders, 'If-Match': '"9"' } satisfies operations['post_purchases_id_line_corrections']['parameters']['header']
@@ -926,3 +926,26 @@ const missingLegacyCorrectionUnit: import('../src/features/purchases/correction-
 // @ts-expect-error A correction source cannot omit the actual retained DisposalRecord.
 const missingCorrectionRecord: import('../src/features/assets/correction-model').DisposalCorrectionSource = { unit: holdingUnit, item: originalCorrectionItem, asset: retainedAsset, corrections: [] }
 void [correctionSelectionSource, disposalCorrectionSource, correctionReadCalls, implicitCorrectionSelection, inventedCorrectionUnits, incompleteCorrectionUnits, missingLegacyCorrectionUnit, missingCorrectionRecord]
+
+// Raw financial correction values stay text until an explicit reviewed proposal.
+declare const purchaseCorrectionForms: typeof import('../src/features/purchases/correction-form')
+declare const disposalCorrectionForms: typeof import('../src/features/assets/correction-form')
+const rawPurchaseCorrection = { action: 'replace', reason: 'Reason', replacement_item_id: 'other-item', allocation: 'none', item_unit_id: '', quantity_base: '2', paid_minor: '0', note: '' } satisfies import('../src/features/purchases/correction-form').PurchaseCorrectionValues
+const rawDisposalCorrection = { action: 'replace', reason: 'Reason', kind: 'sold', currency: 'JPY', realized_proceeds_minor: '0', disposed_at: '1999-01-01T00:00:00Z', note: '' } satisfies import('../src/features/assets/correction-form').DisposalCorrectionValues
+const correctionFormCalls = [purchaseCorrectionForms.purchaseCorrectionDefaults(), purchaseCorrectionForms.purchaseCorrectionProposal(rawPurchaseCorrection, correctionSelectionSource),
+  purchaseCorrectionForms.adoptPurchaseCorrection(rawPurchaseCorrection, correctionSelectionSource, correctionSelectionSource), disposalCorrectionForms.disposalCorrectionDefaults(disposalCorrectionSource),
+  disposalCorrectionForms.disposalCorrectionProposal(rawDisposalCorrection, disposalCorrectionSource), disposalCorrectionForms.adoptDisposalCorrection(rawDisposalCorrection, disposalCorrectionSource, disposalCorrectionSource)]
+const reviewedVoidProposal = { source: correctionSelectionSource, body: lineVoidDecision, unit: null } satisfies import('../src/features/purchases/correction-form').PurchaseCorrectionProposal
+const reviewedReplacementProposal = { source: correctionSelectionSource, body: lineReplacementDecision, unit: null } satisfies import('../src/features/purchases/correction-form').PurchaseCorrectionProposal
+const reviewedDisposalProposal = { source: disposalCorrectionSource, body: disposalReplacementDecision } satisfies import('../src/features/assets/correction-form').DisposalCorrectionProposal
+// @ts-expect-error New amounts remain raw text, not prematurely coerced numbers.
+const numericCorrectionDraft: import('../src/features/purchases/correction-form').PurchaseCorrectionValues = { ...rawPurchaseCorrection, paid_minor: 0 }
+// @ts-expect-error The nullable replacement Unit decision is an explicit draft field.
+const missingCorrectionUnitDraft: import('../src/features/purchases/correction-form').PurchaseCorrectionValues = { action: 'replace', reason: '', replacement_item_id: '', quantity_base: '', paid_minor: '', note: '' }
+// @ts-expect-error A void cannot retain a replacement Unit as its proposed selection.
+const physicalVoidProposal: import('../src/features/purchases/correction-form').PurchaseCorrectionProposal = { source: correctionSelectionSource, body: lineVoidDecision, unit: holdingUnit }
+// @ts-expect-error A reviewed proposal retains its complete original source, not loose proofs.
+const sourcelessDisposalProposal: import('../src/features/assets/correction-form').DisposalCorrectionProposal = { body: disposalVoidDecision }
+// @ts-expect-error Disposal proceeds are raw text until reviewed.
+const numericDisposalDraft: import('../src/features/assets/correction-form').DisposalCorrectionValues = { ...rawDisposalCorrection, realized_proceeds_minor: 0 }
+void [correctionFormCalls, reviewedVoidProposal, reviewedReplacementProposal, reviewedDisposalProposal, numericCorrectionDraft, missingCorrectionUnitDraft, physicalVoidProposal, sourcelessDisposalProposal, numericDisposalDraft]
