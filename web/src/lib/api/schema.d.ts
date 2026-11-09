@@ -1186,7 +1186,7 @@ export interface paths {
         readonly put?: never;
         /**
          * Upload media
-         * @description Non-idempotent mutations must use Idempotency-Key and CSRF; domain service validates invariants and commits projections in same SQLite transaction.
+         * @description Require exact Origin, completed session, CSRF/version and an original idempotency key. Accept exactly one file and no other multipart fields; bound its bytes and the total body, including chunked input and multipart overhead. Verify declared JPEG/PNG/WebP MIME against magic bytes, complete decode, dimension and pixel limits before publication; validate every accepted animation frame or reject unsupported animated variants rather than silently checking only the first frame. Strip GPS and other sensitive location metadata. Derive all storage keys, MIME, sizes and digests from actual sanitized bytes, never from a filename or caller digest. Use private staging, durable atomic promotion and crash recovery with deduplication and safe pending cleanup; never delete an object still referenced by another Media. A fresh upload of already verified sanitized content can return the existing Media and its actual revision, without silently attaching it; a new identity begins at revision one. Bind the original idempotency key to a server-keyed digest of the exact raw file bytes and normalized declared MIME, so different private metadata cannot be silently treated as the same request merely because sanitized bytes match; never persist raw file metadata or the caller filename in the receipt. Revalidate authorization inside SQL and atomically publish source, current/outbox, audit and the frozen original response. An original-key retry cannot create another image or silently rebase. Existing retained metadata is not new-upload eligibility.
          */
         readonly post: operations["post_media"];
         readonly delete?: never;
@@ -1202,13 +1202,16 @@ export interface paths {
             readonly path?: never;
             readonly cookie?: never;
         };
-        /** Media details */
+        /**
+         * Media details
+         * @description Read actual authorized Media source, content metadata and independent membership revision, not a cached list or unverified thumbnail. For a retained ID equal to links, use the equivalent /media/{id}/view route because /media/links names the owner-scoped collection. No body, encoding or query.
+         */
         readonly get: operations["get_media_id"];
         readonly put?: never;
         readonly post?: never;
         /**
          * Delete media
-         * @description Non-idempotent mutations must use Idempotency-Key and CSRF; domain service validates invariants and commits projections in same SQLite transaction.
+         * @description Require exact Origin, completed session, CSRF/version/original key and original Media membership If-Match. A complete media-owned link read bracketed by matching Media reads lets the user review every actual owner before global deletion. Any link create/edit/unlink or owner-deletion cascade advances that Media revision, so a stale deletion cannot absorb a new or changed link. Inside SQL validate actual source, every affected owner/link/counter and authorization; atomically remove the Media and its actual links, publish independent tombstones and affected owner revisions, validate dependent AI/search references without publishing raw OCR or silently erasing approved user data, and record immutable audit, durable pending file cleanup and frozen original acknowledgement. Cleanup runs after COMMIT, rechecks shared references and is retryable after a crash; never unlink shared bytes from a failed or uncertain transaction. Exact original-key replay precedes current source/proof and never installs a historical acknowledgement as current state. No body, encoding or query.
          */
         readonly delete: operations["delete_media_id"];
         readonly options?: never;
@@ -1223,7 +1226,10 @@ export interface paths {
             readonly path?: never;
             readonly cookie?: never;
         };
-        /** GET /media/{id}/content */
+        /**
+         * GET /media/{id}/content
+         * @description Stream only authenticated, sanitized source bytes using their verified actual image MIME, no-store and nosniff. Never expose a filesystem path, caller filename, unvalidated type, API response through the service worker or unsanitized GPS metadata. A missing/unsafe object is not a fabricated empty image. The ETag is the independent Media membership revision. No body, encoding or query.
+         */
         readonly get: operations["get_media_id_content"];
         readonly put?: never;
         readonly post?: never;
@@ -1240,11 +1246,15 @@ export interface paths {
             readonly path?: never;
             readonly cookie?: never;
         };
-        readonly get?: never;
+        /**
+         * List all links to one Media
+         * @description Read one authorized live stable-ID page for this actual Media and validate each real owner, independent link and lookahead before returning any prefix. The signed cursor binds principal, dataset epoch, Media identity, page size and this collection for 15 minutes; it is not a frozen snapshot or authorization. A complete review brackets all pages with matching full Media reads and retains its actual membership revision. No body or content encoding; only limit and cursor are accepted.
+         */
+        readonly get: operations["get_media_id_links"];
         readonly put?: never;
         /**
          * Attach media
-         * @description Non-idempotent mutations must use Idempotency-Key and CSRF; domain service validates invariants and commits projections in same SQLite transaction.
+         * @description Require exact Origin, completed session, CSRF/version/original key, original Media If-Match and required original owner_revision. Strictly read one bounded JSON object, reject duplicate/unknown fields and Unicode repair, then revalidate authorization, actual Media and exactly one owner inside SQL. A conflicting selected cover returns MEDIA_COVER_CONFLICT rather than changing another link. Commit the independent new link, Media membership and affected owner counters, final current/outbox, immutable audit and frozen response atomically. The returned ETag belongs to the new independent link at revision one, not the Media or owner. Original-key replay precedes current proofs; no implicit rebase, physical change or automatic replay.
          */
         readonly post: operations["post_media_id_links"];
         readonly delete?: never;
@@ -1260,8 +1270,31 @@ export interface paths {
             readonly path?: never;
             readonly cookie?: never;
         };
-        /** GET /media/{id}/thumbnail */
+        /**
+         * GET /media/{id}/thumbnail
+         * @description Stream only an authenticated, verified sanitized JPEG thumbnail with its actual digest, no-store and nosniff. An unavailable thumbnail is not a proof that the original is absent; a missing or unsafe file is never fabricated. The ETag is the independent Media membership revision. No body, encoding or query.
+         */
         readonly get: operations["get_media_id_thumbnail"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/media/{id}/view": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /**
+         * Media details with reserved-ID escape
+         * @description Read the identical actual authorized Media resource and membership revision as /media/{id}. This path permits a retained ID equal to links without confusing the owner-scoped /media/links collection; it is not a second Media or proof. No body, encoding or query.
+         */
+        readonly get: operations["get_media_id_view"];
         readonly put?: never;
         readonly post?: never;
         readonly delete?: never;
@@ -1279,7 +1312,7 @@ export interface paths {
         };
         /**
          * GET /media/links
-         * @description Lists use stable ID ordering, or (occurred_at,id) for events, with opaque scoped cursors.
+         * @description Read one authorized live stable-ID page for the selected actual item, unit or location owner and validate each independent link, related Media and lookahead before returning any prefix. The signed cursor binds principal, dataset epoch, owner kind/identity, page size and this collection for 15 minutes; it is not a frozen snapshot or authorization. Complete owner review brackets all pages with matching actual owner reads to verify the link collection; embedded Media metadata can change independently, so reread the selected Media under its own proof before a write. No body or content encoding; only the documented owner, limit and cursor parameters are accepted.
          */
         readonly get: operations["get_media_links"];
         readonly put?: never;
@@ -1300,13 +1333,16 @@ export interface paths {
         readonly get?: never;
         readonly put?: never;
         readonly post?: never;
-        /** DELETE /media/links/{id} */
+        /**
+         * DELETE /media/links/{id}
+         * @description Require exact Origin, completed session, CSRF/version/original key and original independent link If-Match; revalidate actual source and session inside SQL. Atomically remove only this link, publish its independent tombstone, advance Media membership and affected owner aggregates, and retain immutable audit plus frozen ActionAck. Its revision is the deleted link revision plus one, not the owner or Media revision. Unlink never deletes the shared Media, physical bytes or another owner's link. Original-key replay precedes later source/proof checks. No body, encoding or query.
+         */
         readonly delete: operations["delete_media_links_id"];
         readonly options?: never;
         readonly head?: never;
         /**
          * Update media link
-         * @description Non-idempotent mutations must use Idempotency-Key and CSRF; domain service validates invariants and commits projections in same SQLite transaction.
+         * @description Require exact Origin, completed session, CSRF/version/original key and original independent link If-Match. Strict partial JSON preserves omission and cannot reassign the Media or owner. Revalidate actual link, Media, owner, counters and session inside SQL. A conflicting new cover returns MEDIA_COVER_CONFLICT without changing another row. An actual change atomically advances the link, Media membership and owner aggregate, publishes final current/outbox and records immutable audit plus frozen reply; equal intent is a receipt without counter changes. An original-key retry never rebases or installs a historical reply as current. No query or Unicode repair.
          */
         readonly patch: operations["patch_media_links_id"];
         readonly trace?: never;
@@ -2993,6 +3029,7 @@ export interface components {
             readonly password: string;
             readonly username: string;
         };
+        /** @description Actual sanitized image metadata and independent Media revision. sha256 and bytes describe stored sanitized content, never a caller-supplied digest. The revision also covers complete link membership, including owner deletion cascades, so a stale global deletion cannot absorb an unseen link. A verified thumbnail has a server-derived same-origin thumb_url and matching digest; unavailable or unverified thumbnail metadata is explicit null for both, never an invented file. Retained representation is not proof of new-upload eligibility. The runtime verifies URL identity, actual bytes and safe Unicode; original storage keys are private. */
         readonly Media: {
             readonly bytes: number;
             readonly height: number;
@@ -3002,44 +3039,78 @@ export interface components {
             readonly revision: number;
             readonly sha256: string;
             readonly thumb_sha256: string | null;
-            readonly thumb_url: string | null;
+            readonly thumb_url: null | string;
             readonly width: number;
-        };
+        } & unknown;
+        /** @description Frozen acknowledgement for the original Media identity after its metadata, actual links and projections commit. It does not claim that asynchronous private-file cleanup has already completed. */
         readonly MediaDeleteResult: {
             /** @constant */
             readonly deleted: true;
             readonly id: string;
         };
+        /** @description One independent stable-ID link to exactly one actual item, unit or location. Its strong ETag belongs to this row alone, so the resource does not embed mutable Media metadata. Retained negative sort positions and multiple legacy cover flags remain readable, not silently repaired. Raw OCR, private storage keys and an implicit owner reassignment are never link fields. */
         readonly MediaLink: {
-            readonly description?: string;
+            readonly description: string;
             readonly id: string;
-            readonly is_cover?: boolean;
-            readonly media?: components["schemas"]["Media"];
-            readonly media_id?: string;
-            readonly owner_id?: string;
+            readonly is_cover: boolean;
+            readonly media_id: string;
+            readonly owner_id: string;
             /** @enum {unknown} */
-            readonly owner_type?: "item" | "unit" | "location";
+            readonly owner_type: "item" | "unit" | "location";
             readonly revision: number;
-            readonly sort_order?: number;
+            readonly sort_order: number;
         };
-        /** @description Exactly one owner ID required; validation rule XOR across location_id/item_id/item_unit_id */
+        /** @description Attach the Media named by the path against its original Media If-Match and the separately required original owner_revision. Exactly one existing item_id, item_unit_id or location_id is supplied; the actual owner kind, identity and independent revision are verified inside SQL. Omitted link metadata defaults on the server, without clients installing defaults. A selected cover conflicts with another current cover instead of changing it. Owners and Media may have multiple independent links; no stock, physical movement or AI approval is inferred. */
         readonly MediaLinkCreate: {
+            /** @default  */
             readonly description?: string;
+            /** @default false */
             readonly is_cover?: boolean;
             readonly item_id?: string;
             readonly item_unit_id?: string;
             readonly location_id?: string;
+            readonly owner_revision: number;
+            /** @default 0 */
             readonly sort_order?: number;
-        } & (unknown | unknown | unknown);
+        } & ({
+            readonly item_id: string;
+            readonly item_unit_id?: never;
+            readonly location_id?: never;
+        } | {
+            readonly item_id?: never;
+            readonly item_unit_id: string;
+            readonly location_id?: never;
+        } | {
+            readonly item_id?: never;
+            readonly item_unit_id?: never;
+            readonly location_id: string;
+        });
+        /** @description One complete live stable-ID page with required null continuation at the end. A page is not a frozen snapshot or a collection revision/ETag. */
         readonly MediaLinkList: {
-            readonly data: readonly components["schemas"]["MediaLink"][];
-            readonly next_cursor?: string | null;
+            readonly data: readonly components["schemas"]["MediaLinkView"][];
+            readonly next_cursor: string | null;
         };
+        /** @description A link row joined with actual separately versioned Media metadata for a live list page. The embedded Media must match media_id, verified by the runtime. The joined view is not an independently ETagged resource or a Media write proof; its metadata can change independently of the owner-scoped link collection. */
+        readonly MediaLinkView: {
+            readonly description: string;
+            readonly id: string;
+            readonly is_cover: boolean;
+            readonly media_id: string;
+            readonly owner_id: string;
+            /** @enum {unknown} */
+            readonly owner_type: "item" | "unit" | "location";
+            readonly revision: number;
+            readonly sort_order: number;
+        } & {
+            readonly media: components["schemas"]["Media"];
+        };
+        /** @description Nonempty partial link metadata under the original independent link proof. Omitted fields stay unchanged; new sort positions are nonnegative safe integers even though retained negative values remain readable. Changing a link from non-cover to cover when another current link is already a cover returns MEDIA_COVER_CONFLICT rather than silently modifying that independent row. Retained multiple covers can be explicitly cleared, and a value-equal intent remains a no-op receipt. Owner and Media identities cannot be changed. */
         readonly MediaLinkWrite: {
             readonly description?: string;
             readonly is_cover?: boolean;
             readonly sort_order?: number;
         };
+        /** @description Exactly one multipart image file, with no caller-owned storage path, digest, dimensions or owner. The server validates actual bytes, declared MIME, size, pixel count and privacy before creating or deduplicating Media; a later separately reviewed command attaches it. */
         readonly MediaUploadInput: {
             /** Format: binary */
             readonly file: string;
@@ -4053,7 +4124,7 @@ export interface components {
                 readonly "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Revision, idempotency, or business conflict. BARCODE_CONFLICT means the same owner already has the product value under the same symbology; ALIAS_CONFLICT means the same owner already has the exact alias. These static codes never echo submitted values or private diagnostics. */
+        /** @description Revision, idempotency, or business conflict. BARCODE_CONFLICT means the same owner already has the product value under the same symbology; ALIAS_CONFLICT means the same owner already has the exact alias. MEDIA_COVER_CONFLICT means a different current link already claims the selected owner's cover. These static codes never echo submitted values or private diagnostics. */
         readonly Error409: {
             headers: {
                 /** @description Protected API data is never cached by the service worker. */
@@ -7381,6 +7452,8 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
+                /** @description Exact configured public origin; independent of the active session and CSRF proof. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -7399,7 +7472,7 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Strong quoted independent revision matching the returned resource; runtime also enforces the safe-integer maximum. */
                     readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
@@ -7436,7 +7509,7 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Strong quoted independent revision matching the returned resource; runtime also enforces the safe-integer maximum. */
                     readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
@@ -7461,8 +7534,10 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Original Media membership revision, not a link or owner revision. */
                 readonly "If-Match": string;
+                /** @description Exact configured public origin; independent of the active session and CSRF proof. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -7509,17 +7584,58 @@ export interface operations {
         };
         readonly requestBody?: never;
         readonly responses: {
-            /** @description Authenticated streamed content */
+            /** @description Authenticated streamed sanitized original content */
             readonly 200: {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Strong quoted independent revision matching the returned resource; runtime also enforces the safe-integer maximum. */
                     readonly ETag?: string;
+                    /** @description Never let the browser reinterpret an uploaded file as another content type. */
+                    readonly "X-Content-Type-Options"?: "nosniff";
                     readonly [name: string]: unknown;
                 };
                 content: {
-                    readonly "application/octet-stream": string;
+                    readonly "image/jpeg": string;
+                    readonly "image/png": string;
+                    readonly "image/webp": string;
+                };
+            };
+            readonly 400: components["responses"]["Error400"];
+            readonly 401: components["responses"]["Error401"];
+            readonly 403: components["responses"]["Error403"];
+            readonly 404: components["responses"]["Error404"];
+            readonly 409: components["responses"]["Error409"];
+            readonly 413: components["responses"]["Error413"];
+            readonly 415: components["responses"]["Error415"];
+            readonly 422: components["responses"]["Error422"];
+            readonly 429: components["responses"]["Error429"];
+            readonly 503: components["responses"]["Error503"];
+        };
+    };
+    readonly get_media_id_links: {
+        readonly parameters: {
+            readonly query?: {
+                readonly cursor?: string;
+                readonly limit?: number;
+            };
+            readonly header?: never;
+            readonly path: {
+                readonly id: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Complete live Media-owned page, without a collection ETag */
+            readonly 200: {
+                headers: {
+                    /** @description Protected API data is never cached by the service worker. */
+                    readonly "Cache-Control"?: "no-store";
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["MediaLinkList"];
                 };
             };
             readonly 400: components["responses"]["Error400"];
@@ -7539,8 +7655,10 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Original Media membership revision; owner_revision separately binds the actual owner in the body. */
                 readonly "If-Match": string;
+                /** @description Exact configured public origin; independent of the active session and CSRF proof. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -7561,7 +7679,7 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Strong quoted independent revision matching the returned resource; runtime also enforces the safe-integer maximum. */
                     readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
@@ -7593,17 +7711,55 @@ export interface operations {
         };
         readonly requestBody?: never;
         readonly responses: {
-            /** @description Authenticated streamed content */
+            /** @description Authenticated streamed verified JPEG thumbnail */
             readonly 200: {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Strong quoted independent revision matching the returned resource; runtime also enforces the safe-integer maximum. */
                     readonly ETag?: string;
+                    /** @description Never let the browser reinterpret an uploaded file as another content type. */
+                    readonly "X-Content-Type-Options"?: "nosniff";
                     readonly [name: string]: unknown;
                 };
                 content: {
                     readonly "image/jpeg": string;
+                };
+            };
+            readonly 400: components["responses"]["Error400"];
+            readonly 401: components["responses"]["Error401"];
+            readonly 403: components["responses"]["Error403"];
+            readonly 404: components["responses"]["Error404"];
+            readonly 409: components["responses"]["Error409"];
+            readonly 413: components["responses"]["Error413"];
+            readonly 415: components["responses"]["Error415"];
+            readonly 422: components["responses"]["Error422"];
+            readonly 429: components["responses"]["Error429"];
+            readonly 503: components["responses"]["Error503"];
+        };
+    };
+    readonly get_media_id_view: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly id: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Same actual Media and independent membership revision as /media/{id} */
+            readonly 200: {
+                headers: {
+                    /** @description Protected API data is never cached by the service worker. */
+                    readonly "Cache-Control"?: "no-store";
+                    /** @description Strong quoted independent revision matching the returned resource; runtime also enforces the safe-integer maximum. */
+                    readonly ETag?: string;
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["Media"];
                 };
             };
             readonly 400: components["responses"]["Error400"];
@@ -7632,13 +7788,11 @@ export interface operations {
         };
         readonly requestBody?: never;
         readonly responses: {
-            /** @description Successful response */
+            /** @description Complete live owner-scoped page, without a collection ETag */
             readonly 200: {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
-                    readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
                 content: {
@@ -7662,8 +7816,10 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Original independent MediaLink revision, not the Media or owner aggregate revision. */
                 readonly "If-Match": string;
+                /** @description Exact configured public origin; independent of the active session and CSRF proof. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -7704,8 +7860,10 @@ export interface operations {
             readonly query?: never;
             readonly header: {
                 readonly "Idempotency-Key": string;
-                /** @description Quoted current revision of the mutated resource or aggregate. Stock checks the item revision. */
+                /** @description Original independent MediaLink revision, not the Media or owner aggregate revision. */
                 readonly "If-Match": string;
+                /** @description Exact configured public origin; independent of the active session and CSRF proof. */
+                readonly Origin: string;
                 readonly "X-CSRF-Token": string;
                 /** @description Semantic application version. Incompatible writes return 426. */
                 readonly "X-HomeBox-Client-Version": string;
@@ -7726,7 +7884,7 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
+                    /** @description Strong quoted independent revision matching the returned resource; runtime also enforces the safe-integer maximum. */
                     readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };

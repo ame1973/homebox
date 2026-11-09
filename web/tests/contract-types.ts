@@ -967,3 +967,56 @@ const unreviewedCorrectionCommand = correctionCommands.freezeCorrectionCommand({
 // @ts-expect-error A subject proof or caller key alone is not a frozen command.
 const looseCorrectionSend = correctionCommands.sendCorrectionCommand({ kind: 'correct-disposal', body: disposalVoidDecision, key: 'previous-key' }, 'csrf', new AbortController().signal)
 void [sendCorrectionCalls, reusedCorrectionKey, credentialCorrectionCommand, physicalCorrectionCommand, unreviewedCorrectionCommand, looseCorrectionSend]
+
+// Shared media identities, owner intent and independent proofs remain explicit.
+const mediaMetadata = { id: 'media', revision: 4, sha256: 'a'.repeat(64), mime_type: 'image/jpeg', width: 4000, height: 3000, bytes: 120000,
+  thumb_url: null, thumb_sha256: null } satisfies components['schemas']['Media']
+const mediaLink = { id: 'link', revision: 1, media_id: 'media', owner_type: 'item', owner_id: 'item', is_cover: false,
+  sort_order: -1, description: '' } satisfies components['schemas']['MediaLink']
+const mediaLinkView = { ...mediaLink, media: mediaMetadata } satisfies components['schemas']['MediaLinkView']
+const mediaPage = { data: [mediaLinkView], next_cursor: null } satisfies components['schemas']['MediaLinkList']
+const mediaOwnerInputs = [
+  { item_id: 'item', owner_revision: 3 },
+  { item_unit_id: 'unit', owner_revision: 4, is_cover: true },
+  { location_id: 'location', owner_revision: 5, sort_order: 0, description: '' },
+] as const satisfies readonly components['schemas']['MediaLinkCreate'][]
+const mediaHeaders = { ...authHeaders, 'If-Match': '"4"' } satisfies operations['post_media_id_links']['parameters']['header']
+const mediaTransportCalls = [
+  purchaseTransport.GET('/media/{id}/view', { params: { path: { id: 'links' } } }),
+  purchaseTransport.GET('/media/{id}/links', { params: { path: { id: 'media' }, query: { limit: 50 } } }),
+  purchaseTransport.GET('/media/links', { params: { query: { owner_type: 'item', owner_id: 'item' } } }),
+  purchaseTransport.POST('/media/{id}/links', { params: { path: { id: 'media' }, header: mediaHeaders }, body: mediaOwnerInputs[0] }),
+  purchaseTransport.POST('/media/{id}/links', { params: { path: { id: 'media' }, header: mediaHeaders }, body: mediaOwnerInputs[1] }),
+  purchaseTransport.POST('/media/{id}/links', { params: { path: { id: 'media' }, header: mediaHeaders }, body: mediaOwnerInputs[2] }),
+  purchaseTransport.PATCH('/media/links/{id}', { params: { path: { id: 'link' }, header: mediaHeaders }, body: { description: '' } }),
+  purchaseTransport.DELETE('/media/links/{id}', { params: { path: { id: 'link' }, header: mediaHeaders } }),
+  purchaseTransport.DELETE('/media/{id}', { params: { path: { id: 'media' }, header: mediaHeaders } }),
+]
+// @ts-expect-error Attachment needs the original selected owner's independent revision.
+const unprovenMediaOwner: components['schemas']['MediaLinkCreate'] = { item_id: 'item' }
+// @ts-expect-error The owner must be explicit even when the Media is known.
+const ownerlessMediaLink: components['schemas']['MediaLinkCreate'] = { owner_revision: 3 }
+// @ts-expect-error Exactly one actual owner is accepted, not a synthetic multi-owner link.
+const multipleMediaOwners: components['schemas']['MediaLinkCreate'] = { item_id: 'item', location_id: 'location', owner_revision: 3 }
+// @ts-expect-error The generated direct transport preserves the same exclusive owner requirement.
+const multipleRawMediaOwners = purchaseTransport.POST('/media/{id}/links', { params: { path: { id: 'media' }, header: mediaHeaders }, body: { item_id: 'item', item_unit_id: 'unit', owner_revision: 3 } })
+// @ts-expect-error Direct transport cannot omit the owner's independent body proof.
+const unprovenRawMediaOwner = purchaseTransport.POST('/media/{id}/links', { params: { path: { id: 'media' }, header: mediaHeaders }, body: { item_id: 'item' } })
+// @ts-expect-error The Media's original If-Match is separate from its owner's body proof.
+const unprovenMediaHeaders: operations['post_media_id_links']['parameters']['header'] = { ...authHeaders }
+// @ts-expect-error A row ETag cannot cover independently changing embedded Media metadata.
+const embeddedMediaResource: components['schemas']['MediaLink'] = { ...mediaLink, media: mediaMetadata }
+// @ts-expect-error Responses retain the complete selected owner, not only a link ID.
+const partialMediaLink: components['schemas']['MediaLink'] = { id: 'link', revision: 1 }
+// @ts-expect-error List views need actual separately versioned Media metadata.
+const incompleteMediaView: components['schemas']['MediaLinkView'] = { ...mediaLink }
+// @ts-expect-error List views cannot expose unrelated raw OCR alongside the joined metadata.
+const unsafeMediaView: components['schemas']['MediaLinkView'] = { ...mediaLinkView, raw_ocr: 'unreviewed' }
+// @ts-expect-error Live collections explicitly terminate or continue.
+const partialMediaPage: components['schemas']['MediaLinkList'] = { data: [] }
+// @ts-expect-error Owner-scoped lists require the actual owner identity.
+const missingMediaOwnerFilter: operations['get_media_links']['parameters']['query'] = { owner_type: 'item' }
+// @ts-expect-error A link patch cannot reassign its immutable Media.
+const reassignedMediaLink: components['schemas']['MediaLinkWrite'] = { media_id: 'other' }
+void [mediaPage, mediaOwnerInputs, mediaTransportCalls, unprovenMediaOwner, ownerlessMediaLink, multipleMediaOwners,
+  multipleRawMediaOwners, unprovenRawMediaOwner, unprovenMediaHeaders, embeddedMediaResource, partialMediaLink, incompleteMediaView, unsafeMediaView, partialMediaPage, missingMediaOwnerFilter, reassignedMediaLink]

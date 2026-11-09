@@ -4129,12 +4129,13 @@ paths:
               schema:
                 const: no-store
               description: Protected API data is never cached by the service worker.
-            ETag:
+            ETag: &mediaETag
               schema:
                 type: string
                 minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+                maxLength: 18
+                pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+              description: Strong quoted independent revision matching the returned resource; runtime also enforces the safe-integer maximum.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -4180,14 +4181,30 @@ paths:
           minLength: 1
           maxLength: 32
         description: Semantic application version. Incompatible writes return 426.
+      - &mediaOrigin
+        name: Origin
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        description: Exact configured public origin; independent of the active session and CSRF proof.
       requestBody:
         required: true
         content:
           multipart/form-data:
             schema:
               $ref: '#/components/schemas/MediaUploadInput'
-      description: Non-idempotent mutations must use Idempotency-Key and CSRF; domain
-        service validates invariants and commits projections in same SQLite transaction.
+            encoding:
+              file:
+                contentType: image/jpeg, image/png, image/webp
+      description: Require exact Origin, completed session, CSRF/version and an original idempotency key. Accept exactly one file and no other multipart fields; bound its bytes and the total body, including chunked input and multipart overhead. Verify declared JPEG/PNG/WebP MIME against magic bytes, complete decode, dimension and pixel limits before publication; validate every accepted animation frame or reject unsupported animated variants rather than silently checking only the first frame. Strip GPS and other sensitive location metadata. Derive all storage keys, MIME, sizes and digests from actual sanitized bytes, never from a filename or caller digest. Use private staging, durable atomic promotion and crash recovery with deduplication and safe pending cleanup; never delete an object still referenced by another Media. A fresh upload of already verified sanitized content can return the existing Media and its actual revision, without silently attaching it; a new identity begins at revision one. Bind the original idempotency key to a server-keyed digest of the exact raw file bytes and normalized declared MIME, so different private metadata cannot be silently treated as the same request merely because sanitized bytes match; never persist raw file metadata or the caller filename in the receipt. Revalidate authorization inside SQL and atomically publish source, current/outbox, audit and the frozen original response. An original-key retry cannot create another image or silently rebase. Existing retained metadata is not new-upload eligibility.
+      x-max-body-bytes: 33619968
+      x-max-file-bytes: 33554432
+      x-max-image-pixels: 64000000
+      x-max-image-dimension: 16384
+      x-max-query-bytes: 0
   /media/{id}:
     get:
       operationId: get_media_id
@@ -4206,12 +4223,7 @@ paths:
               schema:
                 const: no-store
               description: Protected API data is never cached by the service worker.
-            ETag:
-              schema:
-                type: string
-                minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+            ETag: *mediaETag
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -4240,6 +4252,10 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
+      description: Read actual authorized Media source, content metadata and independent membership revision, not a cached list or unverified thumbnail. For a retained ID equal to links, use the equivalent /media/{id}/view route because /media/links names the owner-scoped collection. No body, encoding or query.
+      x-response-revision-scope: media
+      x-max-body-bytes: 0
+      x-max-query-bytes: 0
     delete:
       operationId: delete_media_id
       summary: Delete media
@@ -4307,10 +4323,9 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+        description: Original Media membership revision, not a link or owner revision.
       - name: X-HomeBox-Client-Version
         in: header
         required: true
@@ -4319,9 +4334,128 @@ paths:
           minLength: 1
           maxLength: 32
         description: Semantic application version. Incompatible writes return 426.
-      description: Non-idempotent mutations must use Idempotency-Key and CSRF; domain
-        service validates invariants and commits projections in same SQLite transaction.
+      - *mediaOrigin
+      description: Require exact Origin, completed session, CSRF/version/original key and original Media membership If-Match. A complete media-owned link read bracketed by matching Media reads lets the user review every actual owner before global deletion. Any link create/edit/unlink or owner-deletion cascade advances that Media revision, so a stale deletion cannot absorb a new or changed link. Inside SQL validate actual source, every affected owner/link/counter and authorization; atomically remove the Media and its actual links, publish independent tombstones and affected owner revisions, validate dependent AI/search references without publishing raw OCR or silently erasing approved user data, and record immutable audit, durable pending file cleanup and frozen original acknowledgement. Cleanup runs after COMMIT, rechecks shared references and is retryable after a crash; never unlink shared bytes from a failed or uncertain transaction. Exact original-key replay precedes current source/proof and never installs a historical acknowledgement as current state. No body, encoding or query.
+      x-revision-scope: media
+      x-max-body-bytes: 0
+      x-max-query-bytes: 0
+  /media/{id}/view:
+    get:
+      operationId: get_media_id_view
+      summary: Media details with reserved-ID escape
+      tags:
+      - media
+      responses:
+        '200':
+          description: Same actual Media and independent membership revision as /media/{id}
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Media'
+          headers:
+            Cache-Control:
+              schema:
+                const: no-store
+              description: Protected API data is never cached by the service worker.
+            ETag: *mediaETag
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '413':
+          $ref: '#/components/responses/Error413'
+        '415':
+          $ref: '#/components/responses/Error415'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+      description: Read the identical actual authorized Media resource and membership revision as /media/{id}. This path permits a retained ID equal to links without confusing the owner-scoped /media/links collection; it is not a second Media or proof. No body, encoding or query.
+      x-response-revision-scope: media
+      x-max-body-bytes: 0
+      x-max-query-bytes: 0
   /media/{id}/links:
+    get:
+      operationId: get_media_id_links
+      summary: List all links to one Media
+      tags:
+      - media
+      responses:
+        '200':
+          description: Complete live Media-owned page, without a collection ETag
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaLinkList'
+          headers:
+            Cache-Control:
+              schema:
+                const: no-store
+              description: Protected API data is never cached by the service worker.
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '413':
+          $ref: '#/components/responses/Error413'
+        '415':
+          $ref: '#/components/responses/Error415'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+      - &mediaLimit
+        name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+      - &mediaCursor
+        name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+      description: Read one authorized live stable-ID page for this actual Media and validate each real owner, independent link and lookahead before returning any prefix. The signed cursor binds principal, dataset epoch, Media identity, page size and this collection for 15 minutes; it is not a frozen snapshot or authorization. A complete review brackets all pages with matching full Media reads and retains its actual membership revision. No body or content encoding; only limit and cursor are accepted.
+      x-max-body-bytes: 0
+      x-max-query-bytes: 16384
     post:
       operationId: post_media_id_links
       summary: Attach media
@@ -4339,12 +4473,7 @@ paths:
               schema:
                 const: no-store
               description: Protected API data is never cached by the service worker.
-            ETag:
-              schema:
-                type: string
-                minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+            ETag: *mediaETag
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -4403,18 +4532,21 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+        description: Original Media membership revision; owner_revision separately binds the actual owner in the body.
+      - *mediaOrigin
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/MediaLinkCreate'
-      description: Non-idempotent mutations must use Idempotency-Key and CSRF; domain
-        service validates invariants and commits projections in same SQLite transaction.
+      description: Require exact Origin, completed session, CSRF/version/original key, original Media If-Match and required original owner_revision. Strictly read one bounded JSON object, reject duplicate/unknown fields and Unicode repair, then revalidate authorization, actual Media and exactly one owner inside SQL. A conflicting selected cover returns MEDIA_COVER_CONFLICT rather than changing another link. Commit the independent new link, Media membership and affected owner counters, final current/outbox, immutable audit and frozen response atomically. The returned ETag belongs to the new independent link at revision one, not the Media or owner. Original-key replay precedes current proofs; no implicit rebase, physical change or automatic replay.
+      x-revision-scope: media
+      x-response-revision-scope: media_link
+      x-max-body-bytes: 131072
+      x-max-query-bytes: 0
   /media/links/{id}:
     patch:
       operationId: patch_media_links_id
@@ -4433,12 +4565,7 @@ paths:
               schema:
                 const: no-store
               description: Protected API data is never cached by the service worker.
-            ETag:
-              schema:
-                type: string
-                minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+            ETag: *mediaETag
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -4489,10 +4616,9 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+        description: Original independent MediaLink revision, not the Media or owner aggregate revision.
       - name: X-HomeBox-Client-Version
         in: header
         required: true
@@ -4501,14 +4627,18 @@ paths:
           minLength: 1
           maxLength: 32
         description: Semantic application version. Incompatible writes return 426.
+      - *mediaOrigin
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/MediaLinkWrite'
-      description: Non-idempotent mutations must use Idempotency-Key and CSRF; domain
-        service validates invariants and commits projections in same SQLite transaction.
+      description: Require exact Origin, completed session, CSRF/version/original key and original independent link If-Match. Strict partial JSON preserves omission and cannot reassign the Media or owner. Revalidate actual link, Media, owner, counters and session inside SQL. A conflicting new cover returns MEDIA_COVER_CONFLICT without changing another row. An actual change atomically advances the link, Media membership and owner aggregate, publishes final current/outbox and records immutable audit plus frozen reply; equal intent is a receipt without counter changes. An original-key retry never rebases or installs a historical reply as current. No query or Unicode repair.
+      x-revision-scope: media_link
+      x-response-revision-scope: media_link
+      x-max-body-bytes: 131072
+      x-max-query-bytes: 0
     delete:
       operationId: delete_media_links_id
       summary: DELETE /media/links/{id}
@@ -4584,10 +4714,14 @@ paths:
         schema:
           type: string
           minLength: 3
-          maxLength: 64
-          pattern: ^"[0-9]+"$
-        description: Quoted current revision of the mutated resource or aggregate.
-          Stock checks the item revision.
+          maxLength: 18
+          pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
+        description: Original independent MediaLink revision, not the Media or owner aggregate revision.
+      - *mediaOrigin
+      description: Require exact Origin, completed session, CSRF/version/original key and original independent link If-Match; revalidate actual source and session inside SQL. Atomically remove only this link, publish its independent tombstone, advance Media membership and affected owner aggregates, and retain immutable audit plus frozen ActionAck. Its revision is the deleted link revision plus one, not the owner or Media revision. Unlink never deletes the shared Media, physical bytes or another owner's link. Original-key replay precedes later source/proof checks. No body, encoding or query.
+      x-revision-scope: media_link
+      x-max-body-bytes: 0
+      x-max-query-bytes: 0
   /purchases:
     get:
       operationId: get_purchases
@@ -10472,7 +10606,7 @@ paths:
       - media
       responses:
         '200':
-          description: Successful response
+          description: Complete live owner-scoped page, without a collection ETag
           content:
             application/json:
               schema:
@@ -10482,12 +10616,6 @@ paths:
               schema:
                 const: no-store
               description: Protected API data is never cached by the service worker.
-            ETag:
-              schema:
-                type: string
-                minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -10508,24 +10636,10 @@ paths:
           $ref: '#/components/responses/Error429'
         '503':
           $ref: '#/components/responses/Error503'
-      description: Lists use stable ID ordering, or (occurred_at,id) for events, with
-        opaque scoped cursors.
+      description: Read one authorized live stable-ID page for the selected actual item, unit or location owner and validate each independent link, related Media and lookahead before returning any prefix. The signed cursor binds principal, dataset epoch, owner kind/identity, page size and this collection for 15 minutes; it is not a frozen snapshot or authorization. Complete owner review brackets all pages with matching actual owner reads to verify the link collection; embedded Media metadata can change independently, so reread the selected Media under its own proof before a write. No body or content encoding; only the documented owner, limit and cursor parameters are accepted.
       parameters:
-      - name: limit
-        in: query
-        required: false
-        schema:
-          type: integer
-          minimum: 1
-          maximum: 100
-          default: 50
-      - name: cursor
-        in: query
-        required: false
-        schema:
-          type: string
-          minLength: 1
-          maxLength: 2048
+      - *mediaLimit
+      - *mediaCursor
       - name: owner_type
         in: query
         required: true
@@ -10541,6 +10655,8 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
+      x-max-body-bytes: 0
+      x-max-query-bytes: 16384
   /media/{id}/content:
     get:
       operationId: get_media_id_content
@@ -10549,23 +10665,26 @@ paths:
       - media
       responses:
         '200':
-          description: Authenticated streamed content
+          description: Authenticated streamed sanitized original content
           content:
-            application/octet-stream:
-              schema:
+            image/jpeg:
+              schema: &mediaBinary
                 type: string
                 format: binary
+            image/png:
+              schema: *mediaBinary
+            image/webp:
+              schema: *mediaBinary
           headers:
             Cache-Control:
               schema:
                 const: no-store
               description: Protected API data is never cached by the service worker.
-            ETag:
+            ETag: *mediaETag
+            X-Content-Type-Options: &mediaNoSniff
               schema:
-                type: string
-                minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+                const: nosniff
+              description: Never let the browser reinterpret an uploaded file as another content type.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -10594,6 +10713,10 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
+      description: Stream only authenticated, sanitized source bytes using their verified actual image MIME, no-store and nosniff. Never expose a filesystem path, caller filename, unvalidated type, API response through the service worker or unsanitized GPS metadata. A missing/unsafe object is not a fabricated empty image. The ETag is the independent Media membership revision. No body, encoding or query.
+      x-response-revision-scope: media
+      x-max-body-bytes: 0
+      x-max-query-bytes: 0
   /media/{id}/thumbnail:
     get:
       operationId: get_media_id_thumbnail
@@ -10602,23 +10725,17 @@ paths:
       - media
       responses:
         '200':
-          description: Authenticated streamed content
+          description: Authenticated streamed verified JPEG thumbnail
           content:
             image/jpeg:
-              schema:
-                type: string
-                format: binary
+              schema: *mediaBinary
           headers:
             Cache-Control:
               schema:
                 const: no-store
               description: Protected API data is never cached by the service worker.
-            ETag:
-              schema:
-                type: string
-                minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+            ETag: *mediaETag
+            X-Content-Type-Options: *mediaNoSniff
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -10647,6 +10764,10 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
+      description: Stream only an authenticated, verified sanitized JPEG thumbnail with its actual digest, no-store and nosniff. An unavailable thumbnail is not a proof that the original is absent; a missing or unsafe file is never fabricated. The ETag is the independent Media membership revision. No body, encoding or query.
+      x-response-revision-scope: media
+      x-max-body-bytes: 0
+      x-max-query-bytes: 0
   /backups/{id}/download:
     get:
       operationId: get_backups_id_download
@@ -13788,18 +13909,33 @@ components:
       type: object
       additionalProperties: false
       properties:
-        id: *id005
-        revision: *id006
+        id: &mediaID
+          type: string
+          minLength: 1
+          maxLength: 128
+        revision: &mediaRevision
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
         sha256: *id011
         mime_type:
           enum:
           - image/jpeg
           - image/png
           - image/webp
-        width: *id006
-        height: *id006
-        bytes: *id006
-        thumb_url: *id007
+        width: &mediaPositiveInteger
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        height: *mediaPositiveInteger
+        bytes: *mediaPositiveInteger
+        thumb_url:
+          anyOf:
+          - type: 'null'
+          - type: string
+            minLength: 1
+            maxLength: 2048
+            pattern: ^/api/v1/media/(?:[A-Za-z0-9._~!$&'()*+,;=:@-]|%[0-9A-Fa-f]{2})+/thumbnail(?![\s\S])
         thumb_sha256:
           anyOf:
           - *id011
@@ -13814,45 +13950,84 @@ components:
       - bytes
       - thumb_url
       - thumb_sha256
+      allOf:
+      - if:
+          properties:
+            thumb_url:
+              type: 'null'
+        then:
+          properties:
+            thumb_sha256:
+              type: 'null'
+        else:
+          properties:
+            thumb_sha256: *id011
+      description: Actual sanitized image metadata and independent Media revision. sha256 and bytes describe stored sanitized content, never a caller-supplied digest. The revision also covers complete link membership, including owner deletion cascades, so a stale global deletion cannot absorb an unseen link. A verified thumbnail has a server-derived same-origin thumb_url and matching digest; unavailable or unverified thumbnail metadata is explicit null for both, never an invented file. Retained representation is not proof of new-upload eligibility. The runtime verifies URL identity, actual bytes and safe Unicode; original storage keys are private.
+      x-runtime-validation: media-actual-bytes-membership-thumbnail-v1
     MediaLink:
       type: object
       additionalProperties: false
-      properties:
-        id: *id005
-        revision: *id006
-        media_id: *id005
+      properties: &mediaLinkProperties
+        id: *mediaID
+        revision: *mediaRevision
+        media_id: *mediaID
         owner_type:
           enum:
           - item
           - unit
           - location
-        owner_id: *id005
+        owner_id: *mediaID
         is_cover:
           type: boolean
-        sort_order: *id006
-        media:
-          $ref: '#/components/schemas/Media'
-        description:
+        sort_order: &retainedMediaSort
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+        description: &mediaDescription
           type: string
           minLength: 0
           maxLength: 10000
-      required:
+      required: &mediaLinkRequired
       - id
       - revision
+      - media_id
+      - owner_type
+      - owner_id
+      - is_cover
+      - sort_order
+      - description
+      description: One independent stable-ID link to exactly one actual item, unit or location. Its strong ETag belongs to this row alone, so the resource does not embed mutable Media metadata. Retained negative sort positions and multiple legacy cover flags remain readable, not silently repaired. Raw OCR, private storage keys and an implicit owner reassignment are never link fields.
+    MediaLinkView:
+      type: object
+      allOf:
+      - properties: *mediaLinkProperties
+        required: *mediaLinkRequired
+      - properties:
+          media:
+            $ref: '#/components/schemas/Media'
+        required:
+        - media
+      unevaluatedProperties: false
+      description: A link row joined with actual separately versioned Media metadata for a live list page. The embedded Media must match media_id, verified by the runtime. The joined view is not an independently ETagged resource or a Media write proof; its metadata can change independently of the owner-scoped link collection.
     MediaLinkList:
       type: object
       required:
       - data
+      - next_cursor
       additionalProperties: false
       properties:
         data:
           type: array
+          maxItems: 100
           items:
-            $ref: '#/components/schemas/MediaLink'
+            $ref: '#/components/schemas/MediaLinkView'
         next_cursor:
           type:
           - string
           - 'null'
+          minLength: 1
+          maxLength: 2048
+      description: One complete live stable-ID page with required null continuation at the end. A page is not a frozen snapshot or a collection revision/ETag.
     MediaLinkWrite:
       type: object
       minProperties: 1
@@ -13860,14 +14035,12 @@ components:
       properties:
         is_cover: &id017
           type: boolean
-        sort_order:
+        sort_order: &newMediaSort
           type: integer
           minimum: 0
           maximum: 9007199254740991
-        description:
-          type: string
-          minLength: 0
-          maxLength: 10000
+        description: *mediaDescription
+      description: Nonempty partial link metadata under the original independent link proof. Omitted fields stay unchanged; new sort positions are nonnegative safe integers even though retained negative values remain readable. Changing a link from non-cover to cover when another current link is already a cover returns MEDIA_COVER_CONFLICT rather than silently modifying that independent row. Retained multiple covers can be explicitly cleared, and a value-equal intent remains a no-op receipt. Owner and Media identities cannot be changed.
     Purchase:
       type: object
       additionalProperties: false
@@ -15245,56 +15418,54 @@ components:
       type: object
       additionalProperties: false
       properties:
-        location_id: *id018
-        item_id: *id018
-        item_unit_id: *id018
+        location_id: *mediaID
+        item_id: *mediaID
+        item_unit_id: *mediaID
+        owner_revision: *mediaRevision
         is_cover:
           type: boolean
+          default: false
         sort_order:
-          type: integer
-          minimum: 0
+          allOf:
+          - *newMediaSort
+          default: 0
         description:
-          type: string
-          minLength: 0
-          maxLength: 10000
-      required: []
-      minProperties: 1
-      description: Exactly one owner ID required; validation rule XOR across location_id/item_id/item_unit_id
+          allOf:
+          - *mediaDescription
+          default: ''
+      required:
+      - owner_revision
+      description: Attach the Media named by the path against its original Media If-Match and the separately required original owner_revision. Exactly one existing item_id, item_unit_id or location_id is supplied; the actual owner kind, identity and independent revision are verified inside SQL. Omitted link metadata defaults on the server, without clients installing defaults. A selected cover conflicts with another current cover instead of changing it. Owners and Media may have multiple independent links; no stock, physical movement or AI approval is inferred.
       oneOf:
       - required:
         - item_id
-        not:
-          anyOf:
-          - required:
-            - item_unit_id
-          - required:
-            - location_id
+        properties:
+          item_id: *mediaID
+          item_unit_id: false
+          location_id: false
       - required:
         - item_unit_id
-        not:
-          anyOf:
-          - required:
-            - item_id
-          - required:
-            - location_id
+        properties:
+          item_id: false
+          item_unit_id: *mediaID
+          location_id: false
       - required:
         - location_id
-        not:
-          anyOf:
-          - required:
-            - item_id
-          - required:
-            - item_unit_id
+        properties:
+          item_id: false
+          item_unit_id: false
+          location_id: *mediaID
     MediaDeleteResult:
       type: object
       additionalProperties: false
       properties:
-        id: *id018
+        id: *mediaID
         deleted:
           const: true
       required:
       - id
       - deleted
+      description: Frozen acknowledgement for the original Media identity after its metadata, actual links and projections commit. It does not claim that asynchronous private-file cleanup has already completed.
     SyncEmbedding:
       type: object
       additionalProperties: false
@@ -16176,6 +16347,7 @@ components:
           format: binary
       required:
       - file
+      description: Exactly one multipart image file, with no caller-owned storage path, digest, dimensions or owner. The server validates actual bytes, declared MIME, size, pixel count and privacy before creating or deduplicating Media; a later separately reviewed command attaches it.
     StockReceiveInput:
       type: object
       additionalProperties: false
@@ -16952,7 +17124,7 @@ components:
             const: no-store
           description: Protected API data is never cached by the service worker.
     Error409:
-      description: Revision, idempotency, or business conflict. BARCODE_CONFLICT means the same owner already has the product value under the same symbology; ALIAS_CONFLICT means the same owner already has the exact alias. These static codes never echo submitted values or private diagnostics.
+      description: Revision, idempotency, or business conflict. BARCODE_CONFLICT means the same owner already has the product value under the same symbology; ALIAS_CONFLICT means the same owner already has the exact alias. MEDIA_COVER_CONFLICT means a different current link already claims the selected owner's cover. These static codes never echo submitted values or private diagnostics.
       content:
         application/json:
           schema:

@@ -366,10 +366,10 @@ class OpenAPIContractTests(unittest.TestCase):
                       {"revision": 0.5}, {"revision": 9007199254740992}]:
             with self.subTest(patch=patch), self.assertRaises(ValidationError):
                 validator("Item").validate({**value, **patch})
-        # Unit now has its own refined boundary; unrelated generic aliases must
-        # remain untouched rather than inheriting catalog/holdings constraints.
-        self.assertEqual({"type": "string"}, SCHEMAS["MediaLink"]["properties"]["id"])
-        self.assertEqual({"type": "integer"}, SCHEMAS["MediaLink"]["properties"]["revision"])
+        # Media now has its own refined boundary too; unrelated generic aliases
+        # must remain untouched rather than inheriting catalog/holdings constraints.
+        self.assertEqual({"type": "string"}, SCHEMAS["AIJob"]["properties"]["id"])
+        self.assertEqual({"type": "integer"}, SCHEMAS["AIJob"]["properties"]["revision"])
 
     def test_item_response_nullable_presence_and_offline_shape(self):
         payload = {"id": "item", "name": "Item", "tracking_mode": "individual", "unit_code": "pcs",
@@ -467,8 +467,10 @@ class OpenAPIContractTests(unittest.TestCase):
                     check.validate(value)
 
     def test_media_owner_xor_is_machine_validated(self):
-        validator("MediaLinkCreate").validate({"item_id": "item-1"})
-        for payload in [{"is_cover": True}, {"item_id": "item-1", "location_id": "location-1"}, {}]:
+        validator("MediaLinkCreate").validate({"item_id": "item-1", "owner_revision": 7})
+        for payload in [{"is_cover": True, "owner_revision": 7},
+                        {"item_id": "item-1", "location_id": "location-1", "owner_revision": 7},
+                        {"item_id": "item-1"}, {}]:
             with self.subTest(payload=payload), self.assertRaises(ValidationError):
                 validator("MediaLinkCreate").validate(payload)
 
