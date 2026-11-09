@@ -69,6 +69,61 @@ func TestDomainReadsAndOriginalReplaysRequireOneRealSessionActivityWrite(t *test
 	}
 }
 
+func TestDomainReadsAndOriginalReplaysRejectAuthorizationChangedDuringActivity(t *testing.T) {
+	for _, failure := range []struct {
+		name, statement string
+		want            error
+	}{
+		{"revoked", "UPDATE sessions SET revoked_at='2000-01-01T00:00:00Z' WHERE id=NEW.id", ErrAuthentication},
+		{"epoch", "UPDATE sync_state SET dataset_epoch='changed-during-activity' WHERE singleton=1", ErrAuthentication},
+		{"mandatory password change", "UPDATE admin_accounts SET must_change_password=1", ErrPasswordChangeRequired},
+		{"expiry", "", ErrAuthentication},
+	} {
+		t.Run(failure.name, func(t *testing.T) {
+			s, locations, auth, token := locationFixture(t)
+			input := LocationCreate{Code: "BOX", Name: "Original"}
+			original, err := locations.Create(t.Context(), token, "activity-revalidation-original", 0, input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			base := auth.now()
+			if failure.statement != "" {
+				execSQL(t, s.db, "CREATE TRIGGER revoke_during_activity AFTER UPDATE OF last_seen_at ON sessions BEGIN "+failure.statement+"; END")
+			}
+			before := domainState(t, s)
+			for _, read := range []bool{true, false} {
+				if failure.name == "expiry" {
+					calls := 0
+					auth.now = func() time.Time {
+						calls++
+						if calls > 2 {
+							return base.Add(31 * 24 * time.Hour)
+						}
+						return base
+					}
+				}
+				var value Location
+				if read {
+					value, err = locations.Get(t.Context(), token, original.ID)
+				} else {
+					value, err = locations.Create(t.Context(), token, "activity-revalidation-original", 0, input)
+				}
+				if !errors.Is(err, failure.want) || value != (Location{}) {
+					t.Fatal("activity-time authorization change exposed a read or frozen reply", read, err)
+				}
+				requireDomainState(t, s, before)
+			}
+			if failure.statement != "" {
+				execSQL(t, s.db, "DROP TRIGGER revoke_during_activity")
+			}
+			auth.now = func() time.Time { return base }
+			if value, err := locations.Create(t.Context(), token, "activity-revalidation-original", 0, input); err != nil || value != original {
+				t.Fatal("rolled-back activity change prevented explicit original-key reconciliation", err)
+			}
+		})
+	}
+}
+
 type domainCountResult struct {
 	rows int64
 	err  error

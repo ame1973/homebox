@@ -28,12 +28,14 @@ func TestUnitEveryStatementAndOwnedCascadeFailureRollsBackSourceSearchHistoryAnd
 			execSQL(t, fixture.store.db, "INSERT INTO unit_search_documents(unit_id,title,revision,updated_at) VALUES(?,'OriginalCache',55,'2026')", fixture.unit.ID)
 			if failure.table == "media_links" {
 				execSQL(t, fixture.store.db, "INSERT INTO media(id,storage_key,sha256,mime_type,width,height,bytes,created_at) VALUES('photo','private',?,'image/png',1,1,1,'2026')", strings.Repeat("a", 64))
+				seedMediaProjection(t, fixture.store, "photo")
 				execSQL(t, fixture.store.db, "INSERT INTO media_links(id,media_id,item_unit_id) VALUES('unit-link','photo',?)", fixture.unit.ID)
+				seedMediaLinkProjection(t, fixture.store, "unit-link")
 			}
 			before := domainState(t, fixture.store)
 			execSQL(t, fixture.store.db, "CREATE TRIGGER fail_real_unit BEFORE "+failure.event+" ON "+failure.table+" BEGIN SELECT RAISE(ABORT,'Unit transaction failure'); END")
-			if value, err := callUnitTest(t.Context(), inventory, fixture.token, "failed-unit-original-key", command); err == nil || !reflect.ValueOf(value).IsZero() {
-				t.Fatal("failed Unit statement released a partial result", err)
+			if value, err := callUnitTest(t.Context(), inventory, fixture.token, "failed-unit-original-key", command); err == nil || !reflect.ValueOf(value).IsZero() || !strings.Contains(err.Error(), "Unit transaction failure") {
+				t.Fatal("targeted Unit statement failure released a partial result or was not reached", err)
 			}
 			requireDomainState(t, fixture.store, before)
 			if scalar[int](t, fixture.store.db, "SELECT COUNT(*) FROM unit_search_fts WHERE unit_search_fts MATCH 'OriginalCache'") != 1 {
@@ -98,8 +100,10 @@ func TestUnitCountersSequencesAndFreshIdentityCollisionsNeverReseedOrPartiallyCo
 			case "media link":
 				command.kind = "delete"
 				execSQL(t, fixture.store.db, "INSERT INTO media(id,storage_key,sha256,mime_type,width,height,bytes,created_at) VALUES('photo','private',?,'image/png',1,1,1,'2026')", strings.Repeat("a", 64))
+				seedMediaProjection(t, fixture.store, "photo")
 				execSQL(t, fixture.store.db, "INSERT INTO media_links(id,media_id,item_unit_id) VALUES('unit-link','photo',?)", fixture.unit.ID)
-				execSQL(t, fixture.store.db, "INSERT INTO projection_revisions VALUES('media_link','unit-link',?)", maxSafeInteger)
+				seedMediaLinkProjection(t, fixture.store, "unit-link")
+				setCatalogProjectionRevision(t, fixture.store, "media_link", "unit-link", maxSafeInteger)
 			case "catalog":
 				execSQL(t, fixture.store.db, "UPDATE data_revision SET revision=? WHERE scope='catalog'", maxSafeInteger)
 			case "sequence":

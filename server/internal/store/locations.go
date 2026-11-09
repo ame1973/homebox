@@ -294,17 +294,8 @@ func (l *Locations) Delete(ctx context.Context, token, key, id string, revision 
 		if references {
 			return ActionAck{}, ErrLocationInUse
 		}
-		links, err := queryIDs(ctx, m.tx, "SELECT id FROM media_links WHERE location_id=? ORDER BY id", id)
-		if err != nil {
+		if err = m.removeOwnerMediaLinks("location", id); err != nil {
 			return ActionAck{}, err
-		}
-		if _, err = m.tx.ExecContext(ctx, "DELETE FROM media_links WHERE location_id=?", id); err != nil {
-			return ActionAck{}, err
-		}
-		for _, linkID := range links {
-			if _, err = m.touch("media_link", linkID, true); err != nil {
-				return ActionAck{}, err
-			}
 		}
 		if _, err = m.tx.ExecContext(ctx, "UPDATE locations SET deleted_at=?,updated_at=? WHERE id=?", stamp(m.now), stamp(m.now), id); err != nil {
 			return ActionAck{}, err

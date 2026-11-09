@@ -72,10 +72,10 @@ func fixtureSchemaSnapshot(t *testing.T) string {
 	return storeFixtureSchema.snapshot
 }
 
-func openTestStore(t *testing.T) *Store {
+func cloneFixtureSnapshot(t *testing.T, snapshot string) string {
 	t.Helper()
 	path := filepath.Join(privateTempDir(t), "homebox.sqlite")
-	source, err := os.Open(fixtureSchemaSnapshot(t))
+	source, err := os.Open(snapshot)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,6 +88,12 @@ func openTestStore(t *testing.T) *Store {
 	if err = errors.Join(copyErr, file.Sync(), file.Close(), source.Close()); err != nil {
 		t.Fatal(err)
 	}
+	return path
+}
+
+func openTestStore(t *testing.T) *Store {
+	t.Helper()
+	path := cloneFixtureSnapshot(t, fixtureSchemaSnapshot(t))
 	s, err := Open(t.Context(), Config{Path: path, Migrate: true})
 	if err != nil {
 		t.Fatal(err)

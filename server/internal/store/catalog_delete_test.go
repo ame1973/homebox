@@ -43,6 +43,7 @@ func catalogWithOwnedRows(t *testing.T) ownedCatalogFixture {
 	item := createCatalogItem(t, catalog, token, ItemCreate{Name: "DeleteCatalogTitle", CategoryID: &category.ID})
 	other := createCatalogItem(t, catalog, token, ItemCreate{Name: "RetainedCatalogTitle", CategoryID: &category.ID})
 	execSQL(t, s.db, "INSERT INTO media(id,storage_key,sha256,mime_type,width,height,bytes,created_at) VALUES('image','private-image',?,'image/png',1,1,1,'2026')", strings.Repeat("a", 64))
+	seedMediaProjection(t, s, "image")
 	for _, owner := range []struct{ prefix, id string }{{"owned", item.ID}, {"other", other.ID}} {
 		execSQL(t, s.db, "INSERT INTO item_barcodes VALUES(?,?,'CODE_128','001234','001234','2026')", owner.prefix+"-barcode", owner.id)
 		execSQL(t, s.db, "INSERT INTO item_aliases VALUES(?,?,'AliasTerm','2026')", owner.prefix+"-alias", owner.id)
@@ -112,7 +113,9 @@ func TestCatalogDeleteRetainsHistoryIdentitiesAndOnlyItsIndependentOwnedTombston
 			t.Fatal("owned deletion omitted an independent null-payload tombstone", key)
 		}
 	}
-	if !ack.OK || ack.Revision != item.Revision+1 || ack.OperationID == "" || len(changed) != 10 ||
+	if !ack.OK || ack.Revision != item.Revision+1 || ack.OperationID == "" || len(changed) != 11 ||
+		!changed[projectionKey{"media", "image"}] || scalar[int64](t, s.db, "SELECT revision FROM projection_revisions WHERE entity_type='media' AND entity_id='image'") != 2 ||
+		scalar[string](t, s.db, "SELECT operation FROM sync_changes WHERE entity_type='media' AND entity_id='image' ORDER BY seq DESC LIMIT 1") != "upsert" ||
 		scalar[int64](t, s.db, "SELECT revision FROM projection_revisions WHERE entity_type='item' AND entity_id=?", item.ID) != ack.Revision ||
 		scalar[int64](t, s.db, "SELECT revision FROM projection_revisions WHERE entity_type='category' AND entity_id=?", fixture.category.ID) != fixture.category.Revision+1 ||
 		scalar[int64](t, s.db, "SELECT revision FROM projection_revisions WHERE entity_type='tag' AND entity_id=?", fixture.tag.ID) != fixture.tag.Revision+1 {

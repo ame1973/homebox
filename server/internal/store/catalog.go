@@ -238,9 +238,12 @@ func (catalog *Catalog) Delete(ctx context.Context, token, key, id string, revis
 				return ActionAck{}, err
 			}
 		}
+		if err = m.removeOwnerMediaLinks("item", id); err != nil {
+			return ActionAck{}, err
+		}
 		for _, owned := range []struct{ kind, table string }{
 			{"barcode", "item_barcodes"}, {"alias", "item_aliases"}, {"attribute", "item_attributes"},
-			{"media_link", "media_links"}, {"ai_review", "ai_review_entries"},
+			{"ai_review", "ai_review_entries"},
 		} {
 			ids, err := queryIDs(ctx, m.tx, "SELECT id FROM "+owned.table+" WHERE item_id=? ORDER BY id", id)
 			if err != nil {

@@ -321,9 +321,12 @@ func TestLocationDeleteEmitsIndependentLinkTombstonesAndRetainsSharedMedia(t *te
 	if _, err := locations.Delete(t.Context(), token, "delete-parent-key", parent.ID, parent.Revision); !errors.Is(err, ErrLocationChildren) {
 		t.Fatal("deleted a parent with a live child", err)
 	}
-	execSQL(t, s.db, "INSERT INTO media(id,storage_key,sha256,mime_type,width,height,bytes,created_at) VALUES('photo','private-photo','digest','image/jpeg',1,1,10,'2026')")
+	execSQL(t, s.db, "INSERT INTO media(id,storage_key,sha256,mime_type,width,height,bytes,created_at) VALUES('photo','private-photo',?,'image/jpeg',1,1,10,'2026')", strings.Repeat("a", 64))
+	seedMediaProjection(t, s, "photo")
 	execSQL(t, s.db, "INSERT INTO media_links(id,media_id,location_id) VALUES('child-photo','photo',?),('other-photo','photo',?)", child.ID, other.ID)
-	execSQL(t, s.db, "INSERT INTO projection_revisions VALUES('media_link','child-photo',4)")
+	seedMediaLinkProjection(t, s, "child-photo")
+	seedMediaLinkProjection(t, s, "other-photo")
+	setCatalogProjectionRevision(t, s, "media_link", "child-photo", 4)
 	ack, err := locations.Delete(t.Context(), token, "delete-child-key", child.ID, child.Revision)
 	if err != nil || !ack.OK || ack.OperationID == "" || ack.Revision != child.Revision+1 {
 		t.Fatal("leaf deletion failed", err)
@@ -342,6 +345,9 @@ func TestLocationDeleteEmitsIndependentLinkTombstonesAndRetainsSharedMedia(t *te
 	}
 	if scalar[int](t, s.db, "SELECT COUNT(*) FROM sync_changes WHERE operation='delete' AND projection_json IS NULL") != 2 ||
 		scalar[int](t, s.db, "SELECT entity_revision FROM sync_changes WHERE entity_type='media_link'") != 5 ||
+		scalar[int](t, s.db, "SELECT revision FROM projection_revisions WHERE entity_type='media' AND entity_id='photo'") != 2 ||
+		scalar[int](t, s.db, "SELECT COUNT(*) FROM sync_changes WHERE entity_type='media' AND entity_id='photo' AND operation='upsert' AND entity_revision=2") != 1 ||
+		scalar[int](t, s.db, "SELECT revision FROM projection_revisions WHERE entity_type='media_link' AND entity_id='other-photo'") != 1 ||
 		getLocation(t, locations, token, parent.ID).Revision != parent.Revision+1 {
 		t.Fatal("owner/link tombstones or aggregate revisions were incomplete")
 	}

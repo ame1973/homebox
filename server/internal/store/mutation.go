@@ -37,13 +37,14 @@ type pendingProjection struct {
 // one revision/change per transaction; payloads are built from the final SQL state.
 // Authentication must use its independently keyed credential fingerprint instead.
 type mutationTx struct {
-	ctx     context.Context
-	tx      *sql.Tx
-	now     time.Time
-	eventID string
-	reason  string
-	note    string
-	pending map[projectionKey]pendingProjection
+	ctx         context.Context
+	tx          *sql.Tx
+	now         time.Time
+	eventID     string
+	reason      string
+	note        string
+	pending     map[projectionKey]pendingProjection
+	finalChecks []func() error
 }
 
 type domainResult interface{ validateDomainResult() error }
@@ -84,6 +85,7 @@ func runDomainMutation[T domainResult](ctx context.Context, a *Auth, token, key,
 		return zero, err
 	}
 	var result T
+	var finalChecks []func() error
 	if body != "" {
 		decoder := json.NewDecoder(strings.NewReader(body))
 		decoder.DisallowUnknownFields()
@@ -123,9 +125,22 @@ func runDomainMutation[T domainResult](ctx context.Context, a *Auth, token, key,
 		if err != nil {
 			return zero, err
 		}
+		finalChecks = m.finalChecks
 	}
 	if err = finishDomainSession(ctx, a, tx, token, session); err != nil {
 		return zero, err
+	}
+	// Cross-resource checks run after the last mandatory SQL write, so a late
+	// trigger cannot publish a stale current/frozen result as a successful reply.
+	for _, check := range finalChecks {
+		if err = check(); err != nil {
+			return zero, err
+		}
+	}
+	if len(finalChecks) > 0 {
+		if _, err = checkDomainSession(ctx, a, tx, token, session, a.now().UTC()); err != nil {
+			return zero, err
+		}
 	}
 	if err = tx.Commit(); err != nil {
 		return zero, err
@@ -171,19 +186,33 @@ func readDomainReply(ctx context.Context, tx *sql.Tx, key, operation, fingerprin
 	return body.String, nil
 }
 
+func checkDomainSession(ctx context.Context, a *Auth, tx *sql.Tx, token string, initial AuthSession, now time.Time) (AuthSession, error) {
+	current, err := a.loadSession(ctx, tx, token, now)
+	if err != nil {
+		return AuthSession{}, err
+	}
+	if err = requireCompleteSession(current); err != nil {
+		return AuthSession{}, err
+	}
+	if current.ID != initial.ID || current.Admin != initial.Admin {
+		return AuthSession{}, ErrAuthentication
+	}
+	return current, nil
+}
+
 func finishDomainSession(ctx context.Context, a *Auth, tx *sql.Tx, token string, initial AuthSession) error {
 	now := a.now().UTC()
-	current, err := a.loadSession(ctx, tx, token, now)
+	current, err := checkDomainSession(ctx, a, tx, token, initial, now)
 	if err != nil {
 		return err
 	}
-	if err = requireCompleteSession(current); err != nil {
+	if err = requireDomainRow(tx.ExecContext(ctx, "UPDATE sessions SET last_seen_at=? WHERE id=?", stamp(now), current.ID)); err != nil {
 		return err
 	}
-	if current.ID != initial.ID || current.Admin != initial.Admin {
-		return ErrAuthentication
-	}
-	return requireDomainRow(tx.ExecContext(ctx, "UPDATE sessions SET last_seen_at=? WHERE id=?", stamp(now), current.ID))
+	// Session-activity triggers or expiry during the write cannot authorize a
+	// result using the preceding snapshot. This final read performs no writes.
+	_, err = checkDomainSession(ctx, a, tx, token, initial, a.now().UTC())
+	return err
 }
 
 // Mandatory single-row writes must not silently succeed after RAISE(IGNORE).

@@ -265,6 +265,7 @@ func TestUnitDeletionPreservesOwnImmutableHistorySharedMediaAndOtherOwnerLinks(t
 	fixture, inventory := inventoryFixture(t)
 	unit := createUnitTest(t, fixture, inventory, "created-deletable-unit", testPointer("source"))
 	execSQL(t, fixture.store.db, "INSERT INTO media(id,storage_key,sha256,mime_type,width,height,bytes,created_at) VALUES('shared-image','private-key',?,'image/png',1,1,1,'2026')", strings.Repeat("a", 64))
+	seedMediaProjection(t, fixture.store, "shared-image")
 	execSQL(t, fixture.store.db, "INSERT INTO media_links(id,media_id,item_unit_id) VALUES('unit-photo','shared-image',?)", unit.ID)
 	execSQL(t, fixture.store.db, "INSERT INTO media_links(id,media_id,item_id) VALUES('other-photo','shared-image',?)", fixture.quantity.ID)
 	for _, id := range []string{"unit-photo", "other-photo"} {
@@ -282,7 +283,10 @@ func TestUnitDeletionPreservesOwnImmutableHistorySharedMediaAndOtherOwnerLinks(t
 	if scalar[int](t, fixture.store.db, "SELECT COUNT(*) FROM inventory_events WHERE item_unit_id=?", unit.ID) != 2 || scalar[int](t, fixture.store.db, "SELECT COUNT(*) FROM media") != 1 || scalar[int](t, fixture.store.db, "SELECT COUNT(*) FROM media_links WHERE id='other-photo'") != 1 || scalar[int](t, fixture.store.db, "SELECT COUNT(*) FROM media_links WHERE id='unit-photo'") != 0 {
 		t.Fatal("Unit deletion erased history/shared media or retained an owned source link")
 	}
-	if scalar[string](t, fixture.store.db, "SELECT payload_json FROM current_projections WHERE entity_type='media_link' AND entity_id='other-photo'") != beforeOther || scalar[int](t, fixture.store.db, "SELECT projection_json IS NULL FROM sync_changes WHERE entity_type='media_link' AND entity_id='unit-photo' ORDER BY seq DESC LIMIT 1") != 1 {
+	if scalar[string](t, fixture.store.db, "SELECT payload_json FROM current_projections WHERE entity_type='media_link' AND entity_id='other-photo'") != beforeOther ||
+		scalar[int](t, fixture.store.db, "SELECT projection_json IS NULL FROM sync_changes WHERE entity_type='media_link' AND entity_id='unit-photo' ORDER BY seq DESC LIMIT 1") != 1 ||
+		scalar[int](t, fixture.store.db, "SELECT revision FROM projection_revisions WHERE entity_type='media' AND entity_id='shared-image'") != 2 ||
+		scalar[int](t, fixture.store.db, "SELECT COUNT(*) FROM sync_changes WHERE entity_type='media' AND entity_id='shared-image' AND operation='upsert' AND entity_revision=2") != 1 {
 		t.Fatal("Unit deletion omitted its stable link tombstone or changed another owner")
 	}
 	requireUnitEventTest(t, fixture, "delete-created-unit-with-photo", unit.ID, "unit_delete", -1, testPointer("source"), nil)

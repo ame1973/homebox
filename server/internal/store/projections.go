@@ -113,6 +113,18 @@ func (m *mutationTx) projectionPayload(key projectionKey) ([]byte, error) {
 			return nil, err
 		}
 		return json.Marshal(value.DisposalData)
+	case "media":
+		value, err := loadMedia(m.ctx, m.tx, key.id)
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(value.mediaData)
+	case "media_link":
+		value, err := loadMediaLink(m.ctx, m.tx, key.id)
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(value.mediaLinkData)
 	case "barcode":
 		value, err := loadBarcode(m.ctx, m.tx, key.id)
 		if err != nil {

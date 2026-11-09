@@ -273,17 +273,8 @@ func (inventory *Inventory) DeleteUnit(ctx context.Context, token, key, id strin
 		if err != nil {
 			return ActionAck{}, err
 		}
-		links, err := queryIDs(ctx, m.tx, "SELECT id FROM media_links WHERE item_unit_id=? ORDER BY id", id)
-		if err != nil {
+		if err = m.removeOwnerMediaLinks("unit", id); err != nil {
 			return ActionAck{}, err
-		}
-		for _, link := range links {
-			if !validDomainID(link) {
-				return ActionAck{}, ErrDomainState
-			}
-			if _, err = m.touch("media_link", link, true); err != nil {
-				return ActionAck{}, err
-			}
 		}
 		// Only owned source/derived FTS/link rows cascade; shared media, purchase,
 		// asset and immutable movement history must never be erased here.

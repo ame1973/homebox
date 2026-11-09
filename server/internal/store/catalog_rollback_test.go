@@ -81,8 +81,8 @@ func TestCatalogDeleteRollsBackEveryOwnedCascadeCounterTombstoneAndReply(t *test
 			s, catalog, item := fixture.store, fixture.catalog, fixture.item
 			before := domainState(t, s)
 			execSQL(t, s.db, "CREATE TRIGGER fail_catalog_delete BEFORE "+failure.event+" ON "+failure.table+" BEGIN SELECT RAISE(ABORT,'delete failure'); END")
-			if ack, err := catalog.Delete(t.Context(), fixture.token, "rollback-delete-item", item.ID, item.Revision); err == nil || ack.OK {
-				t.Fatal("a failed owned cascade/deletion exposed an acknowledgement", err)
+			if ack, err := catalog.Delete(t.Context(), fixture.token, "rollback-delete-item", item.ID, item.Revision); err == nil || ack.OK || !strings.Contains(err.Error(), "delete failure") {
+				t.Fatal("targeted owned cascade failure exposed an acknowledgement or was not reached", err)
 			}
 			requireDomainState(t, s, before)
 			if scalar[int](t, s.db, "SELECT COUNT(*) FROM search_fts WHERE search_fts MATCH 'DeleteCatalogTitle'") != 1 {

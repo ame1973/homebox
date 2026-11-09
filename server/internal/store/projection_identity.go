@@ -63,7 +63,7 @@ func projectionPairParts(identity string) ([]string, bool) {
 
 func validProjectionIdentity(kind, identity string) bool {
 	switch kind {
-	case "location", "location_event", "inventory_event", "media_link", "category", "tag", "item", "unit", "barcode", "alias", "attribute", "ai_review", "purchase", "purchase_line", "asset", "usage", "cost", "disposal":
+	case "location", "location_event", "inventory_event", "media", "media_link", "category", "tag", "item", "unit", "barcode", "alias", "attribute", "ai_review", "purchase", "purchase_line", "asset", "usage", "cost", "disposal":
 		return validDomainID(identity)
 	case "stock", "item_tag", "search_doc":
 		parts, valid := projectionPairParts(identity)

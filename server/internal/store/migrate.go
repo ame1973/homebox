@@ -97,7 +97,7 @@ func (s *Store) migrate(ctx context.Context, cfg Config, all []migrations.Migrat
 	for _, migration := range all {
 		if migration.Version <= version {
 			if legacy {
-				if _, err = tx.ExecContext(ctx, "INSERT INTO schema_migration_checksums VALUES(?,?,?)", migration.Version, migration.Filename, migration.Checksum); err != nil {
+				if err = requireDomainRow(tx.ExecContext(ctx, "INSERT INTO schema_migration_checksums VALUES(?,?,?)", migration.Version, migration.Filename, migration.Checksum)); err != nil {
 					return report, err
 				}
 			}
@@ -126,6 +126,11 @@ func (s *Store) migrate(ctx context.Context, cfg Config, all []migrations.Migrat
 				return report, fmt.Errorf("validate asset financial backfill: %w", err)
 			}
 		}
+		if migration.Version == 19 {
+			if err = validateMediaBackfill(ctx, tx); err != nil {
+				return report, fmt.Errorf("validate retained media backfill: %w", err)
+			}
+		}
 		// Reference migrations insert their own version row. New migrations can
 		// leave metadata to the runner, which always owns checksum publication.
 		if _, err = tx.ExecContext(ctx, `INSERT INTO schema_migrations(version,name,applied_at)
@@ -133,7 +138,7 @@ func (s *Store) migrate(ctx context.Context, cfg Config, all []migrations.Migrat
 			migration.Version, migration.Filename, time.Now().UTC().Format(time.RFC3339Nano), migration.Version); err != nil {
 			return report, err
 		}
-		if _, err = tx.ExecContext(ctx, "INSERT INTO schema_migration_checksums VALUES(?,?,?)", migration.Version, migration.Filename, migration.Checksum); err != nil {
+		if err = requireDomainRow(tx.ExecContext(ctx, "INSERT INTO schema_migration_checksums VALUES(?,?,?)", migration.Version, migration.Filename, migration.Checksum)); err != nil {
 			return report, err
 		}
 	}
@@ -148,6 +153,20 @@ func (s *Store) migrate(ctx context.Context, cfg Config, all []migrations.Migrat
 				return report, err
 			}
 		}
+	}
+	// Recheck required media materialization after every migration-ledger and
+	// legacy-mapping write, not only immediately after its SQL backfill.
+	if version < 19 && len(all) >= 19 {
+		if err = validateMediaBackfill(ctx, tx); err != nil {
+			return report, fmt.Errorf("revalidate retained media backfill: %w", err)
+		}
+	}
+	finalVersion, finalLedger, err := history(ctx, tx, all)
+	if err != nil {
+		return report, err
+	}
+	if !finalLedger || finalVersion != len(all) {
+		return report, fmt.Errorf("%w: migration history did not fully persist", ErrSchemaChanged)
 	}
 	if err = integrity(ctx, tx); err != nil {
 		return report, err

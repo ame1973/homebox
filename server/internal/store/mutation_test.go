@@ -230,12 +230,14 @@ func TestDomainMutationDeleteFailureRestoresOwnerLinksAndCurrentProjection(t *te
 		t.Run(failure.table, func(t *testing.T) {
 			s, locations, _, token := locationFixture(t)
 			location := createLocation(t, locations, token, "BOX", nil)
-			execSQL(t, s.db, "INSERT INTO media(id,storage_key,sha256,mime_type,width,height,bytes,created_at) VALUES('photo','private-photo','digest','image/jpeg',1,1,10,'2026')")
+			execSQL(t, s.db, "INSERT INTO media(id,storage_key,sha256,mime_type,width,height,bytes,created_at) VALUES('photo','private-photo',?,'image/jpeg',1,1,10,'2026')", strings.Repeat("a", 64))
+			seedMediaProjection(t, s, "photo")
 			execSQL(t, s.db, "INSERT INTO media_links(id,media_id,location_id) VALUES('link','photo',?)", location.ID)
+			seedMediaLinkProjection(t, s, "link")
 			before := domainState(t, s)
 			execSQL(t, s.db, "CREATE TRIGGER fail_domain_delete BEFORE "+failure.event+" ON "+failure.table+" BEGIN SELECT RAISE(ABORT,'write failure'); END")
-			if ack, err := locations.Delete(t.Context(), token, "failed-delete-key", location.ID, location.Revision); err == nil || ack.OK {
-				t.Fatal("failed deletion returned an acknowledgement")
+			if ack, err := locations.Delete(t.Context(), token, "failed-delete-key", location.ID, location.Revision); err == nil || ack.OK || !strings.Contains(err.Error(), "write failure") {
+				t.Fatal("targeted failed deletion returned an acknowledgement or missed its injected statement", err)
 			}
 			requireDomainState(t, s, before)
 		})
