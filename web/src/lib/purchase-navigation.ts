@@ -1,6 +1,6 @@
 import { itemPageQuerySchema, type ItemPageQuery } from './api/catalog'
 import { ApiError, validText } from './api/client'
-import { input, pathIDSchema, validCursor } from './api/domain'
+import { idSchema, input, pathIDSchema, validCursor } from './api/domain'
 import { purchasePageQuerySchema, type PurchasePageQuery } from './api/purchases'
 import { catalogQuery } from './catalog-navigation'
 
@@ -12,6 +12,20 @@ export function purchaseRoute(id: string, mode: 'detail' | 'edit' = 'detail') {
 }
 export const purchaseAllocationRoute = (id: string, itemID: string) => `/purchases/${encodeURIComponent(input(pathIDSchema, id))}/allocate/${encodeURIComponent(input(pathIDSchema, itemID))}`
 export const purchaseCorrectionHistoryRoute = (id: string) => `/purchases/${encodeURIComponent(input(pathIDSchema, id))}/line-corrections`
+export function purchaseCorrectionRoute(id: string, lineID: string) {
+  const query = new URLSearchParams({ line: input(idSchema, lineID) })
+  return `${purchaseCorrectionHistoryRoute(id)}/edit?${query}`
+}
+export function purchaseCorrectionLine(search: string): string | undefined {
+  if (!validText(search, 1, 18000)) return undefined
+  try {
+    decodeURIComponent(search.replace(/\+/g, ' '))
+    const entries = [...new URLSearchParams(search)]
+    if (entries.length !== 1 || entries[0]?.[0] !== 'line') return undefined
+    const parsed = idSchema.safeParse(entries[0][1])
+    return parsed.success ? parsed.data : undefined
+  } catch { return undefined }
+}
 export function purchaseSelectionRoute(id: string, query: ItemPageQuery = {}) {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(input(itemPageQuerySchema, query))) if (value !== undefined) params.set(key, String(value))
@@ -40,6 +54,8 @@ export function purchaseReturnPath(value: unknown): string | undefined {
     const url = new URL(value, 'https://homebox.invalid')
     if (url.origin !== 'https://homebox.invalid' || url.pathname + url.search !== value) return undefined
     if (url.pathname === '/purchases') return purchaseQuery(url.search) === undefined ? undefined : value
+    const correction = /^\/purchases\/([^/]+)\/line-corrections\/edit$/.exec(url.pathname)
+    if (correction) return pathIDSchema.safeParse(decodeURIComponent(correction[1]!)).success && purchaseCorrectionLine(url.search) !== undefined ? value : undefined
     const match = /^\/purchases\/([^/]+)(?:\/(edit|view|allocate|line-corrections)(?:\/([^/]+))?)?$/.exec(url.pathname)
     const item = /^\/items\/([^/]+)\/purchases$/.exec(url.pathname)
     if (item) return !url.search && pathIDSchema.safeParse(decodeURIComponent(item[1]!)).success ? value : undefined

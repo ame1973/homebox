@@ -16,6 +16,7 @@ const PurchasePage = lazy(() => import('@/features/purchases/purchase-page'))
 const AssetPage = lazy(() => import('@/features/assets/asset-page'))
 const DisposalCorrectionPage = lazy(() => import('@/features/financial-corrections/disposal-page'))
 const PurchaseCorrectionHistoryPage = lazy(() => import('@/features/financial-corrections/purchase-history-page'))
+const PurchaseCorrectionPage = lazy(() => import('@/features/financial-corrections/purchase-page'))
 const UnitAlias = lazy(() => import('@/features/holdings/holding-page').then((module) => ({ default: module.UnitAlias })))
 const LocationsPage = lazy(() => import('@/features/locations/locations-page'))
 const LocationAlias = lazy(() => import('@/features/locations/locations-page').then((module) => ({ default: module.LocationAlias })))
@@ -90,6 +91,7 @@ export default function App() {
               <Route path="/purchases/:id/allocate" element={<PurchasePage key={location.key} mode="select-item" />} />
               <Route path="/purchases/:id/allocate/:itemID" element={<PurchasePage key={location.key} mode="allocate" />} />
               <Route path="/purchases/:id/line-corrections" element={<PurchaseCorrectionHistoryPage key={location.key} />} />
+              <Route path="/purchases/:id/line-corrections/edit" element={<PurchaseCorrectionPage key={location.key} />} />
               <Route path="/purchases/:id" element={<PurchasePage key={location.key} mode="detail" />} />
               <Route path="/items/:id/purchases" element={<PurchasePage key={location.key} mode="item" />} />
               <Route path="/assets" element={<AssetPage key={location.key} mode="list" />} />

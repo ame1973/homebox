@@ -47,6 +47,7 @@ it('shows actual current Lines and retained before/after decisions without fabri
   expect(await screen.findByText(`${text.historyCount}1`)).toBeVisible(); expect(screen.getByText(`${purchaseText.lineCount}1`)).toBeVisible()
   expect(screen.getByRole('link', { name: purchaseText.back })).toHaveAttribute('href', '/purchases?currency=JPY')
   expect(screen.getByRole('link', { name: purchaseText.backDetail })).toHaveAttribute('href', '/purchases/purchase')
+  expect(screen.getByRole('link', { name: `${text.start}：${JSON.stringify(replacement.id)}` })).toHaveAttribute('href', '/purchases/purchase/line-corrections/edit?line=replacement')
   expect(screen.getByText(text.order)).toBeVisible(); expect(screen.getByText(text.readOnly)).toBeVisible()
   const history = screen.getByRole('heading', { name: text.history }).closest('section')!
   await userEvent.setup().click(within(history).getByText(new RegExp(text.replace)))
@@ -55,6 +56,11 @@ it('shows actual current Lines and retained before/after decisions without fabri
   expect(within(history).getByText('0 JPY')).toBeVisible(); expect(within(history).getByText('250 JPY')).toBeVisible()
   expect(within(history).getByText(/Exact reason/)).toBeVisible(); expect(within(history).getByText(/123456789Z/)).toBeVisible()
   expect(auth.fetchCSRF).not.toHaveBeenCalled(); expect(finance.correctPurchaseLine).not.toHaveBeenCalled()
+})
+it('encodes a path-unaddressable active Line as an exact query identity', async () => {
+  source = { ...source, lines: [old], corrections: [] }; mount()
+  const link = await screen.findByRole('link', { name: `${text.start}：${JSON.stringify(old.id)}` })
+  expect(link).toHaveAttribute('href', '/purchases/purchase/line-corrections/edit?line=line%2Flegacy')
 })
 it('distinguishes no current Lines after a void from no retained financial history', async () => {
   source = { ...source, lines: [], corrections: [{ id: 'entry', revision: 1, purchase_id: 'purchase', action: 'void', reason: 'Explicit void', created_at: '2026-11-07T02:00:00Z', before: old, after: null }] }

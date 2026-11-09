@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest'
 import { applicationReturnPath } from './settings-navigation'
-import { itemPurchasesRoute, purchaseAllocationRoute, purchaseCorrectionHistoryRoute, purchaseCursorTrail, purchaseListRoute, purchaseNavigationState, purchaseQuery, purchaseReturnPath, purchaseRoute, purchaseSelectionRoute } from './purchase-navigation'
+import { itemPurchasesRoute, purchaseAllocationRoute, purchaseCorrectionHistoryRoute, purchaseCorrectionLine, purchaseCorrectionRoute, purchaseCursorTrail, purchaseListRoute, purchaseNavigationState, purchaseQuery, purchaseReturnPath, purchaseRoute, purchaseSelectionRoute } from './purchase-navigation'
 
 it('escapes imported new identities without rewriting them and builds the actual operating routes', () => {
   for (const id of ['new', 'NEW', 'tree', '物品 😀']) {
@@ -15,6 +15,15 @@ it('escapes imported new identities without rewriting them and builds the actual
   expect(selection.pathname).toBe('/purchases/purchase/allocate')
   expect(Object.fromEntries(selection.searchParams)).toEqual({ q: 'approved', limit: '1' })
 })
+it('round-trips real body-only Line identities without making them path segments or carrying financial fields', () => {
+  for (const line of ['line/legacy', 'a?b#c', 'legacy\\unit', '\0', '.', '..', '採購 😀', 'a+b', 'line\nnext']) {
+    const path = purchaseCorrectionRoute('new', line), url = new URL(path, 'https://homebox.invalid')
+    expect(url.pathname).toBe('/purchases/new/line-corrections/edit'); expect(purchaseCorrectionLine(url.search)).toBe(line)
+    expect(purchaseReturnPath(path)).toBe(path); expect(applicationReturnPath(path)).toBe(path)
+  }
+  for (const search of ['', '?line=', '?line=%', '?line=%EF', '?line=one&line=two', '?line=one&reason=private', `?line=${'x'.repeat(129)}`]) expect(purchaseCorrectionLine(search)).toBeUndefined()
+  for (const line of ['', '\ud800', '😀'.repeat(129)]) expect(() => purchaseCorrectionRoute('purchase', line)).toThrow()
+})
 it('preserves every global filter and independent explicit continuation without allowing catalog text queries', () => {
   const query = { from: '2026-01-01', to: '2026-11-07', currency: 'JPY', merchant: '  Exact é 😀 ', category_id: 'category', location_id: 'location', scope: 'direct' as const, status: 'active' as const, limit: 1, cursor: 'opaque' }
   const path = purchaseListRoute(query)
@@ -27,7 +36,7 @@ it.each(['/purchases', '/purchases/new', '/purchases/new/view', '/purchases/NEW/
   expect(purchaseReturnPath(path)).toBe(path)
   expect(applicationReturnPath(path)).toBe(path)
 })
-it.each([undefined, null, {}, 7, '', '/purchases/../items', '/purchases\\other', 'https://evil.example/purchases', '//evil.example/purchases', '/purchases?currency=JPY#secret', '/purchases?amount=100', '/purchases?q=hidden', '/purchases?currency=JPY&currency=USD', '/purchases?limit=01', '/purchases?limit=101', '/purchases?from=2026-02-30', '/purchases?from=2026-11-07&to=2026-01-01', '/purchases?merchant=%EF', '/purchases?merchant=%', '/purchases/%EF', '/purchases/%2Fsecret/edit', '/purchases/%00/edit', '/purchases/id/edit/extra', '/purchases/id/delete', '/purchases/id/line-corrections?reason=secret', '/purchases/id/line-corrections/extra', '/purchases/id?paid_minor=100', '/purchases/id/allocate/item?quantity_base=1', '/purchases/id/allocate?key=secret', '/purchases/id/allocate?q=%EF', '/purchases/id/allocate?q=one&q=two', '/purchases/id/allocate/%2Fsecret', '/items/item/purchases?cursor=secret', '/items/%5Csecret/purchases', '/purchases/./view', `/purchases/${'😀'.repeat(129)}`, `/purchases?merchant=${'x'.repeat(18000)}`, '/purchases?merchant=\ud800'])('rejects unsafe, repaired, duplicate or financial return data %j', (path) => {
+it.each([undefined, null, {}, 7, '', '/purchases/../items', '/purchases\\other', 'https://evil.example/purchases', '//evil.example/purchases', '/purchases?currency=JPY#secret', '/purchases?amount=100', '/purchases?q=hidden', '/purchases?currency=JPY&currency=USD', '/purchases?limit=01', '/purchases?limit=101', '/purchases?from=2026-02-30', '/purchases?from=2026-11-07&to=2026-01-01', '/purchases?merchant=%EF', '/purchases?merchant=%', '/purchases/%EF', '/purchases/%2Fsecret/edit', '/purchases/%00/edit', '/purchases/id/edit/extra', '/purchases/id/delete', '/purchases/id/line-corrections?reason=secret', '/purchases/id/line-corrections/extra', '/purchases/id/line-corrections/edit', '/purchases/id/line-corrections/edit?line=', '/purchases/id/line-corrections/edit?line=%EF', '/purchases/id/line-corrections/edit?line=ok&paid_minor=100', '/purchases/id/line-corrections/edit?line=x&line=y', '/purchases/id?paid_minor=100', '/purchases/id/allocate/item?quantity_base=1', '/purchases/id/allocate?key=secret', '/purchases/id/allocate?q=%EF', '/purchases/id/allocate?q=one&q=two', '/purchases/id/allocate/%2Fsecret', '/items/item/purchases?cursor=secret', '/items/%5Csecret/purchases', '/purchases/./view', `/purchases/${'😀'.repeat(129)}`, `/purchases?merchant=${'x'.repeat(18000)}`, '/purchases?merchant=\ud800'])('rejects unsafe, repaired, duplicate or financial return data %j', (path) => {
   expect(purchaseReturnPath(path)).toBeUndefined()
 })
 it.each(['?q=text', '?merchant=%', '?merchant=%EF', '?merchant=\ud800', '?unknown=value', '?cursor=', '?limit=0', '?currency=jpy', '?merchant=one&merchant=two', `?merchant=${'x'.repeat(16385)}`])('rejects invalid raw global query %j without throwing or repairing it', (search) => {
