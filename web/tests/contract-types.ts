@@ -903,3 +903,26 @@ const filteredSDKCorrectionHistory = financialSDK.fetchDisposalCorrectionsPage('
 void [correctionSDKCalls, ownerlessSDKCorrection, implicitSDKReplacementContext, overriddenSDKCorrectionProof, markedSDKCorrection,
   implicitSDKCorrectionUnit, bulkSDKCorrectionUnit, ownerlessSDKDisposalCorrection, assetlessSDKDisposalCorrection,
   physicalSDKDisposalCorrection, paidSDKNonSaleCorrection, filteredSDKCorrectionHistory]
+
+// Bracketed correction read models distinguish unqueried, quantity and individual sources.
+declare const purchaseCorrectionModels: typeof import('../src/features/purchases/correction-model')
+declare const disposalCorrectionModels: typeof import('../src/features/assets/correction-model')
+const correctionHistorySource = { purchase: reviewedPurchase, lines: [correctionOriginalLine], corrections: [] } satisfies import('../src/features/purchases/correction-model').PurchaseCorrectionHistory
+const correctionSelectionSource = { ...correctionHistorySource, line: correctionOriginalLine, item: originalCorrectionItem,
+  originalUnit: { kind: 'resolved', unit: holdingUnit }, replacement: { kind: 'quantity', item: replacementCorrectionItem } } as const satisfies import('../src/features/purchases/correction-model').PurchaseCorrectionSource
+const disposalCorrectionSource = { unit: holdingUnit, item: originalCorrectionItem, asset: retainedAsset, disposal: voidedDisposalRecord, corrections: [disposalVoidEntry] } satisfies import('../src/features/assets/correction-model').DisposalCorrectionSource
+const correctionReadCalls = [purchaseCorrectionModels.readPurchaseCorrectionHistory('purchase', new AbortController().signal),
+  purchaseCorrectionModels.readPurchaseCorrection('purchase', 'line', null, new AbortController().signal),
+  purchaseCorrectionModels.readPurchaseCorrection('purchase', 'line', 'replacement-item', new AbortController().signal),
+  disposalCorrectionModels.readDisposalCorrection('unit', new AbortController().signal)]
+// @ts-expect-error The replacement decision must be explicit even when there is no target.
+const implicitCorrectionSelection = purchaseCorrectionModels.readPurchaseCorrection('purchase', 'line', undefined, new AbortController().signal)
+// @ts-expect-error Quantity selection cannot pretend that a Unit collection was queried.
+const inventedCorrectionUnits: import('../src/features/purchases/correction-model').ReplacementCorrectionSource = { kind: 'quantity', item: replacementCorrectionItem, units: [] }
+// @ts-expect-error An individual replacement needs its complete selected Unit collection.
+const incompleteCorrectionUnits: import('../src/features/purchases/correction-model').ReplacementCorrectionSource = { kind: 'individual', item: originalCorrectionItem }
+// @ts-expect-error A path-unaddressable original Unit remains an explicit identity, not null.
+const missingLegacyCorrectionUnit: import('../src/features/purchases/correction-model').OriginalCorrectionUnit = { kind: 'unaddressable' }
+// @ts-expect-error A correction source cannot omit the actual retained DisposalRecord.
+const missingCorrectionRecord: import('../src/features/assets/correction-model').DisposalCorrectionSource = { unit: holdingUnit, item: originalCorrectionItem, asset: retainedAsset, corrections: [] }
+void [correctionSelectionSource, disposalCorrectionSource, correctionReadCalls, implicitCorrectionSelection, inventedCorrectionUnits, incompleteCorrectionUnits, missingLegacyCorrectionUnit, missingCorrectionRecord]

@@ -13,7 +13,7 @@ const test = applicationTest.extend<{}, { applicationWebDirectory: string }>({
     try {
       cpSync(fileURLToPath(new URL('../../dist', import.meta.url)), web, { recursive: true })
       // Bundle the actual SDK privately, without a production test entrypoint.
-      writeFileSync(entry, `export * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/financial-corrections.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/assets.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/purchases.ts', import.meta.url)))};\nexport {createItem,fetchItem,patchItem} from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/catalog.ts', import.meta.url)))};\nexport {createUnit,fetchUnit} from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/holdings.ts', import.meta.url)))};\n`)
+      writeFileSync(entry, `export * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/financial-corrections.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/assets.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/purchases.ts', import.meta.url)))};\nexport {createItem,fetchItem,patchItem} from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/catalog.ts', import.meta.url)))};\nexport {createUnit,fetchUnit} from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/holdings.ts', import.meta.url)))};\nexport {readPurchaseCorrection,readPurchaseCorrectionHistory} from ${JSON.stringify(fileURLToPath(new URL('../../src/features/purchases/correction-model.ts', import.meta.url)))};\nexport {readDisposalCorrection} from ${JSON.stringify(fileURLToPath(new URL('../../src/features/assets/correction-model.ts', import.meta.url)))};\n`)
       await build({ configFile: false, logLevel: 'silent', build: { outDir: sdk, minify: false, lib: { entry, formats: ['es'], fileName: 'financial-corrections-sdk' } } })
       cpSync(join(sdk, 'financial-corrections-sdk.js'), join(web, 'assets', 'financial-corrections-sdk.js'))
       await provideFixture(web)
@@ -201,4 +201,83 @@ test('reconciles genuinely committed altered correction replies only by explicit
   for (const key of [original.lineKey, original.disposalKey]) {
     const requests = writes.filter((request) => request.key === key); expect(requests).toHaveLength(2); expect(requests[1]).toEqual(requests[0]); expect(attempts.get(key)).toBe(2)
   }
+})
+
+test('withholds mixed Purchase correction sources when the real parent changes inside the selected history interval', async ({ page, application }) => {
+  await provision(page, application); await page.goto('/')
+  const initial = await page.evaluate(async () => {
+    const modulePath = '/assets/financial-corrections-sdk.js', api = await import(modulePath)
+    const csrf = await fetch('/api/v1/auth/csrf', { credentials: 'same-origin', cache: 'no-store' }); if (!csrf.ok) throw new Error('Financial session unavailable')
+    const csrfToken: string = (await csrf.json()).token, root = () => ({ csrfToken, idempotencyKey: crypto.randomUUID(), signal: new AbortController().signal }), read = () => new AbortController().signal
+    const item = await api.createItem({ name: 'Correction source quantity', tracking_mode: 'quantity', unit_code: 'kg', base_unit: 'g', scale_factor: 1000 }, root())
+    const purchase = await api.createPurchase({ merchant_name: 'Correction source', purchased_at: '2026-11-07T00:00:00Z', currency: 'JPY' }, root())
+    const line = await api.createPurchaseLine(purchase.id, { item_id: item.id, item_revision: item.revision, item_unit_id: null, quantity_base: 1500, paid_minor: 0 }, { ...root(), purchase, item })
+    const parent = await api.fetchPurchase(purchase.id, read()), currentItem = await api.fetchItem(item.id, read())
+    const entry = await api.correctPurchaseLine(purchase.id, { line_id: line.id, line_revision: line.revision, item_revision: currentItem.revision, action: 'replace', replacement: { item_id: item.id, item_revision: currentItem.revision, item_unit_id: null, quantity_base: 2500, paid_minor: 99 }, reason: 'Actual earlier correction' }, { ...root(), purchase: parent, line, item: currentItem, replacementItem: currentItem })
+    if (!entry.after) throw new Error('Expected replacement source')
+    const nextParent = await api.fetchPurchase(purchase.id, read()), nextItem = await api.fetchItem(item.id, read())
+    const second = await api.correctPurchaseLine(purchase.id, { line_id: entry.after.id, line_revision: entry.after.revision, item_revision: nextItem.revision, action: 'replace', replacement: { item_id: item.id, item_revision: nextItem.revision, item_unit_id: null, quantity_base: 3000, paid_minor: 123 }, reason: 'Actual later correction' }, { ...root(), purchase: nextParent, line: entry.after, item: nextItem, replacementItem: nextItem })
+    const target = await api.createItem({ name: 'Selected replacement Unit' }, root())
+    const unit = await api.createUnit(target.id, { location_id: null }, { ...root(), expectedRevision: target.revision })
+    return { purchase: await api.fetchPurchase(purchase.id, read()), item: await api.fetchItem(item.id, read()), target: await api.fetchItem(target.id, read()), unit, line, entry, second }
+  })
+  expect(initial.second.after).not.toBeNull()
+  const reads: string[] = [], writes = watchDomainWrites(page, ['/api/v1/purchases', '/api/v1/units', '/api/v1/stock'])
+  page.on('request', (request) => { if (request.method() === 'GET') reads.push(new URL(request.url()).pathname) })
+  const reviewed = await page.evaluate(async (source) => {
+    const modulePath = '/assets/financial-corrections-sdk.js', api = await import(modulePath), read = () => new AbortController().signal
+    return { history: await api.readPurchaseCorrectionHistory(source.purchase.id, read()), selected: await api.readPurchaseCorrection(source.purchase.id, source.second.after.id, source.target.id, read()) }
+  }, initial)
+  expect(reviewed.history.lines).toEqual([initial.second.after]); expect(new Set(reviewed.history.corrections.map((entry: { id: string }) => entry.id))).toEqual(new Set([initial.entry.id, initial.second.id]))
+  expect(reviewed.selected).toMatchObject({ purchase: initial.purchase, line: initial.second.after, item: initial.item, originalUnit: { kind: 'unallocated' }, replacement: { kind: 'individual', item: initial.target, units: [initial.unit] } })
+  expect(reads).not.toContain('/api/v1/inventory'); expect(writes).toHaveLength(0)
+  let changed = false
+  await page.route((url) => url.pathname === `/api/v1/purchases/${initial.purchase.id}/line-corrections`, async (route) => {
+    if (route.request().method() !== 'GET' || changed) { await route.continue(); return }
+    changed = true; const response = await route.fetch(); expect(response.status()).toBe(200)
+    const patch = await page.request.patch(`/api/v1/purchases/${initial.purchase.id}`, { headers: await writeContext(page, application.url, initial.purchase.revision), data: { receipt_note: 'Changed within reviewed interval' } })
+    expect(patch.status()).toBe(200); await route.fulfill({ response })
+  })
+  const raced = await page.evaluate(async (id) => {
+    const modulePath = '/assets/financial-corrections-sdk.js', api = await import(modulePath)
+    try { return { value: await api.readPurchaseCorrectionHistory(id, new AbortController().signal) } }
+    catch (error) { return { code: error instanceof Error && 'code' in error ? error.code : 'unexpected' } }
+  }, initial.purchase.id)
+  expect(changed).toBe(true); expect(raced).toEqual({ code: 'INVALID_RESPONSE' }); expect(writes).toHaveLength(0)
+  const refreshed = await page.evaluate(async (id) => { const modulePath = '/assets/financial-corrections-sdk.js', api = await import(modulePath); return api.readPurchaseCorrectionHistory(id, new AbortController().signal) }, initial.purchase.id)
+  expect(refreshed.purchase).toMatchObject({ revision: initial.purchase.revision + 1, receipt_note: 'Changed within reviewed interval' }); expect(new Set(refreshed.corrections.map((entry: { id: string }) => entry.id))).toEqual(new Set([initial.entry.id, initial.second.id]))
+})
+
+test('withholds mixed Disposal correction sources when a real financial void lands during history paging', async ({ page, application }) => {
+  await provision(page, application); await page.goto('/')
+  const initial = await page.evaluate(async () => {
+    const modulePath = '/assets/financial-corrections-sdk.js', api = await import(modulePath)
+    const csrf = await fetch('/api/v1/auth/csrf', { credentials: 'same-origin', cache: 'no-store' }); if (!csrf.ok) throw new Error('Financial session unavailable')
+    const csrfToken: string = (await csrf.json()).token, root = () => ({ csrfToken, idempotencyKey: crypto.randomUUID(), signal: new AbortController().signal }), read = () => new AbortController().signal
+    const owner = await api.createItem({ name: 'Correction source disposal' }, root())
+    const unit = await api.createUnit(owner.id, { location_id: null, notes: 'Retained physical Unit' }, { ...root(), expectedRevision: owner.revision }), item = await api.fetchItem(owner.id, read())
+    const asset = await api.putAssetProfile(unit.id, { item_revision: item.revision, asset_revision: null, cost_basis: 'manual', currency: 'JPY', manual_acquisition_minor: 100, in_service_at: null, retired_at: null, estimated_residual_minor: null, usage_unit: 'times' }, { ...root(), unit, item, asset: null })
+    await api.disposeAsset(unit.id, { unit_revision: unit.revision, kind: 'sold', disposed_at: '2026-11-07T00:00:00Z', currency: 'JPY', realized_proceeds_minor: 200 }, { ...root(), asset, unit, disposal: null })
+    const record = await api.fetchDisposalRecord(unit.id, read()), currentAsset = await api.fetchAsset(unit.id, read())
+    const entry = await api.correctDisposal(unit.id, { asset_revision: currentAsset.revision, action: 'replace', replacement: { kind: 'sold', disposed_at: '2026-11-07T00:00:00Z', currency: 'JPY', realized_proceeds_minor: 0 }, reason: 'Actual zero decision' }, { ...root(), asset: currentAsset, disposal: record })
+    return { record: await api.fetchDisposalRecord(unit.id, read()), asset: await api.fetchAsset(unit.id, read()), physical: await api.fetchUnit(unit.id, read()), entry }
+  })
+  const writes = watchDomainWrites(page, ['/api/v1/units', '/api/v1/stock'])
+  const reviewed = await page.evaluate(async (id) => { const modulePath = '/assets/financial-corrections-sdk.js', api = await import(modulePath); return api.readDisposalCorrection(id, new AbortController().signal) }, initial.record.item_unit_id)
+  expect(reviewed).toMatchObject({ unit: initial.physical, asset: initial.asset, disposal: initial.record, corrections: [initial.entry] }); expect(writes).toHaveLength(0)
+  let changed = false
+  await page.route((url) => url.pathname === `/api/v1/units/${initial.record.item_unit_id}/disposal-corrections`, async (route) => {
+    if (route.request().method() !== 'GET' || changed) { await route.continue(); return }
+    changed = true; const response = await route.fetch(); expect(response.status()).toBe(200)
+    const correction = await page.request.post(`/api/v1/units/${initial.record.item_unit_id}/disposal-corrections`, { headers: await writeContext(page, application.url, initial.record.revision), data: { asset_revision: initial.asset.revision, action: 'void', replacement: null, reason: 'Changed within reviewed interval' } })
+    expect(correction.status()).toBe(200); await route.fulfill({ response })
+  })
+  const raced = await page.evaluate(async (id) => {
+    const modulePath = '/assets/financial-corrections-sdk.js', api = await import(modulePath)
+    try { return { value: await api.readDisposalCorrection(id, new AbortController().signal) } }
+    catch (error) { return { code: error instanceof Error && 'code' in error ? error.code : 'unexpected' } }
+  }, initial.record.item_unit_id)
+  expect(changed).toBe(true); expect(raced).toEqual({ code: 'INVALID_RESPONSE' }); expect(writes).toHaveLength(0)
+  const refreshed = await page.evaluate(async (id) => { const modulePath = '/assets/financial-corrections-sdk.js', api = await import(modulePath); return api.readDisposalCorrection(id, new AbortController().signal) }, initial.record.item_unit_id)
+  expect(refreshed.disposal).toMatchObject({ revision: initial.record.revision + 1, original: initial.record.original, current: null }); expect(refreshed.corrections).toHaveLength(2); expect(refreshed.corrections).toContainEqual(initial.entry); expect(refreshed.unit).toEqual(initial.physical)
 })

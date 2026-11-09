@@ -61,11 +61,11 @@ export const disposalCorrectionWriteSchema: z.ZodType<DisposalCorrectionWrite> =
   z.strictObject({ ...disposalWriteFields, action: z.literal('void'), replacement: z.null() }),
   z.strictObject({ ...disposalWriteFields, action: z.literal('replace'), replacement: disposalFinancialWriteSchema }),
 ])
-function sameDisposalData(a: DisposalData, b: DisposalData) {
+export function sameDisposalData(a: DisposalData, b: DisposalData) {
   return a.item_unit_id === b.item_unit_id && a.kind === b.kind && a.disposed_at === b.disposed_at &&
     a.realized_proceeds_minor === b.realized_proceeds_minor && a.currency === b.currency && a.note === b.note
 }
-function sameDisposalRecord(a: DisposalRecord, b: DisposalRecord) {
+export function sameDisposalRecord(a: DisposalRecord, b: DisposalRecord) {
   return a.item_unit_id === b.item_unit_id && a.revision === b.revision && sameDisposalData(a.original, b.original) &&
     (a.current === null ? b.current === null : b.current !== null && sameDisposalData(a.current, b.current))
 }
@@ -79,7 +79,7 @@ export const disposalCorrectionSchema: z.ZodType<DisposalCorrection> = z.discrim
 const disposalPageSchema: z.ZodType<DisposalCorrectionPage> = z.strictObject({ data: z.array(disposalCorrectionSchema).max(100), next_cursor: cursorSchema().nullable() })
   .refine((page) => new Set(page.data.map((entry) => entry.id)).size === page.data.length)
 
-function sameLine(a: PurchaseLine, b: PurchaseLine) {
+export function samePurchaseLine(a: PurchaseLine, b: PurchaseLine) {
   return a.id === b.id && a.revision === b.revision && a.purchase_id === b.purchase_id && a.item_id === b.item_id &&
     a.item_unit_id === b.item_unit_id && a.quantity_base === b.quantity_base && a.paid_minor === b.paid_minor && a.note === b.note
 }
@@ -105,7 +105,7 @@ export async function correctPurchaseLine(purchaseID: string, body: PurchaseLine
   }
   const headers = revisionHeaders({ ...context, expectedRevision: purchase.revision })
   const schema = purchaseCorrectionSchema.refine((entry) => entry.purchase_id === id && entry.action === values.action && entry.reason === values.reason &&
-    sameLine(entry.before, line) && (values.replacement === null ? entry.after === null : entry.after !== null &&
+    samePurchaseLine(entry.before, line) && (values.replacement === null ? entry.after === null : entry.after !== null &&
       entry.after.item_id === values.replacement.item_id && entry.after.item_unit_id === values.replacement.item_unit_id &&
       entry.after.quantity_base === values.replacement.quantity_base && entry.after.paid_minor === values.replacement.paid_minor && entry.after.note === (values.replacement.note ?? '')))
   return resourceRequest(schema, context.signal,
