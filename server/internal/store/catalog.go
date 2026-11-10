@@ -118,6 +118,14 @@ func (catalog *Catalog) List(ctx context.Context, token, afterID string, limit i
 }
 
 func (catalog *Catalog) Create(ctx context.Context, token, key string, input ItemCreate) (Item, error) {
+	input.Brand = snapshotPurchaseString(input.Brand)
+	input.Model = snapshotPurchaseString(input.Model)
+	input.CategoryID = snapshotPurchaseString(input.CategoryID)
+	input.TrackingMode = snapshotPurchaseString(input.TrackingMode)
+	input.UnitCode = snapshotPurchaseString(input.UnitCode)
+	input.BaseUnit = snapshotPurchaseString(input.BaseUnit)
+	input.ScaleFactor = snapshotAssetNumber(input.ScaleFactor)
+	input.Status = snapshotPurchaseString(input.Status)
 	value := ItemData{Name: input.Name, Brand: input.Brand, Model: input.Model, CategoryID: input.CategoryID,
 		Description: input.Description, Notes: input.Notes, TrackingMode: "individual", UnitCode: "pcs", BaseUnit: "pcs", ScaleFactor: 1, Status: "active"}
 	for _, field := range []struct{ supplied, destination *string }{
@@ -168,6 +176,17 @@ func (catalog *Catalog) Create(ctx context.Context, token, key string, input Ite
 }
 
 func (catalog *Catalog) Patch(ctx context.Context, token, key, id string, revision int64, input ItemPatch) (Item, error) {
+	input.Name = snapshotPurchaseString(input.Name)
+	input.Brand.Value = snapshotPurchaseString(input.Brand.Value)
+	input.Model.Value = snapshotPurchaseString(input.Model.Value)
+	input.CategoryID.Value = snapshotPurchaseString(input.CategoryID.Value)
+	input.Description = snapshotPurchaseString(input.Description)
+	input.Notes = snapshotPurchaseString(input.Notes)
+	input.TrackingMode = snapshotPurchaseString(input.TrackingMode)
+	input.UnitCode = snapshotPurchaseString(input.UnitCode)
+	input.BaseUnit = snapshotPurchaseString(input.BaseUnit)
+	input.ScaleFactor = snapshotAssetNumber(input.ScaleFactor)
+	input.Status = snapshotPurchaseString(input.Status)
 	if !validDomainID(id) || !input.hasFields() ||
 		!input.Brand.Set && input.Brand.Value != nil || !input.Model.Set && input.Model.Value != nil || !input.CategoryID.Set && input.CategoryID.Value != nil {
 		return Item{}, ErrDomainInput

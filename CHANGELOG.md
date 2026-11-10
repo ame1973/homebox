@@ -196,6 +196,8 @@
 
 ### Fixed
 
+- Snapshot caller-owned Item creation/edit and Attribute patch pointers before validation and idempotency fingerprinting. Preserve the original nullable metadata, classification, measurement tuple, approved search and value-equal receipts if caller values change afterward; unsynchronized concurrent access remains a caller data race.
+
 - Snapshot caller-owned Category create/patch parent and name values before validation and idempotency fingerprinting. Preserve the reviewed hierarchy, approved dependent search text and equal-intent receipts if those pointers change afterward; unsynchronized concurrent access remains a caller data race.
 
 - Snapshot optional Unit creation, metadata-edit and status pointers before validation and idempotency fingerprinting. Preserve the reviewed placement, serial, notes, no-op intent and explicit disposal kind in physical history, audit and original-key replies even if caller values change afterward. Concurrent mutation without synchronization remains a caller data race.

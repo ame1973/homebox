@@ -192,6 +192,8 @@ func (catalog *Catalog) CreateAttribute(ctx context.Context, token, key, itemID 
 }
 
 func (catalog *Catalog) PatchAttribute(ctx context.Context, token, key, id string, revision int64, input AttributePatch) (Attribute, error) {
+	input.AttributeKey = snapshotPurchaseString(input.AttributeKey)
+	input.AttributeValue = snapshotPurchaseString(input.AttributeValue)
 	if input.AttributeKey == nil && input.AttributeValue == nil || input.AttributeKey != nil && !authString(*input.AttributeKey, 1, 100) || input.AttributeValue != nil && !authString(*input.AttributeValue, 0, 10000) {
 		return Attribute{}, ErrDomainInput
 	}
