@@ -208,6 +208,16 @@ func (m *mutationTx) captureOtherMedia(members []mediaMember, selected string) (
 func (m *mutationTx) verifyUpdatedMediaLink(owner mediaOwnerState, before retainedMedia, link retainedMediaLink,
 	mediaMembers, ownerMembers []mediaMember, related map[string]guardedMedia, column string,
 ) error {
+	if err := m.verifyMediaMembership(owner, before, mediaMembers, ownerMembers, related, column); err != nil {
+		return err
+	}
+	return m.requirePublishedMedia("media_link", link.ID, link.Revision, link.mediaLinkData)
+}
+
+// Verify shared membership after one changed link advances the Media and owner.
+func (m *mutationTx) verifyMediaMembership(owner mediaOwnerState, before retainedMedia,
+	mediaMembers, ownerMembers []mediaMember, related map[string]guardedMedia, column string,
+) error {
 	if err := m.verifyMediaOwner(owner); err != nil {
 		return err
 	}
@@ -221,9 +231,6 @@ func (m *mutationTx) verifyUpdatedMediaLink(owner mediaOwnerState, before retain
 		return ErrDomainState
 	}
 	if err = m.requirePublishedMedia("media", want.ID, want.Revision, want.mediaData); err != nil {
-		return err
-	}
-	if err = m.requirePublishedMedia("media_link", link.ID, link.Revision, link.mediaLinkData); err != nil {
 		return err
 	}
 	actualMediaMembers, err := readMediaMembers(m.ctx, m.tx, before.ID)
