@@ -20,7 +20,7 @@ export const mediaLinkMetadataSchema: z.ZodType<MediaLinkMetadataInput> = metada
 export const mediaLinkPatchSchema: z.ZodType<MediaLinkPatchInput> = z.union([
   metadata.required({ is_cover: true }), metadata.required({ sort_order: true }), metadata.required({ description: true }),
 ])
-const ownerSchema: z.ZodType<MediaOwner> = z.discriminatedUnion('kind', [
+export const mediaOwnerSchema: z.ZodType<MediaOwner> = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('item'), value: itemSchema }),
   z.strictObject({ kind: z.literal('unit'), value: unitSchema }),
   z.strictObject({ kind: z.literal('location'), value: locationSchema }),
@@ -30,7 +30,7 @@ const ownerSchema: z.ZodType<MediaOwner> = z.discriminatedUnion('kind', [
 // are JSON values, so retained owner IDs need not be addressable as paths.
 export async function attachMedia(id: string, body: MediaLinkMetadataInput, context: MediaAttachContext): Promise<MediaLink> {
   const mediaID = input(pathIDSchema, id), values = input(mediaLinkMetadataSchema, body)
-  const media = input(mediaSchema, context.media), owner = input(ownerSchema, context.owner)
+  const media = input(mediaSchema, context.media), owner = input(mediaOwnerSchema, context.owner)
   input(z.undefined(), context.expectedRevision); input(z.literal(mediaID), media.id)
   const headers = revisionHeaders({ ...context, expectedRevision: media.revision })
   const selected = owner.kind === 'item' ? { item_id: owner.value.id } : owner.kind === 'unit' ? { item_unit_id: owner.value.id } : { location_id: owner.value.id }

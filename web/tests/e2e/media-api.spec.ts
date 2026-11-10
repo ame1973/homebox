@@ -15,7 +15,7 @@ const test = applicationTest.extend<{}, { applicationWebDirectory: string }>({
     try {
       cpSync(fileURLToPath(new URL('../../dist', import.meta.url)), web, { recursive: true })
       // The private SDK bundle is never a production test entrypoint.
-      writeFileSync(entry, `export * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/media.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/media-writes.ts', import.meta.url)))};\nexport { fetchItem } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/catalog.ts', import.meta.url)))};\nexport { createUnit, fetchUnitByIdentity } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/holdings.ts', import.meta.url)))};\nexport { createLocation } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/locations.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/features/media/model.ts', import.meta.url)))};\n`)
+      writeFileSync(entry, `export * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/media.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/media-writes.ts', import.meta.url)))};\nexport { fetchItem } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/catalog.ts', import.meta.url)))};\nexport { createUnit, fetchUnitByIdentity, moveUnit } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/holdings.ts', import.meta.url)))};\nexport { createLocation, fetchLocation } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/locations.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/features/media/model.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/features/media/commands.ts', import.meta.url)))};\n`)
       await build({ configFile: false, logLevel: 'silent', resolve: { alias: { '@': fileURLToPath(new URL('../../src', import.meta.url)) } },
         build: { outDir: sdk, minify: false, lib: { entry, formats: ['es'], fileName: 'media-sdk' } } })
       cpSync(join(sdk, 'media-sdk.js'), join(web, 'assets', 'media-sdk.js'))
@@ -471,6 +471,103 @@ test.describe('retained Media owner identities', () => {
     expect(requests.filter((path) => path === '/api/v1/locations/tree')).toHaveLength(2)
     expect(requests.filter((path) => path === '/api/v1/media/links')).toHaveLength(3)
   })
+})
+
+test('freezes complete review scopes and delivers attach, edit and unlink commands with the actual Go server', async ({ page, application }) => {
+  await provision(page, application)
+  await page.goto('/')
+  const result = await page.evaluate(async ({ empty }) => {
+    const modulePath = '/assets/media-sdk.js', api = await import(modulePath), signal = () => new AbortController().signal
+    const csrf = (await (await fetch('/api/v1/auth/csrf')).json()).token as string
+    const owner = await api.readOwnerMedia({ kind: 'item', id: empty }, signal())
+    const membership = await api.readMediaMembership('links', signal())
+    const body = { is_cover: true, sort_order: 0, description: 'Original review' }
+    const attach = api.freezeMediaCommand({ kind: 'attach', owner, membership, body })
+    owner.owner.value.revision = 99; membership.media.revision = 99; body.description = 'Changed after review'
+    const frozen = Object.isFrozen(attach) && Object.isFrozen(attach.owner.links) && Object.isFrozen(attach.membership.media)
+    const created = await api.sendMediaCommand(attach, csrf, signal())
+    const createReplay = await api.sendMediaCommand(attach, csrf, signal())
+    const beforeEdit = await api.readOwnerMedia({ kind: 'item', id: empty }, signal())
+    const patch = api.freezeMediaCommand({ kind: 'patch-link', source: beforeEdit, linkID: created.id, body: { description: 'Reviewed é\nedit' } })
+    const changed = await api.sendMediaCommand(patch, csrf, signal())
+    const editReplay = await api.sendMediaCommand(patch, csrf, signal())
+    const beforeUnlink = await api.readOwnerMedia({ kind: 'item', id: empty }, signal())
+    const unlink = api.freezeMediaCommand({ kind: 'unlink', source: beforeUnlink, linkID: created.id })
+    const removed = await api.sendMediaCommand(unlink, csrf, signal())
+    const unlinkReplay = await api.sendMediaCommand(unlink, csrf, signal())
+    return { frozen, created, createReplay, changed, editReplay, removed, unlinkReplay,
+      after: await api.readOwnerMedia({ kind: 'item', id: empty }, signal()),
+      membership: await api.readMediaMembership('links', signal()), hasCSRF: Object.hasOwn(attach, 'csrfToken') }
+  }, { empty })
+  expect(result.frozen).toBe(true); expect(result.hasCSRF).toBe(false)
+  expect(result.created).toMatchObject({ owner_id: empty, media_id: 'links', revision: 1, is_cover: true, sort_order: 0, description: 'Original review' })
+  expect(result.createReplay).toEqual(result.created)
+  expect(result.changed).toMatchObject({ id: result.created.id, revision: 2, description: 'Reviewed é\nedit' })
+  expect(result.editReplay).toEqual(result.changed)
+  expect(result.removed).toMatchObject({ ok: true, revision: 3 }); expect(result.unlinkReplay).toEqual(result.removed)
+  expect(result.after.links).toEqual([])
+  expect(result.membership.media).toMatchObject({ id: 'links', revision: 6, verification: 'unverified', thumb_url: null })
+  expect(result.membership.links).toMatchObject([{ id: 'reserved', owner_id: sibling }])
+})
+
+test('invalidates Unit location scope even when the Unit moves after link review', async ({ page, application }) => {
+  await provision(page, application)
+  await page.goto('/')
+  const result = await page.evaluate(async ({ empty }) => {
+    const modulePath = '/assets/media-sdk.js', api = await import(modulePath), signal = () => new AbortController().signal
+    const csrf = (await (await fetch('/api/v1/auth/csrf')).json()).token as string
+    const context = () => ({ csrfToken: csrf, idempotencyKey: crypto.randomUUID(), signal: signal() })
+    const location = await api.createLocation({ name: 'Moved room', code: 'MOVED' }, context())
+    const item = await api.fetchItem(empty, signal())
+    const unit = await api.createUnit(empty, { location_id: null }, { ...context(), expectedRevision: item.revision })
+    const media = await api.fetchMedia('links', signal())
+    const link = await api.attachMedia('links', {}, { ...context(), media, owner: { kind: 'unit', value: unit } })
+    const source = await api.readOwnerMedia({ kind: 'unit', id: unit.id }, signal())
+    const command = api.freezeMediaCommand({ kind: 'unlink', source, linkID: link.id })
+    const moved = await api.moveUnit(unit.id, { target_location_id: location.id }, { ...context(), itemID: empty, expectedRevision: source.owner.value.revision })
+    const before = await api.fetchLocation(location.id, signal())
+    const removed = await api.sendMediaCommand(command, csrf, signal())
+    const after = await api.fetchLocation(location.id, signal())
+    return { capturedLocation: command.source.owner.value.location_id, roots: api.mediaCommandReadRoots(command), moved, before, after, removed }
+  }, { empty })
+  expect(result.capturedLocation).toBeNull(); expect(result.roots).toContainEqual(['locations'])
+  expect(result.moved.location_id).toBe(result.before.id)
+  expect(result.removed).toMatchObject({ ok: true, revision: 2 })
+  expect(result.after.revision).toBe(result.before.revision + 1)
+})
+
+test('reconciles an actual lost unlink response with the identical frozen review command', async ({ page, application }) => {
+  await provision(page, application)
+  let deletes = 0, committedStatus = 0
+  await page.route((url) => url.pathname === '/api/v1/media/links/sibling', async (route) => {
+    if (route.request().method() !== 'DELETE') { await route.continue(); return }
+    deletes++
+    if (deletes !== 1) { await route.continue(); return }
+    const response = await route.fetch()
+    committedStatus = response.status()
+    await route.abort('failed')
+  })
+  await page.goto('/')
+  const state = await page.evaluateHandle(async ({ sibling }) => {
+    const modulePath = '/assets/media-sdk.js', api = await import(modulePath), signal = () => new AbortController().signal
+    const csrf = (await (await fetch('/api/v1/auth/csrf')).json()).token as string
+    const source = await api.readOwnerMedia({ kind: 'item', id: sibling }, signal())
+    return { api, csrf, command: api.freezeMediaCommand({ kind: 'unlink', source, linkID: 'sibling' }), sibling }
+  }, { sibling })
+  const first = await state.evaluate(async ({ api, csrf, command }) => {
+    try { await api.sendMediaCommand(command, csrf, new AbortController().signal); return 'unexpected' }
+    catch (error) { return error instanceof Error && 'code' in error ? error.code : 'unexpected' }
+  })
+  expect(first).toBe('NETWORK_ERROR'); expect(committedStatus).toBe(200); expect(deletes).toBe(1)
+  const current = await state.evaluate(async ({ api, sibling }) => {
+    window.dispatchEvent(new Event('online'))
+    return { owner: await api.readOwnerMedia({ kind: 'item', id: sibling }, new AbortController().signal),
+      media: await api.fetchMedia('photo', new AbortController().signal) }
+  })
+  expect(current.owner.links).toMatchObject([{ id: 'reserved' }]); expect(current.media.revision).toBe(8); expect(deletes).toBe(1)
+  const retry = await state.evaluate(async ({ api, csrf, command }) => api.sendMediaCommand(command, csrf, new AbortController().signal))
+  expect(retry).toMatchObject({ ok: true, revision: 6 }); expect(retry.operation_id).toBeTruthy(); expect(deletes).toBe(2)
+  await state.dispose()
 })
 
 test('rejects inconsistent real-server page replies rather than returning a partial selection', async ({ page, application }) => {

@@ -1113,3 +1113,27 @@ const unrelatedMediaScope = mediaModels.readOwnerMedia({ kind: 'location', id: '
 // @ts-expect-error Every live review read retains caller-owned cancellation.
 const uncancellableMediaScope = mediaModels.readMediaMembership('media')
 void [reviewedItemMedia, reviewedUnitMedia, reviewedLocationMedia, reviewedMediaMembership, unsupportedMediaScope, implicitMediaScope, unrelatedMediaScope, uncancellableMediaScope]
+
+// Foreground commands retain full reviewed scopes and a selected independent
+// link, never a loose proof or a credential in the proposal.
+declare const mediaCommands: typeof import('../src/features/media/commands')
+const mediaOwnerSource = { owner: { kind: 'item' as const, value: currentItem }, links: [mediaLinkView] }
+const mediaMembershipSource = { media: mediaMetadata, links: [mediaLinkView] }
+const reviewedAttachCommand = mediaCommands.freezeMediaCommand({ kind: 'attach', owner: mediaOwnerSource, membership: mediaMembershipSource, body: {} })
+const reviewedPatchCommand = mediaCommands.freezeMediaCommand({ kind: 'patch-link', source: mediaOwnerSource, linkID: mediaLink.id, body: { description: '' } })
+const reviewedUnlinkCommand = mediaCommands.freezeMediaCommand({ kind: 'unlink', source: mediaOwnerSource, linkID: mediaLink.id })
+const sentMediaCommand = mediaCommands.sendMediaCommand(reviewedUnlinkCommand, 'csrf', new AbortController().signal)
+// @ts-expect-error Attachment must retain its full reviewed Media membership.
+const unreviewedMediaAttachment = mediaCommands.freezeMediaCommand({ kind: 'attach', owner: mediaOwnerSource, body: {} })
+// @ts-expect-error Editing requires an explicitly selected original link.
+const unselectedMediaEdit = mediaCommands.freezeMediaCommand({ kind: 'patch-link', source: mediaOwnerSource, body: { is_cover: false } })
+// @ts-expect-error An empty patch is not an explicit link metadata decision.
+const emptyReviewedMediaEdit = mediaCommands.freezeMediaCommand({ kind: 'patch-link', source: mediaOwnerSource, linkID: mediaLink.id, body: {} })
+// @ts-expect-error A caller may not substitute an unrelated revision for the source.
+const looseReviewedMediaProof = mediaCommands.freezeMediaCommand({ kind: 'unlink', source: mediaOwnerSource, linkID: mediaLink.id, expectedRevision: 1 })
+// @ts-expect-error Commands never retain a CSRF credential in the reviewed proposal.
+const credentialInMediaReview = mediaCommands.freezeMediaCommand({ kind: 'unlink', source: mediaOwnerSource, linkID: mediaLink.id, csrfToken: 'secret' })
+// @ts-expect-error Sending a frozen command requires caller-owned cancellation.
+const uncancellableMediaCommand = mediaCommands.sendMediaCommand(reviewedUnlinkCommand, 'csrf')
+void [reviewedAttachCommand, reviewedPatchCommand, reviewedUnlinkCommand, sentMediaCommand, unreviewedMediaAttachment, unselectedMediaEdit, emptyReviewedMediaEdit,
+  looseReviewedMediaProof, credentialInMediaReview, uncancellableMediaCommand]

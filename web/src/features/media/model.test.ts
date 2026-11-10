@@ -6,10 +6,10 @@ import * as locations from '@/lib/api/locations'
 import * as mediaAPI from '@/lib/api/media'
 import { readMediaMembership, readOwnerMedia } from './model'
 
-vi.mock('@/lib/api/catalog', () => ({ fetchItem: vi.fn(), fetchItemsPage: vi.fn() }))
-vi.mock('@/lib/api/holdings', () => ({ fetchUnit: vi.fn(), fetchUnitByIdentity: vi.fn(), fetchItemUnitsPage: vi.fn() }))
-vi.mock('@/lib/api/locations', () => ({ fetchLocation: vi.fn(), fetchLocationsPage: vi.fn() }))
-vi.mock('@/lib/api/media', () => ({ fetchMedia: vi.fn(), fetchMediaLinksPage: vi.fn(), fetchOwnerMediaLinksPage: vi.fn() }))
+vi.mock('@/lib/api/catalog', async (original) => ({ ...await original<typeof import('@/lib/api/catalog')>(), fetchItem: vi.fn(), fetchItemsPage: vi.fn() }))
+vi.mock('@/lib/api/holdings', async (original) => ({ ...await original<typeof import('@/lib/api/holdings')>(), fetchUnit: vi.fn(), fetchUnitByIdentity: vi.fn(), fetchItemUnitsPage: vi.fn() }))
+vi.mock('@/lib/api/locations', async (original) => ({ ...await original<typeof import('@/lib/api/locations')>(), fetchLocation: vi.fn(), fetchLocationsPage: vi.fn() }))
+vi.mock('@/lib/api/media', async (original) => ({ ...await original<typeof import('@/lib/api/media')>(), fetchMedia: vi.fn(), fetchMediaLinksPage: vi.fn(), fetchOwnerMediaLinksPage: vi.fn() }))
 
 const signal = () => new AbortController().signal
 const item = { id: 'item', revision: 4, name: 'Owner', brand: null, model: '', category_id: null, description: '', notes: '',
