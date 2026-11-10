@@ -49,6 +49,13 @@ type mutationTx struct {
 
 type domainResult interface{ validateDomainResult() error }
 
+// Keep the exact receipt and audit snapshot through the last transaction write.
+type domainReply struct {
+	body, created, expires                                         string
+	eventID, eventAdmin, eventEpoch, eventOperation, eventOccurred string
+	eventReason, eventNote                                         string
+}
+
 // runDomainMutation never returns a successful result before COMMIT. Domain keys
 // bind the administrator and dataset epoch, not a particular login session. An
 // active, completed session is still required before reading any frozen reply.
@@ -80,14 +87,17 @@ func runDomainMutation[T domainResult](ctx context.Context, a *Auth, token, key,
 		return zero, err
 	}
 	scopedKey := domainReplyKey(session.Admin.ID, epoch, key)
-	body, err := readDomainReply(ctx, tx, scopedKey, operation, fingerprint, now)
+	reply, err := readDomainReply(ctx, tx, scopedKey, operation, fingerprint, now)
 	if err != nil {
 		return zero, err
 	}
 	var result T
 	var finalChecks []func() error
-	if body != "" {
-		decoder := json.NewDecoder(strings.NewReader(body))
+	if reply.body != "" {
+		if reply.eventAdmin != session.Admin.ID || reply.eventEpoch != epoch || reply.eventOperation != operation {
+			return zero, ErrDomainState
+		}
+		decoder := json.NewDecoder(strings.NewReader(reply.body))
 		decoder.DisallowUnknownFields()
 		if err = decoder.Decode(&result); err != nil {
 			return zero, ErrDomainState
@@ -125,6 +135,11 @@ func runDomainMutation[T domainResult](ctx context.Context, a *Auth, token, key,
 		if err != nil {
 			return zero, err
 		}
+		reply = domainReply{
+			body: string(encoded), created: stamp(now), expires: stamp(now.Add(domainReplyLifetime)),
+			eventID: eventID, eventAdmin: session.Admin.ID, eventEpoch: epoch, eventOperation: operation,
+			eventOccurred: stamp(now), eventReason: m.reason, eventNote: m.note,
+		}
 		finalChecks = m.finalChecks
 	}
 	if err = finishDomainSession(ctx, a, tx, token, session); err != nil {
@@ -142,6 +157,18 @@ func runDomainMutation[T domainResult](ctx context.Context, a *Auth, token, key,
 			return zero, err
 		}
 	}
+	// Session or audit triggers must not turn a committed write or replay into a
+	// different, missing, shortened or extended original-key acknowledgement.
+	finalReply, err := readDomainReply(ctx, tx, scopedKey, operation, fingerprint, now)
+	if errors.Is(err, ErrIdempotencyConflict) || errors.Is(err, ErrIdempotencyExpired) || errors.Is(err, ErrDomainState) {
+		return zero, ErrDomainState
+	}
+	if err != nil {
+		return zero, err
+	}
+	if finalReply != reply {
+		return zero, ErrDomainState
+	}
 	if err = tx.Commit(); err != nil {
 		return zero, err
 	}
@@ -154,36 +181,40 @@ func domainReplyKey(adminID, epoch, key string) string {
 	return authDigest("domain\x00" + string(encoded))
 }
 
-func readDomainReply(ctx context.Context, tx *sql.Tx, key, operation, fingerprint string, now time.Time) (string, error) {
-	var storedOperation, storedFingerprint, created, expires string
+func readDomainReply(ctx context.Context, tx *sql.Tx, key, operation, fingerprint string, now time.Time) (domainReply, error) {
+	var reply domainReply
+	var storedOperation, storedFingerprint string
 	var body, eventBody sql.NullString
 	var status sql.NullInt64
-	err := tx.QueryRowContext(ctx, `SELECT i.operation,i.request_sha256,i.response_status,i.response_json,i.created_at,i.expires_at,e.result_json
+	err := tx.QueryRowContext(ctx, `SELECT i.operation,i.request_sha256,i.response_status,i.response_json,i.created_at,i.expires_at,e.result_json,
+ COALESCE(e.id,''),COALESCE(e.admin_id,''),COALESCE(e.dataset_epoch,''),COALESCE(e.operation,''),COALESCE(e.occurred_at,''),COALESCE(e.reason,''),COALESCE(e.note,'')
  FROM api_idempotency i LEFT JOIN mutation_events e ON e.idempotency_key=i.key WHERE i.key=?`, key).
-		Scan(&storedOperation, &storedFingerprint, &status, &body, &created, &expires, &eventBody)
+		Scan(&storedOperation, &storedFingerprint, &status, &body, &reply.created, &reply.expires, &eventBody,
+			&reply.eventID, &reply.eventAdmin, &reply.eventEpoch, &reply.eventOperation, &reply.eventOccurred, &reply.eventReason, &reply.eventNote)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil
+		return domainReply{}, nil
 	}
 	if err != nil {
-		return "", err
+		return domainReply{}, err
 	}
 	if storedOperation != operation || subtle.ConstantTimeCompare([]byte(storedFingerprint), []byte(fingerprint)) != 1 {
-		return "", ErrIdempotencyConflict
+		return domainReply{}, ErrIdempotencyConflict
 	}
-	start, err1 := time.Parse(time.RFC3339Nano, created)
-	end, err2 := time.Parse(time.RFC3339Nano, expires)
+	start, err1 := time.Parse(time.RFC3339Nano, reply.created)
+	end, err2 := time.Parse(time.RFC3339Nano, reply.expires)
 	if err1 != nil || err2 != nil || !end.After(start) || now.Before(start) {
-		return "", ErrDomainState
+		return domainReply{}, ErrDomainState
 	}
 	// Keep the claim even after expiry. Never turn a long-delayed retry into a
 	// second inventory/financial write by deleting or reusing an expired key.
 	if !now.Before(end) {
-		return "", ErrIdempotencyExpired
+		return domainReply{}, ErrIdempotencyExpired
 	}
 	if !status.Valid || status.Int64 != 200 || !body.Valid || !json.Valid([]byte(body.String)) || body.String == "null" || !eventBody.Valid || body.String != eventBody.String {
-		return "", ErrDomainState
+		return domainReply{}, ErrDomainState
 	}
-	return body.String, nil
+	reply.body = body.String
+	return reply, nil
 }
 
 func checkDomainSession(ctx context.Context, a *Auth, tx *sql.Tx, token string, initial AuthSession, now time.Time) (AuthSession, error) {

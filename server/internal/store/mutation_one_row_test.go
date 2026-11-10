@@ -69,6 +69,90 @@ func TestDomainReadsAndOriginalReplaysRequireOneRealSessionActivityWrite(t *test
 	}
 }
 
+func TestDomainMutationRejectsReceiptChangedDuringSessionActivity(t *testing.T) {
+	for _, failure := range []struct{ name, statement string }{
+		{"fingerprint", "UPDATE api_idempotency SET request_sha256='tampered' WHERE operation='post_locations'"},
+		{"operation", "UPDATE api_idempotency SET operation='tampered' WHERE operation='post_locations'"},
+		{"status", "UPDATE api_idempotency SET response_status=201 WHERE operation='post_locations'"},
+		{"body", "UPDATE api_idempotency SET response_json='{}' WHERE operation='post_locations'"},
+		{"creation", "UPDATE api_idempotency SET created_at='2001-01-01T00:00:00Z' WHERE operation='post_locations'"},
+		{"expiry", "UPDATE api_idempotency SET expires_at='2099-01-01T00:00:00Z' WHERE operation='post_locations'"},
+		{"audit", `INSERT OR REPLACE INTO mutation_events(id,admin_id,dataset_epoch,operation,idempotency_key,occurred_at,reason,result_json,note)
+ SELECT id,admin_id,dataset_epoch,operation,idempotency_key,occurred_at,'tampered',result_json,note FROM mutation_events WHERE operation='post_locations'`},
+	} {
+		for _, replay := range []bool{false, true} {
+			name := failure.name + "/new mutation"
+			if replay {
+				name = failure.name + "/original-key replay"
+			}
+			t.Run(name, func(t *testing.T) {
+				s, locations, _, token := locationFixture(t)
+				input := LocationCreate{Code: "BOX", Name: "Receipt must remain exact"}
+				const key = "activity-receipt-original"
+				var original Location
+				var err error
+				if replay {
+					original, err = locations.Create(t.Context(), token, key, 0, input)
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
+				execSQL(t, s.db, "CREATE TRIGGER tamper_domain_receipt AFTER UPDATE OF last_seen_at ON sessions BEGIN "+failure.statement+"; END")
+				before := domainState(t, s)
+				value, err := locations.Create(t.Context(), token, key, 0, input)
+				if !errors.Is(err, ErrDomainState) || value != (Location{}) {
+					t.Fatal("changed receipt returned a successful mutation or replay", value, err)
+				}
+				requireDomainState(t, s, before)
+				execSQL(t, s.db, "DROP TRIGGER tamper_domain_receipt")
+				value, err = locations.Create(t.Context(), token, key, 0, input)
+				if err != nil || (replay && value != original) {
+					t.Fatal("rolled-back receipt change prevented explicit reconciliation", value, err)
+				}
+			})
+		}
+	}
+}
+
+func TestDomainReplayRequiresOriginalAuditScope(t *testing.T) {
+	for _, fields := range []struct{ name, epoch, operation string }{
+		{"epoch", "'different-epoch'", "operation"},
+		{"operation", "dataset_epoch", "'different-operation'"},
+	} {
+		t.Run(fields.name, func(t *testing.T) {
+			s, locations, _, token := locationFixture(t)
+			input := LocationCreate{Code: "BOX", Name: "Original audit scope"}
+			const key = "original-audit-scope"
+			if _, err := locations.Create(t.Context(), token, key, 0, input); err != nil {
+				t.Fatal(err)
+			}
+			execSQL(t, s.db, `INSERT OR REPLACE INTO mutation_events(id,admin_id,dataset_epoch,operation,idempotency_key,occurred_at,reason,result_json,note)
+ SELECT id,admin_id,`+fields.epoch+`,`+fields.operation+`,idempotency_key,occurred_at,reason,result_json,note FROM mutation_events WHERE operation='post_locations'`)
+			before := domainState(t, s)
+			if value, err := locations.Create(t.Context(), token, key, 0, input); !errors.Is(err, ErrDomainState) || value != (Location{}) {
+				t.Fatal("corrupt audit scope exposed a frozen reply", value, err)
+			}
+			requireDomainState(t, s, before)
+		})
+	}
+}
+
+func TestDomainMutationRejectsReceiptChangedDuringAuditInsertion(t *testing.T) {
+	s, locations, _, token := locationFixture(t)
+	input := LocationCreate{Code: "BOX", Name: "Keep the original expiry"}
+	execSQL(t, s.db, `CREATE TRIGGER tamper_domain_receipt AFTER INSERT ON mutation_events
+ BEGIN UPDATE api_idempotency SET expires_at='2099-01-01T00:00:00Z' WHERE key=NEW.idempotency_key; END`)
+	before := domainState(t, s)
+	if value, err := locations.Create(t.Context(), token, "audit-receipt-original", 0, input); !errors.Is(err, ErrDomainState) || value != (Location{}) {
+		t.Fatal("changed receipt returned a successful mutation", value, err)
+	}
+	requireDomainState(t, s, before)
+	execSQL(t, s.db, "DROP TRIGGER tamper_domain_receipt")
+	if _, err := locations.Create(t.Context(), token, "audit-receipt-original", 0, input); err != nil {
+		t.Fatal("rolled-back receipt change prevented explicit reconciliation", err)
+	}
+}
+
 func TestDomainReadsAndOriginalReplaysRejectAuthorizationChangedDuringActivity(t *testing.T) {
 	for _, failure := range []struct {
 		name, statement string

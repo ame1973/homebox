@@ -188,6 +188,8 @@
 
 ### Fixed
 
+- Recheck the exact domain idempotency receipt and immutable-audit snapshot after session activity and final source checks, for both new mutations and original-key replays. Roll back late receipt fingerprint, status, body, timestamp or audit changes rather than returning a result that cannot be reconciled; reject replay against a different audit principal, dataset epoch or operation. Retain original expiry and do not reapply expired claims.
+
 - Enforce actual decoded UTF-8 byte limits for live browser cursors and returned continuations across metadata, catalog, holdings, purchases, Assets and financial corrections. Keep the independent 2048-byte and Stock 4096-byte limits, reject lone surrogates without repair and retain only valid cursor trails through navigation. Existing ASCII signed tokens and server policy remain unchanged.
 
 - Require one actual Purchase header/source and immutable correction-context write, including value-equal correction intent. Compare created/corrected header fields and independent counters with the reviewed proposal, then verify the exact stored context before freezing success. Ignored, rewritten, missing or reseeded source now rolls back source/search/counters/audit/original responses instead of acknowledging a different or unaudited decision. Preserve existing schemas, no-op/equivalent-instant spelling and explicit original-key retry; add real SQLite failure/retry regressions.
