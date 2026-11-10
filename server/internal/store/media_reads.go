@@ -40,8 +40,8 @@ type MediaLinkView struct {
 
 type MediaLinkList = metadataList[MediaLinkView]
 
-// MediaLibrary owns private authoritative media reads; image streaming, uploads
-// and public HTTP handlers require separate file-integrity and transport gates.
+// MediaLibrary owns private authoritative media reads; image streaming and
+// uploads require separate file-integrity and transport gates.
 type MediaLibrary struct{ auth *Auth }
 
 func NewMediaLibrary(a *Auth) (*MediaLibrary, error) {

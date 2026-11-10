@@ -4,7 +4,9 @@
 
 ### Added
 
-- Expose four protected Media metadata and owner- or Media-scoped link reads with actual independent revisions, signed live continuations, completed-session checks and SQL authorization revalidation. Preserve the reserved `links` Media-ID escape, unverified legacy claims and sibling membership through owner deletion; never expose private storage keys or unreviewed OCR. Add boundary, actual TLS/cookie-jar, owner-deletion replay, parser fuzz and compiled-server/socket contract checks. Image files, writes and streams, SDK/gallery/camera and physical acceptance remain unfinished.
+- Add stateless browser Media metadata and scoped-link read adapters. Validate independent Media ETags, owner/Media identity, repeated Media consistency within a page, signed cursor bounds, the reserved `links` escape and verified-versus-unverified thumbnail representation without claiming actual image safety or silently retrying. Add runtime/type and private actual-SDK/Go browser coverage for real pages, owner deletion/replay and inconsistent response withholding. Media file storage, writes and streams, gallery/camera and physical acceptance remain unfinished.
+
+- Expose four protected Media metadata and owner- or Media-scoped link reads with actual independent revisions, signed live continuations, completed-session checks and SQL authorization revalidation. Preserve the reserved `links` Media-ID escape, unverified legacy claims and sibling membership through owner deletion; never expose private storage keys or unreviewed OCR. Add boundary, actual TLS/cookie-jar, owner-deletion replay, parser fuzz and compiled-server/socket contract checks. Image files, writes and streams, SDK/gallery/camera and physical acceptance remained unfinished at this stage.
 
 - Add authenticated private Go reads for retained Media and owner- or Media-scoped link pages. Preserve independent link and Media revisions, historical claims and actual owner authority; bind live cursors to their separate scope and validate lookahead without exposing private storage keys or inventing thumbnails. Media files, HTTP handlers, SDK and gallery remained unfinished at this stage.
 
