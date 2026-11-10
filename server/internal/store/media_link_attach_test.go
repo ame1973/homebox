@@ -2,7 +2,6 @@ package store
 
 import (
 	"errors"
-	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -478,14 +477,10 @@ func TestMediaAttachValidatesMembershipBeyondOnePage(t *testing.T) {
 	for _, scope := range []string{"media", "owner"} {
 		t.Run(scope, func(t *testing.T) {
 			fixture, library, input := mediaLibraryFixture(t, "location")
-			for i := range 205 {
-				id := fmt.Sprintf("media-attach-sibling-%03d", i)
-				if scope == "media" {
-					execSQL(t, fixture.store.db, `INSERT INTO media_links(id,media_id,item_id,description) VALUES(?,'shared-a',?,'retained')`, id, fixture.siblingID)
-				} else {
-					execSQL(t, fixture.store.db, `INSERT INTO media_links(id,media_id,location_id,description) VALUES(?,'shared-b',?,'retained')`, id, fixture.ownerID)
-				}
-				seedMediaLinkProjection(t, fixture.store, id)
+			if scope == "media" {
+				seedMediaLinkBatch(t, fixture.store, "item_id", "shared-a", fixture.siblingID, "media-attach-sibling-", 205)
+			} else {
+				seedMediaLinkBatch(t, fixture.store, "location_id", "shared-b", fixture.ownerID, "media-attach-sibling-", 205)
 			}
 			execSQL(t, fixture.store.db, `CREATE TRIGGER fail_media_attach AFTER INSERT ON mutation_events BEGIN
  UPDATE media_links SET description='late change' WHERE id='media-attach-sibling-204'; END`)

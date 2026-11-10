@@ -43,6 +43,43 @@ func seedMediaLinkProjection(t *testing.T, s *Store, id string) {
  VALUES('media_link',?,1,?,'2026')`, id, string(payload))
 }
 
+// Batch only large test seeding; every case still owns a separate private store
+// and validates each real source, owner and counter before publication.
+func seedMediaLinkBatch(t *testing.T, s *Store, column, mediaID, ownerID, prefix string, count int) {
+	t.Helper()
+	if column != "item_id" && column != "location_id" {
+		t.Fatal("invalid test owner column")
+	}
+	tx, err := s.db.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	for index := range count {
+		id := fmt.Sprintf("%s%03d", prefix, index)
+		if _, err = tx.ExecContext(t.Context(), "INSERT INTO media_links(id,media_id,"+column+",description) VALUES(?,?,?,'retained')", id, mediaID, ownerID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = tx.ExecContext(t.Context(), "INSERT INTO projection_revisions VALUES('media_link',?,1)", id); err != nil {
+			t.Fatal(err)
+		}
+		value, err := loadMediaLink(t.Context(), tx, id)
+		if err != nil {
+			t.Fatal("invalid batched media-link source", err)
+		}
+		payload, err := json.Marshal(value.mediaLinkData)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = tx.ExecContext(t.Context(), `INSERT INTO current_projections(entity_type,entity_id,entity_revision,payload_json,updated_at) VALUES('media_link',?,1,?,'2026')`, id, string(payload)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 type mediaCascadeFixture struct {
 	store     *Store
 	auth      *Auth

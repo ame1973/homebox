@@ -159,7 +159,7 @@ func (library *MediaLibrary) Attach(ctx context.Context, token, key, mediaID str
 		mediaMembers = insertMediaMember(mediaMembers, member)
 		ownerMembers = insertMediaMember(ownerMembers, member)
 		m.finalChecks = append(m.finalChecks, func() error {
-			return m.verifyAttachedMedia(owner, media, value, mediaMembers, ownerMembers, related, column)
+			return m.verifyUpdatedMediaLink(owner, media, value, mediaMembers, ownerMembers, related, column)
 		})
 		return publicMediaLink(value), nil
 	})
@@ -171,7 +171,7 @@ func insertMediaMember(members []mediaMember, added mediaMember) []mediaMember {
 	return result
 }
 
-// Other Media linked to the selected owner are not touched by an attachment.
+// captureOtherMedia preserves related Media source and current bytes.
 type guardedMedia struct {
 	value   retainedMedia
 	payload string
@@ -205,7 +205,7 @@ func (m *mutationTx) captureOtherMedia(members []mediaMember, selected string) (
 	return result, nil
 }
 
-func (m *mutationTx) verifyAttachedMedia(owner mediaOwnerState, before retainedMedia, link retainedMediaLink,
+func (m *mutationTx) verifyUpdatedMediaLink(owner mediaOwnerState, before retainedMedia, link retainedMediaLink,
 	mediaMembers, ownerMembers []mediaMember, related map[string]guardedMedia, column string,
 ) error {
 	if err := m.verifyMediaOwner(owner); err != nil {
