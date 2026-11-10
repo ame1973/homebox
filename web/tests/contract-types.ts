@@ -1044,3 +1044,43 @@ const uncancellableMediaRead = mediaAPI.fetchMedia('media')
 // @ts-expect-error A link row has no embedded Media covered by its ETag.
 const embeddedMediaRow = mediaLink.media
 void [mediaRead, mediaLinksRead, ownerLinksRead, unsupportedMediaOwner, overriddenMediaOwner, uncancellableMediaRead, embeddedMediaRow]
+
+// Media writes retain complete reviewed source; callers cannot replace those
+// proofs with unrelated loose counters or change a link's immutable owner.
+declare const mediaWrites: typeof import('../src/lib/api/media-writes')
+const mediaAttachContext = { ...writeContext, media: mediaMetadata, owner: { kind: 'item' as const, value: currentItem } }
+const unitMediaAttachContext = { ...writeContext, media: unverifiedMediaMetadata, owner: { kind: 'unit' as const, value: holdingUnit } }
+const locationMediaOwner = { id: 'location', revision: 5, parent_id: null, name: 'Room', code: 'ROOM', kind: 'room', status: 'active', sort_order: 0, description: '' } satisfies components['schemas']['Location']
+const locationMediaAttachContext = { ...writeContext, media: mediaMetadata, owner: { kind: 'location' as const, value: locationMediaOwner } }
+const mediaRowContext = { ...writeContext, link: mediaLink }
+const mediaViewContext = { ...writeContext, link: mediaLinkView }
+const mediaWriteCalls = [
+  mediaWrites.attachMedia('media', {}, mediaAttachContext),
+  mediaWrites.attachMedia('media', { is_cover: false, sort_order: 0, description: '' }, unitMediaAttachContext),
+  mediaWrites.attachMedia('media', { sort_order: 1 }, locationMediaAttachContext),
+  mediaWrites.patchMediaLink('link', { description: '' }, mediaViewContext),
+  mediaWrites.patchMediaLink('link', { is_cover: true, sort_order: 0 }, mediaRowContext),
+  mediaWrites.unlinkMediaLink('link', mediaRowContext),
+]
+// @ts-expect-error Attachment needs an original Media snapshot, not a loose revision.
+const mediaAttachWithoutSnapshot = mediaWrites.attachMedia('media', {}, { ...writeContext, owner: mediaAttachContext.owner, expectedRevision: 4 })
+// @ts-expect-error Attachment needs one complete, explicitly typed original owner.
+const mediaAttachWithoutOwner = mediaWrites.attachMedia('media', {}, { ...writeContext, media: mediaMetadata })
+// @ts-expect-error A Unit cannot be passed as an Item owner snapshot.
+const mediaAttachWrongOwner = mediaWrites.attachMedia('media', {}, { ...writeContext, media: mediaMetadata, owner: { kind: 'item', value: holdingUnit } })
+// @ts-expect-error Callers cannot supply a competing loose Media proof.
+const mediaAttachLooseRevision = mediaWrites.attachMedia('media', {}, { ...mediaAttachContext, expectedRevision: 4 })
+// @ts-expect-error Owner identity and revision are derived from the same original snapshot.
+const mediaAttachInjectedOwner = mediaWrites.attachMedia('media', { item_id: 'another', owner_revision: 1 }, mediaAttachContext)
+// @ts-expect-error A partial metadata edit must explicitly select at least one field.
+const emptyMediaLinkPatch = mediaWrites.patchMediaLink('link', {}, mediaRowContext)
+// @ts-expect-error A link edit cannot reassign its immutable owner or Media.
+const reassignMediaLinkPatch = mediaWrites.patchMediaLink('link', { owner_id: 'another' }, mediaRowContext)
+// @ts-expect-error A joined source or complete independent link is needed for edit review.
+const unreviewedMediaLinkPatch = mediaWrites.patchMediaLink('link', { description: '' }, { ...writeContext, expectedRevision: 1 })
+// @ts-expect-error Unlinking binds its own reviewed row, not a Media proof.
+const unreviewedMediaUnlink = mediaWrites.unlinkMediaLink('link', { ...writeContext, media: mediaMetadata })
+// @ts-expect-error The original link proof cannot be silently overridden.
+const looseMediaUnlink = mediaWrites.unlinkMediaLink('link', { ...mediaRowContext, expectedRevision: 2 })
+void [mediaWriteCalls, mediaAttachWithoutSnapshot, mediaAttachWithoutOwner, mediaAttachWrongOwner, mediaAttachLooseRevision, mediaAttachInjectedOwner,
+  emptyMediaLinkPatch, reassignMediaLinkPatch, unreviewedMediaLinkPatch, unreviewedMediaUnlink, looseMediaUnlink]
