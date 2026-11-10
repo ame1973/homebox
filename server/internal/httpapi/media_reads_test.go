@@ -32,7 +32,7 @@ type mediaHTTPFixture struct {
 
 // Seed retained image and legacy link source offline because upload is not yet
 // implemented. Real owner services create their source, counters and events.
-func newMediaHTTPFixture(t *testing.T) mediaHTTPFixture {
+func newMediaHTTPFixture(t *testing.T, specialLinkIDs ...string) mediaHTTPFixture {
 	t.Helper()
 	directory := t.TempDir()
 	if err := os.Chmod(directory, 0o700); err != nil {
@@ -170,6 +170,9 @@ func newMediaHTTPFixture(t *testing.T) mediaHTTPFixture {
 	seedLink("unit", "photo", "unit", fixture.unit.ID, 1)
 	seedLink("location", "photo", "location", fixture.location.ID, 1)
 	seedLink("reserved", "links", "item", fixture.sibling.ID, 1)
+	for _, id := range specialLinkIDs {
+		seedLink(id, "photo", "item", fixture.empty.ID, 1)
+	}
 	exec(`INSERT INTO ocr_results(id,media_id,raw_text,engine,engine_version,created_at) VALUES('private-ocr','photo','NeverPublishUnreviewedMediaOCR','fixture','1','2026-11-06T00:00:00Z')`)
 	if err = tx.Commit(); err != nil {
 		t.Fatal(err)

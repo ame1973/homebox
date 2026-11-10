@@ -38,25 +38,49 @@ func readMediaLinkCreate(w http.ResponseWriter, r *http.Request, requestID strin
 	if !ok || input.OwnerRevision < 1 || owners != 1 {
 		return invalid()
 	}
+	metadata, ok := mediaLinkMetadata(values)
+	if !ok {
+		return invalid()
+	}
+	input.IsCover, input.SortOrder, input.Description = metadata.IsCover, metadata.SortOrder, metadata.Description
+	return input, true
+}
+
+func readMediaLinkPatch(w http.ResponseWriter, r *http.Request, requestID string) (store.MediaLinkPatch, bool) {
+	values, ok := readJSONObject(w, r, requestID, mediaLinkBodyLimit, "is_cover", "sort_order", "description")
+	if !ok {
+		return store.MediaLinkPatch{}, false
+	}
+	input, valid := mediaLinkMetadata(values)
+	if !valid || len(values) == 0 {
+		writeError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "Media input is outside its allowed bounds.", requestID)
+		return store.MediaLinkPatch{}, false
+	}
+	return input, true
+}
+
+func mediaLinkMetadata(values map[string]json.RawMessage) (store.MediaLinkPatch, bool) {
+	var input store.MediaLinkPatch
 	if raw, present := values["is_cover"]; present {
 		var value bool
 		if len(raw) == 0 || raw[0] != 't' && raw[0] != 'f' || json.Unmarshal(raw, &value) != nil {
-			return invalid()
+			return store.MediaLinkPatch{}, false
 		}
 		input.IsCover = &value
 	}
 	if raw, present := values["sort_order"]; present {
 		value, ok := exactSafeInteger(raw)
 		if !ok || value < 0 {
-			return invalid()
+			return store.MediaLinkPatch{}, false
 		}
 		input.SortOrder = &value
 	}
 	if raw, present := values["description"]; present {
-		input.Description, ok = jsonString(raw, 0, 10000)
+		value, ok := jsonString(raw, 0, 10000)
 		if !ok {
-			return invalid()
+			return store.MediaLinkPatch{}, false
 		}
+		input.Description = value
 	}
 	return input, true
 }

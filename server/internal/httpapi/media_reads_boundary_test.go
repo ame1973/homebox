@@ -222,6 +222,7 @@ func TestMediaHTTPThroughVerifiedTLSAndCookieJar(t *testing.T) {
 	}
 	body := fmt.Sprintf(`{"item_id":%q,"owner_revision":%d}`, f.empty.ID, f.empty.Revision)
 	var original []byte
+	var attached store.MediaLink
 	for range 2 {
 		request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, server.URL+"/api/v1/media/empty-media/links", strings.NewReader(body))
 		if err != nil {
@@ -247,6 +248,36 @@ func TestMediaHTTPThroughVerifiedTLSAndCookieJar(t *testing.T) {
 		}
 		if original != nil && !bytes.Equal(original, data) {
 			t.Fatal("verified-TLS original-key retry changed the frozen response")
+		}
+		original = data
+		attached = link
+	}
+	original = nil
+	for range 2 {
+		request, err := http.NewRequestWithContext(t.Context(), http.MethodPatch, server.URL+"/api/v1/media/links/"+attached.ID, strings.NewReader(`{"description":"TLS reviewed edit"}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Header.Set("Origin", origin)
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("X-CSRF-Token", csrf.Token)
+		request.Header.Set("Idempotency-Key", "media-tls-original-edit")
+		request.Header.Set("X-HomeBox-Client-Version", supportedClientVersion+"-dev")
+		request.Header.Set("If-Match", `"1"`)
+		response, err = client.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, readErr := io.ReadAll(response.Body)
+		closeErr = response.Body.Close()
+		var link store.MediaLink
+		if response.StatusCode != 200 || readErr != nil || closeErr != nil || json.Unmarshal(data, &link) != nil ||
+			link.ID != attached.ID || link.MediaID != attached.MediaID || link.OwnerID != attached.OwnerID || link.Revision != 2 || link.Description != "TLS reviewed edit" ||
+			response.Header.Get("ETag") != `"2"` || response.Header.Get("Cache-Control") != "no-store" || response.Header.Get("Strict-Transport-Security") == "" || response.Header.Get("Set-Cookie") != "" {
+			t.Fatal("verified-TLS link edit or independent proof failed", response.StatusCode, readErr, closeErr)
+		}
+		if original != nil && !bytes.Equal(original, data) {
+			t.Fatal("verified-TLS original-key edit retry changed the frozen response")
 		}
 		original = data
 	}

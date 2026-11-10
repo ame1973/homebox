@@ -138,6 +138,38 @@ test('attaches the reserved Media through same-origin browser requests and recon
   expect(JSON.stringify(result)).not.toContain('private-links')
 })
 
+test('edits an independent MediaLink through same-origin browser requests with explicit original-key reconciliation', async ({ page, application }) => {
+  await provision(page, application)
+  await page.goto('/')
+  const result = await page.evaluate(async ({ sibling }) => {
+    const csrfResponse = await fetch('/api/v1/auth/csrf')
+    const csrf = (await csrfResponse.json()).token as string
+    const headers = { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf, 'X-HomeBox-Client-Version': '0.1.0-dev', 'Idempotency-Key': crypto.randomUUID(), 'If-Match': '"5"' }
+    const body = JSON.stringify({ is_cover: false, sort_order: 0, description: 'Reviewed é\ncaption' })
+    const edit = async (requestHeaders: typeof headers) => {
+      const response = await fetch('/api/v1/media/links/sibling', { method: 'PATCH', headers: requestHeaders, body })
+      return { status: response.status, etag: response.headers.get('ETag'), cache: response.headers.get('Cache-Control'), value: await response.json() }
+    }
+    const first = await edit(headers), retry = await edit(headers)
+    const stale = await edit({ ...headers, 'Idempotency-Key': crypto.randomUUID() })
+    const equal = await edit({ ...headers, 'Idempotency-Key': crypto.randomUUID(), 'If-Match': '"6"' })
+    const imageResponse = await fetch('/api/v1/media/photo')
+    const ownerResponse = await fetch(`/api/v1/media/links?owner_type=item&owner_id=${encodeURIComponent(sibling)}`)
+    const reservedResponse = await fetch('/api/v1/media/links/view')
+    return { csrfStatus: csrfResponse.status, first, retry, stale, equal, image: await imageResponse.json(), owner: await ownerResponse.json(), reserved: await reservedResponse.json() }
+  }, { sibling })
+  expect(result.csrfStatus).toBe(200)
+  expect(result.first).toMatchObject({ status: 200, etag: '"6"', cache: 'no-store', value: { id: 'sibling', media_id: 'photo', owner_type: 'item', owner_id: sibling, revision: 6, is_cover: false, sort_order: 0, description: 'Reviewed é\ncaption' } })
+  expect(Object.keys(result.first.value).sort()).toEqual(['description', 'id', 'is_cover', 'media_id', 'owner_id', 'owner_type', 'revision', 'sort_order'])
+  expect(result.retry).toEqual(result.first)
+  expect(result.stale).toMatchObject({ status: 409, etag: null, value: { error: { code: 'REVISION_CONFLICT' } } })
+  expect(result.equal).toEqual(result.first)
+  expect(result.image).toMatchObject({ id: 'photo', revision: 8, verification: 'unverified', thumb_url: null, thumb_sha256: null })
+  expect(result.reserved).toMatchObject({ id: 'links', revision: 3 })
+  expect(result.owner.data).toContainEqual(expect.objectContaining({ id: 'sibling', revision: 6, media: expect.objectContaining({ id: 'photo', revision: 8 }) }))
+  expect(JSON.stringify(result)).not.toContain('private-photo')
+})
+
 test('rejects inconsistent real-server page replies rather than returning a partial selection', async ({ page, application }) => {
   await provision(page, application)
   let tamper = true

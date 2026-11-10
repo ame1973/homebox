@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -33,24 +34,46 @@ func mediaReadRoute(path string) (route, id string) {
 	return "", ""
 }
 
-// Metadata and link pages do not expose image bytes. Attachment creates only
-// an independently reviewed link; uploads and file storage remain separate.
+// The same two-segment path can name a Media read and a link write. In
+// particular, /media/links/links names Media membership for GET/POST and the
+// independent link ID "links" for PATCH.
+func mediaLinkRoute(path string) (string, bool) {
+	const prefix = "/api/v1/media/links/"
+	if !strings.HasPrefix(path, prefix) {
+		return "", false
+	}
+	id := strings.TrimPrefix(path, prefix)
+	return id, id != "" && !strings.Contains(id, "/")
+}
+
+// Metadata and link pages do not expose image bytes. Attachment and link edits
+// change reviewed metadata only; uploads and file storage remain separate.
 func (a *authAPI) serveMediaReads(w http.ResponseWriter, r *http.Request, requestID string) bool {
 	route, id := mediaReadRoute(r.URL.Path)
-	if route == "" {
+	linkID, linkRoute := mediaLinkRoute(r.URL.Path)
+	if route == "" && (!linkRoute || r.Method == http.MethodGet) {
 		return false
 	}
 	if !a.requireAdmin(w, r, requestID) {
 		return true
 	}
-	allow := http.MethodGet
-	if route == "membership" {
-		allow = "GET, POST"
+	var methods []string
+	if route != "" {
+		methods = append(methods, http.MethodGet)
 	}
-	if r.Method != http.MethodGet && !(route == "membership" && r.Method == http.MethodPost) {
-		w.Header().Set("Allow", allow)
+	if route == "membership" {
+		methods = append(methods, http.MethodPost)
+	}
+	if linkRoute {
+		methods = append(methods, http.MethodPatch)
+	}
+	if !slices.Contains(methods, r.Method) {
+		w.Header().Set("Allow", strings.Join(methods, ", "))
 		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "The method is not supported for this route.", requestID)
 		return true
+	}
+	if r.Method == http.MethodPatch {
+		id = linkID
 	}
 	isList := r.Method == http.MethodGet && route != "resource"
 	if r.URL.RawPath != "" || strings.ContainsAny(id, "\\\x00") || id == "." || id == ".." || id != "" && !boundedString(id, 1, 128) ||
@@ -59,16 +82,26 @@ func (a *authAPI) serveMediaReads(w http.ResponseWriter, r *http.Request, reques
 		return true
 	}
 	token, _ := sessionToken(r)
-	if r.Method == http.MethodPost {
+	if r.Method == http.MethodPost || r.Method == http.MethodPatch {
 		revision, _, ok := resourceRevision(w, r, requestID, true)
 		if !ok {
 			return true
 		}
-		input, ok := readMediaLinkCreate(w, r, requestID)
-		if !ok {
-			return true
+		var value store.MediaLink
+		var err error
+		if r.Method == http.MethodPost {
+			input, ok := readMediaLinkCreate(w, r, requestID)
+			if !ok {
+				return true
+			}
+			value, err = a.media.Attach(r.Context(), token, r.Header.Get("Idempotency-Key"), id, revision, input)
+		} else {
+			input, ok := readMediaLinkPatch(w, r, requestID)
+			if !ok {
+				return true
+			}
+			value, err = a.media.PatchLink(r.Context(), token, r.Header.Get("Idempotency-Key"), id, revision, input)
 		}
-		value, err := a.media.Attach(r.Context(), token, r.Header.Get("Idempotency-Key"), id, revision, input)
 		if err != nil {
 			writeMediaError(w, err, requestID)
 		} else {
@@ -174,13 +207,13 @@ func writeMediaError(w http.ResponseWriter, err error, requestID string) {
 	case errors.Is(err, store.ErrDomainInput):
 		status, code, message = http.StatusUnprocessableEntity, "VALIDATION_ERROR", "Media input is outside its allowed bounds."
 	case errors.Is(err, store.ErrNotFound):
-		status, code, message = http.StatusNotFound, "NOT_FOUND", "The Media or selected owner does not exist."
+		status, code, message = http.StatusNotFound, "NOT_FOUND", "The Media, link or selected owner does not exist."
 	case errors.Is(err, store.ErrInvalidCursor):
 		status, code, message = http.StatusBadRequest, "INVALID_CURSOR", "Refresh the collection; its continuation is invalid, expired or differently scoped."
 	case errors.Is(err, store.ErrPreconditionRequired):
-		status, code, message = http.StatusConflict, "PRECONDITION_REQUIRED", "Send the original reviewed Media and owner proofs."
+		status, code, message = http.StatusConflict, "PRECONDITION_REQUIRED", "Send the original reviewed Media, owner or link proofs required for this action."
 	case errors.Is(err, store.ErrRevisionConflict):
-		status, code, message = http.StatusConflict, "REVISION_CONFLICT", "The reviewed Media membership or owner changed. Refresh and review before a new command."
+		status, code, message = http.StatusConflict, "REVISION_CONFLICT", "The reviewed Media, link or owner changed. Refresh and review before a new command."
 	case errors.Is(err, store.ErrIdempotencyExpired):
 		status, code, message = http.StatusConflict, "IDEMPOTENCY_EXPIRED", "The original acknowledgement expired. Review current source before using a new key."
 	case errors.Is(err, store.ErrMediaCoverConflict):
