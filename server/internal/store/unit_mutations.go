@@ -50,6 +50,9 @@ func runUnitMutation[T domainResult](ctx context.Context, inventory *Inventory, 
 }
 
 func (inventory *Inventory) CreateUnit(ctx context.Context, token, key, itemID string, itemRevision int64, input UnitCreate) (Unit, error) {
+	input.LocationID = snapshotPurchaseString(input.LocationID)
+	input.SerialNumber = snapshotPurchaseString(input.SerialNumber)
+	input.Status = snapshotPurchaseString(input.Status)
 	status := "stored"
 	if input.Status != nil {
 		status = *input.Status
@@ -97,6 +100,8 @@ func (inventory *Inventory) CreateUnit(ctx context.Context, token, key, itemID s
 }
 
 func (inventory *Inventory) PatchUnit(ctx context.Context, token, key, id string, revision int64, input UnitPatch) (Unit, error) {
+	input.SerialNumber.Value = snapshotPurchaseString(input.SerialNumber.Value)
+	input.Notes = snapshotPurchaseString(input.Notes)
 	if !input.SerialNumber.Set && input.SerialNumber.Value != nil || !input.SerialNumber.Set && input.Notes == nil ||
 		input.SerialNumber.Value != nil && !authString(*input.SerialNumber.Value, 0, 10000) || input.Notes != nil && !authString(*input.Notes, 0, 10000) {
 		return Unit{}, ErrDomainInput
@@ -183,6 +188,7 @@ func (inventory *Inventory) MoveUnit(ctx context.Context, token, key, id string,
 }
 
 func (inventory *Inventory) SetUnitStatus(ctx context.Context, token, key, id string, revision int64, input UnitStatus) (Unit, error) {
+	input.DisposalKind = snapshotPurchaseString(input.DisposalKind)
 	if !validUnitStatus(input.Status) || !authString(input.Note, 0, 10000) {
 		return Unit{}, ErrDomainInput
 	}

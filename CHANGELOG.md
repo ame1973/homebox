@@ -196,6 +196,8 @@
 
 ### Fixed
 
+- Snapshot optional Unit creation, metadata-edit and status pointers before validation and idempotency fingerprinting. Preserve the reviewed placement, serial, notes, no-op intent and explicit disposal kind in physical history, audit and original-key replies even if caller values change afterward. Concurrent mutation without synchronization remains a caller data race.
+
 - Snapshot caller-owned optional Location create, patch and move values before validation and idempotency fingerprinting. Preserve the reviewed parent, metadata, movement destination and original-key reply even if those pointers change after the snapshot; add actual-source, parent-revision and movement-history regressions. Concurrent mutation without synchronization remains a caller data race.
 
 - Snapshot every optional Media attachment owner, cover, position and description value before validation and idempotency fingerprinting. Caller-owned pointers can no longer change the committed link or make its frozen response diverge from the original request during a transaction. Preserve omission versus explicit defaults and original-key replay for all three owner kinds.
