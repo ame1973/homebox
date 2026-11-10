@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 
 	"homebox/internal/store"
 )
@@ -95,56 +97,81 @@ func TestHoldingsHTTPOriginalItemAndUnitProofsAreRecheckedAfterBodyReading(t *te
 }
 
 func TestHoldingsHTTPDefaultPagesCompleteOnlyTheirRealOwnerAndCollection(t *testing.T) {
-	auth, handler, cookie, csrf := domainHTTPFixture(t)
+	var databasePath string
+	auth, handler, cookie, csrf := domainHTTPFixture(t, &databasePath)
+	var started, ended time.Time
+	defer func() {
+		if t.Failed() {
+			logSessionFailure(t, databasePath, cookie, started, ended)
+		}
+	}()
 	catalog, _ := store.NewCatalog(auth)
 	inventory, _ := store.NewInventory(auth)
 	locations, _ := store.NewLocations(auth)
+	started = time.Now()
 	individual, err := catalog.Create(t.Context(), cookie.Value, "holding-default-individual", store.ItemCreate{Name: "Individual"})
+	ended = time.Now()
 	if err != nil {
 		t.Fatal(err)
 	}
 	mode := "quantity"
+	started = time.Now()
 	quantity, err := catalog.Create(t.Context(), cookie.Value, "holding-default-quantity", store.ItemCreate{Name: "Quantity", TrackingMode: &mode})
+	ended = time.Now()
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Seed through real transaction services, not HTTP flooding, SQL exposure or a
 	// production rate-limit override. Each signed collection still has >1 page.
 	for index := range 51 {
-		if _, err := inventory.CreateUnit(t.Context(), cookie.Value, fmt.Sprintf("holding-default-unit-%d", index), individual.ID, int64(index+1), store.UnitCreate{}); err != nil {
-			t.Fatal(err)
-		}
-		location, err := locations.Create(t.Context(), cookie.Value, fmt.Sprintf("holding-default-place-%d", index), 0, store.LocationCreate{Code: fmt.Sprintf("PLACE-%d", index), Name: "Placement"})
+		started = time.Now()
+		_, err = inventory.CreateUnit(t.Context(), cookie.Value, fmt.Sprintf("holding-default-unit-%d", index), individual.ID, int64(index+1), store.UnitCreate{})
+		ended = time.Now()
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := inventory.Receive(t.Context(), cookie.Value, fmt.Sprintf("holding-default-stock-%d", index), int64(index+1), store.StockReceive{ItemID: quantity.ID, TargetLocationID: location.ID, QuantityBase: 1}); err != nil {
+		started = time.Now()
+		location, err := locations.Create(t.Context(), cookie.Value, fmt.Sprintf("holding-default-place-%d", index), 0, store.LocationCreate{Code: fmt.Sprintf("PLACE-%d", index), Name: "Placement"})
+		ended = time.Now()
+		if err != nil {
+			t.Fatal(err)
+		}
+		started = time.Now()
+		_, err = inventory.Receive(t.Context(), cookie.Value, fmt.Sprintf("holding-default-stock-%d", index), int64(index+1), store.StockReceive{ItemID: quantity.ID, TargetLocationID: location.ID, QuantityBase: 1})
+		ended = time.Now()
+		if err != nil {
 			t.Fatal(err)
 		}
 	}
+	get := func(path string) *httptest.ResponseRecorder {
+		started = time.Now()
+		response := respond(handler, domainRequest(http.MethodGet, path, "", cookie, csrf, "", ""))
+		ended = time.Now()
+		return response
+	}
 	call := func(path string) {
-		first := ownedPageReply(t, respond(handler, domainRequest(http.MethodGet, path, "", cookie, csrf, "", "")))
+		first := ownedPageReply(t, get(path))
 		if len(first.Data) != 50 || first.NextCursor == nil {
 			t.Fatal("holding collection did not preserve its default 50-row page", path)
 		}
-		last := ownedPageReply(t, respond(handler, domainRequest(http.MethodGet, path+"?cursor="+url.QueryEscape(*first.NextCursor), "", cookie, csrf, "", "")))
+		last := ownedPageReply(t, get(path+"?cursor="+url.QueryEscape(*first.NextCursor)))
 		if len(last.Data) != 1 || last.NextCursor != nil {
 			t.Fatal("holding collection did not finish the remaining source", path)
 		}
 	}
 	call("/api/v1/items/" + individual.ID + "/units")
 	call("/api/v1/inventory")
-	units := ownedPageReply(t, respond(handler, domainRequest(http.MethodGet, "/api/v1/items/"+individual.ID+"/units?limit=1", "", cookie, csrf, "", "")))
+	units := ownedPageReply(t, get("/api/v1/items/"+individual.ID+"/units?limit=1"))
 	if units.NextCursor == nil {
 		t.Fatal("Unit cursor fixture failed")
 	}
-	expectError(t, respond(handler, domainRequest(http.MethodGet, "/api/v1/items/"+quantity.ID+"/units?limit=1&cursor="+url.QueryEscape(*units.NextCursor), "", cookie, csrf, "", "")), 400, "INVALID_CURSOR")
-	stock := ownedPageReply(t, respond(handler, domainRequest(http.MethodGet, "/api/v1/inventory?limit=1", "", cookie, csrf, "", "")))
+	expectError(t, get("/api/v1/items/"+quantity.ID+"/units?limit=1&cursor="+url.QueryEscape(*units.NextCursor)), 400, "INVALID_CURSOR")
+	stock := ownedPageReply(t, get("/api/v1/inventory?limit=1"))
 	if stock.NextCursor == nil {
 		t.Fatal("Stock cursor fixture failed")
 	}
 	for _, path := range []string{"/api/v1/inventory?limit=2&cursor=" + url.QueryEscape(*stock.NextCursor), "/api/v1/inventory?limit=1&status=active&cursor=" + url.QueryEscape(*stock.NextCursor)} {
-		expectError(t, respond(handler, domainRequest(http.MethodGet, path, "", cookie, csrf, "", "")), 400, "INVALID_CURSOR")
+		expectError(t, get(path), 400, "INVALID_CURSOR")
 	}
 }
 

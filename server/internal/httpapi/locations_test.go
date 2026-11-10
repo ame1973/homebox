@@ -19,9 +19,9 @@ import (
 	"homebox/internal/store"
 )
 
-func domainHTTPFixture(t *testing.T) (*store.Auth, http.Handler, *http.Cookie, string) {
+func domainHTTPFixture(t *testing.T, databasePath ...*string) (*store.Auth, http.Handler, *http.Cookie, string) {
 	t.Helper()
-	auth := newTestAuth(t)
+	auth := newTestAuth(t, databasePath...)
 	setupAccount(t, auth, true)
 	cookie, csrf := testCredentials(t, auth, changedPassword)
 	return auth, authHandler(t, auth), cookie, csrf

@@ -23,13 +23,17 @@ import (
 const initialPassword = "initial HTTP fixture password"
 const changedPassword = "different HTTP fixture password"
 
-func newTestAuth(t *testing.T) *store.Auth {
+func newTestAuth(t *testing.T, databasePath ...*string) *store.Auth {
 	t.Helper()
 	directory := t.TempDir()
 	if err := os.Chmod(directory, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	db, err := store.Open(t.Context(), store.Config{Path: filepath.Join(directory, "homebox.sqlite"), Migrate: true})
+	path := filepath.Join(directory, "homebox.sqlite")
+	if len(databasePath) > 0 {
+		*databasePath[0] = path
+	}
+	db, err := store.Open(t.Context(), store.Config{Path: path, Migrate: true})
 	if err != nil {
 		t.Fatal(err)
 	}

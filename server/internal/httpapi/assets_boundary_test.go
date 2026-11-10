@@ -5,32 +5,36 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"homebox/internal/store"
 )
 
 type assetHTTPSource struct {
-	auth      *store.Auth
-	handler   http.Handler
-	cookie    *http.Cookie
-	csrf      string
-	catalog   *store.Catalog
-	inventory *store.Inventory
-	assets    *store.Assets
-	item      store.Item
-	unit      store.Unit
-	asset     store.Asset
-	input     store.AssetProfileWrite
+	auth         *store.Auth
+	handler      http.Handler
+	cookie       *http.Cookie
+	csrf         string
+	catalog      *store.Catalog
+	inventory    *store.Inventory
+	assets       *store.Assets
+	item         store.Item
+	unit         store.Unit
+	asset        store.Asset
+	input        store.AssetProfileWrite
+	databasePath string
 }
 
 func assetHTTPSourceFixture(t *testing.T, profile bool) assetHTTPSource {
 	t.Helper()
-	auth, handler, cookie, csrf := domainHTTPFixture(t)
+	var databasePath string
+	auth, handler, cookie, csrf := domainHTTPFixture(t, &databasePath)
 	catalog, err := store.NewCatalog(auth)
 	if err != nil {
 		t.Fatal(err)
@@ -68,7 +72,7 @@ func assetHTTPSourceFixture(t *testing.T, profile bool) assetHTTPSource {
 			t.Fatal(err)
 		}
 	}
-	return assetHTTPSource{auth, handler, cookie, csrf, catalog, inventory, assets, item, unit, asset, input}
+	return assetHTTPSource{auth, handler, cookie, csrf, catalog, inventory, assets, item, unit, asset, input, databasePath}
 }
 
 func TestAssetsHTTPEveryWriterRechecksSQLAuthorizationAfterReadingItsActualBody(t *testing.T) {
@@ -307,54 +311,87 @@ func TestAssetsHTTPExplicitKeysBindCompleteInputOriginalHeaderOperationAndOwner(
 
 func TestAssetsHTTPDefaultCollectionsCompleteActualProfilesAndIndependentOwnedHistory(t *testing.T) {
 	f := assetHTTPSourceFixture(t, true)
+	var started, ended time.Time
+	observedCookie := f.cookie
+	defer func() {
+		if t.Failed() {
+			logSessionFailure(t, f.databasePath, observedCookie, started, ended)
+		}
+	}()
 	var otherID string
 	// Real transaction services create >1 page without HTTP flooding, SQL exposure
 	// or a production limiter override. Event IDs and counters are never invented.
 	for index := range 50 {
+		started = time.Now()
 		item, err := f.catalog.Get(t.Context(), f.cookie.Value, f.item.ID)
+		ended = time.Now()
 		if err != nil {
 			t.Fatal(err)
 		}
+		started = time.Now()
 		unit, err := f.inventory.CreateUnit(t.Context(), f.cookie.Value, fmt.Sprintf("asset-default-unit-%d", index), item.ID, item.Revision, store.UnitCreate{})
+		ended = time.Now()
 		if err != nil {
 			t.Fatal(err)
 		}
 		otherID = unit.ID
+		started = time.Now()
 		item, err = f.catalog.Get(t.Context(), f.cookie.Value, item.ID)
+		ended = time.Now()
 		if err != nil {
 			t.Fatal(err)
 		}
 		input := f.input
 		input.ItemRevision = item.Revision
-		if _, err := f.assets.PutProfile(t.Context(), f.cookie.Value, fmt.Sprintf("asset-default-profile-%d", index), unit.ID, unit.Revision, input); err != nil {
+		started = time.Now()
+		_, err = f.assets.PutProfile(t.Context(), f.cookie.Value, fmt.Sprintf("asset-default-profile-%d", index), unit.ID, unit.Revision, input)
+		ended = time.Now()
+		if err != nil {
 			t.Fatal(err)
 		}
 	}
 	for index := range 51 {
+		started = time.Now()
 		asset, err := f.assets.Get(t.Context(), f.cookie.Value, f.unit.ID)
+		ended = time.Now()
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := f.assets.RecordUsage(t.Context(), f.cookie.Value, fmt.Sprintf("asset-default-use-%d", index), f.unit.ID, asset.Revision, store.UsageWrite{Delta: 1, UsageUnit: "times", EventType: "use", OccurredAt: "2026-11-07T00:00:00Z"}); err != nil {
+		started = time.Now()
+		_, err = f.assets.RecordUsage(t.Context(), f.cookie.Value, fmt.Sprintf("asset-default-use-%d", index), f.unit.ID, asset.Revision, store.UsageWrite{Delta: 1, UsageUnit: "times", EventType: "use", OccurredAt: "2026-11-07T00:00:00Z"})
+		ended = time.Now()
+		if err != nil {
 			t.Fatal(err)
 		}
+		started = time.Now()
 		asset, err = f.assets.Get(t.Context(), f.cookie.Value, f.unit.ID)
+		ended = time.Now()
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := f.assets.RecordCost(t.Context(), f.cookie.Value, fmt.Sprintf("asset-default-cost-%d", index), f.unit.ID, asset.Revision, store.CostWrite{AmountMinor: 1, Currency: "JPY", Kind: "repair", Direction: "expense", OccurredAt: "2026-11-07T00:00:00Z"}); err != nil {
+		started = time.Now()
+		_, err = f.assets.RecordCost(t.Context(), f.cookie.Value, fmt.Sprintf("asset-default-cost-%d", index), f.unit.ID, asset.Revision, store.CostWrite{AmountMinor: 1, Currency: "JPY", Kind: "repair", Direction: "expense", OccurredAt: "2026-11-07T00:00:00Z"})
+		ended = time.Now()
+		if err != nil {
 			t.Fatal(err)
 		}
+	}
+	call := func(path string, cookie *http.Cookie, csrf string) *httptest.ResponseRecorder {
+		observedCookie = cookie
+		started = time.Now()
+		response := respond(f.handler, domainRequest(http.MethodGet, path, "", cookie, csrf, "", ""))
+		ended = time.Now()
+		return response
 	}
 	paths := []string{"/api/v1/assets", "/api/v1/units/" + f.unit.ID + "/usage", "/api/v1/units/" + f.unit.ID + "/costs"}
 	cursors := make(map[string]string)
 	for _, path := range paths {
-		first := ownedPageReply(t, respond(f.handler, domainRequest(http.MethodGet, path, "", f.cookie, f.csrf, "", "")))
+		first := ownedPageReply(t, call(path, f.cookie, f.csrf))
 		if len(first.Data) != 50 || first.NextCursor == nil {
 			t.Fatal("Asset collection lost its actual default 50-row page", path)
 		}
 		cursors[path] = *first.NextCursor
-		last := ownedPageReply(t, respond(f.handler, domainRequest(http.MethodGet, path+"?cursor="+url.QueryEscape(*first.NextCursor), "", f.cookie, f.csrf, "", "")))
+		last := ownedPageReply(t, call(path+"?cursor="+url.QueryEscape(*first.NextCursor), f.cookie, f.csrf))
 		if len(last.Data) != 1 || last.NextCursor != nil {
 			t.Fatal("Asset collection did not finish its remaining actual row", path)
 		}
@@ -374,28 +411,28 @@ func TestAssetsHTTPDefaultCollectionsCompleteActualProfilesAndIndependentOwnedHi
 			}
 		}
 		for _, query := range []string{"limit=1&cursor=", "limit=100&cursor="} {
-			expectError(t, respond(f.handler, domainRequest(http.MethodGet, path+"?"+query+url.QueryEscape(*first.NextCursor), "", f.cookie, f.csrf, "", "")), 400, "INVALID_CURSOR")
+			expectError(t, call(path+"?"+query+url.QueryEscape(*first.NextCursor), f.cookie, f.csrf), 400, "INVALID_CURSOR")
 		}
 	}
 	for _, path := range paths {
 		for other, cursor := range cursors {
 			if other != path {
-				expectError(t, respond(f.handler, domainRequest(http.MethodGet, path+"?cursor="+url.QueryEscape(cursor), "", f.cookie, f.csrf, "", "")), 400, "INVALID_CURSOR")
+				expectError(t, call(path+"?cursor="+url.QueryEscape(cursor), f.cookie, f.csrf), 400, "INVALID_CURSOR")
 			}
 		}
 	}
 	for _, kind := range []string{"usage", "costs"} {
-		expectError(t, respond(f.handler, domainRequest(http.MethodGet, "/api/v1/units/"+otherID+"/"+kind+"?cursor="+url.QueryEscape(cursors["/api/v1/units/"+f.unit.ID+"/"+kind]), "", f.cookie, f.csrf, "", "")), 400, "INVALID_CURSOR")
+		expectError(t, call("/api/v1/units/"+otherID+"/"+kind+"?cursor="+url.QueryEscape(cursors["/api/v1/units/"+f.unit.ID+"/"+kind]), f.cookie, f.csrf), 400, "INVALID_CURSOR")
 	}
-	expectError(t, respond(f.handler, domainRequest(http.MethodGet, "/api/v1/assets?currency=JPY&cursor="+url.QueryEscape(cursors["/api/v1/assets"]), "", f.cookie, f.csrf, "", "")), 400, "INVALID_CURSOR")
+	expectError(t, call("/api/v1/assets?currency=JPY&cursor="+url.QueryEscape(cursors["/api/v1/assets"]), f.cookie, f.csrf), 400, "INVALID_CURSOR")
 	fresh, csrf := testCredentials(t, f.auth, changedPassword)
 	for _, path := range paths {
-		page := ownedPageReply(t, respond(f.handler, domainRequest(http.MethodGet, path+"?cursor="+url.QueryEscape(cursors[path]), "", fresh, csrf, "", "")))
+		page := ownedPageReply(t, call(path+"?cursor="+url.QueryEscape(cursors[path]), fresh, csrf))
 		if len(page.Data) != 1 || page.NextCursor != nil {
 			t.Fatal("same-principal fresh login invalidated a live collection continuation")
 		}
 	}
-	asset := assetHTTPReply[store.Asset](t, respond(f.handler, domainRequest(http.MethodGet, "/api/v1/units/"+f.unit.ID+"/asset", "", fresh, csrf, "", "")), 9)
+	asset := assetHTTPReply[store.Asset](t, call("/api/v1/units/"+f.unit.ID+"/asset", fresh, csrf), 9)
 	if asset.Revision != 103 {
 		t.Fatal("collection reads invented aggregate authority", strconv.FormatInt(asset.Revision, 10))
 	}
