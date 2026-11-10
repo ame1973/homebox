@@ -190,6 +190,8 @@
 
 ### Fixed
 
+- Prevent SQLite replacement writes from silently deleting retained mutation, location, inventory, purchase and Asset history or overwriting frozen sync payloads. Migration 0020 guards declared and explicit positive/negative non-sentinel row identities, while every HomeBox connection enables recursive triggers to protect the special hidden-rowid sentinel as well. Preserve normal financial updates, new appends, explicit sync retention, original-key rollback and exact pre-upgrade data. Exercise primary/alternate conflicts, upgrade snapshots, failed migration rollback and connection replacement; this does not implement sync retention or protect against an operator bypassing database ownership.
+
 - Recheck the exact domain idempotency receipt and immutable-audit snapshot after session activity and final source checks, for both new mutations and original-key replays. Roll back late receipt fingerprint, status, body, timestamp or audit changes rather than returning a result that cannot be reconciled; reject replay against a different audit principal, dataset epoch or operation. Retain original expiry and do not reapply expired claims.
 
 - Enforce actual decoded UTF-8 byte limits for live browser cursors and returned continuations across metadata, catalog, holdings, purchases, Assets and financial corrections. Keep the independent 2048-byte and Stock 4096-byte limits, reject lone surrogates without repair and retain only valid cursor trails through navigation. Existing ASCII signed tokens and server policy remain unchanged.

@@ -141,9 +141,12 @@ func TestConnectionReplacementPreservesRequiredPragmas(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		var foreignKeys, timeout int
+		var foreignKeys, recursiveTriggers, timeout int
 		var mode string
 		if err = connection.QueryRowContext(t.Context(), "PRAGMA foreign_keys").Scan(&foreignKeys); err != nil {
+			t.Fatal(err)
+		}
+		if err = connection.QueryRowContext(t.Context(), "PRAGMA recursive_triggers").Scan(&recursiveTriggers); err != nil {
 			t.Fatal(err)
 		}
 		if err = connection.QueryRowContext(t.Context(), "PRAGMA busy_timeout").Scan(&timeout); err != nil {
@@ -155,8 +158,19 @@ func TestConnectionReplacementPreservesRequiredPragmas(t *testing.T) {
 		if err = connection.Close(); err != nil {
 			t.Fatal(err)
 		}
-		if foreignKeys != 1 || timeout != 5000 || mode != "wal" {
+		if foreignKeys != 1 || recursiveTriggers != 1 || timeout != 5000 || mode != "wal" {
 			t.Fatal("replacement connection lost its safety pragmas")
+		}
+	}
+	readOnly, err := openSQL(s.path, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer readOnly.Close()
+	readOnly.SetMaxIdleConns(0)
+	for range 3 {
+		if scalar[int](t, readOnly, "PRAGMA recursive_triggers") != 1 {
+			t.Fatal("replacement read-only connection lost its recursive-trigger setting")
 		}
 	}
 }

@@ -61,9 +61,9 @@ func TestAssetProfileIgnoredOrRewrittenWritesCannotPublishIncompleteIntent(t *te
 				}
 			}
 			if failure == "rewritten profile" {
-				execSQL(t, s.db, "CREATE TRIGGER fail_profile_write AFTER UPDATE ON asset_profiles BEGIN UPDATE asset_profiles SET manual_acquisition_minor=999 WHERE item_unit_id=NEW.item_unit_id; END")
+				execSQL(t, s.db, "CREATE TRIGGER fail_profile_write AFTER UPDATE ON asset_profiles WHEN NEW.manual_acquisition_minor IS NOT 999 BEGIN UPDATE asset_profiles SET manual_acquisition_minor=999 WHERE item_unit_id=NEW.item_unit_id; END")
 			} else if failure == "corrupt stored profile" {
-				execSQL(t, s.db, "CREATE TRIGGER fail_profile_write AFTER UPDATE ON asset_profiles BEGIN UPDATE asset_profiles SET currency='jpy' WHERE item_unit_id=NEW.item_unit_id; END")
+				execSQL(t, s.db, "CREATE TRIGGER fail_profile_write AFTER UPDATE ON asset_profiles WHEN NEW.currency<>'jpy' BEGIN UPDATE asset_profiles SET currency='jpy' WHERE item_unit_id=NEW.item_unit_id; END")
 			} else {
 				execSQL(t, s.db, "CREATE TRIGGER fail_profile_write BEFORE "+verb+" ON "+table+" BEGIN SELECT RAISE(IGNORE); END")
 			}

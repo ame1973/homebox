@@ -132,6 +132,8 @@ func TestPurchaseLineCorrectionFreshMigrationAndNativeConstraintsRequireActualSt
 		t.Fatal("actual atomic producer did not satisfy deferred audit/subject constraints", err)
 	}
 	before = assetProfileState(t, s)
+	// Verify the underlying unique indexes independently of the new insert guard.
+	execSQL(t, s.db, "DROP TRIGGER purchase_line_corrections_no_replace")
 	for _, pair := range [][2]string{{fixture.unitLine.ID, ""}, {fixture.stockLine.ID, entry.After.ID}} {
 		action := "void"
 		var replacement any

@@ -131,6 +131,8 @@ func TestDisposalCorrectionFreshMigrationAndNativeConstraintsRequireActualStruct
 		t.Fatal(err)
 	}
 	before = disposalCorrectionState(t, s)
+	// Verify the underlying unique indexes independently of the new insert guard.
+	execSQL(t, s.db, "DROP TRIGGER asset_disposal_corrections_no_replace")
 	for _, value := range []row{
 		{event, fixture.unit.ID, nil, 1, 100, "void", "Duplicate root", entry.CreatedAt, "{}"},
 		{event, fixture.unit.ID, entry.ID, 1, 100, "void", "Branched predecessor", entry.CreatedAt, "{}"},

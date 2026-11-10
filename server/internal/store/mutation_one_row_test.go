@@ -97,6 +97,11 @@ func TestDomainMutationRejectsReceiptChangedDuringSessionActivity(t *testing.T) 
 						t.Fatal(err)
 					}
 				}
+				if failure.name == "audit" {
+					// Model corrupted database guards to exercise the independent final check.
+					execSQL(t, s.db, "DROP TRIGGER mutation_events_no_replace")
+					execSQL(t, s.db, "DROP TRIGGER mutation_events_no_delete")
+				}
 				execSQL(t, s.db, "CREATE TRIGGER tamper_domain_receipt AFTER UPDATE OF last_seen_at ON sessions BEGIN "+failure.statement+"; END")
 				before := domainState(t, s)
 				value, err := locations.Create(t.Context(), token, key, 0, input)
@@ -126,6 +131,9 @@ func TestDomainReplayRequiresOriginalAuditScope(t *testing.T) {
 			if _, err := locations.Create(t.Context(), token, key, 0, input); err != nil {
 				t.Fatal(err)
 			}
+			// Exercise receipt validation even if the database guards were corrupted.
+			execSQL(t, s.db, "DROP TRIGGER mutation_events_no_replace")
+			execSQL(t, s.db, "DROP TRIGGER mutation_events_no_delete")
 			execSQL(t, s.db, `INSERT OR REPLACE INTO mutation_events(id,admin_id,dataset_epoch,operation,idempotency_key,occurred_at,reason,result_json,note)
  SELECT id,admin_id,`+fields.epoch+`,`+fields.operation+`,idempotency_key,occurred_at,reason,result_json,note FROM mutation_events WHERE operation='post_locations'`)
 			before := domainState(t, s)

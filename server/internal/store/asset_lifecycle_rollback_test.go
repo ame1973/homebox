@@ -56,9 +56,9 @@ func TestAssetLifecycleIgnoredOrRewrittenSourceAndContextCannotClaimSuccess(t *t
 				case "ignored context":
 					execSQL(t, s.db, "CREATE TRIGGER fail_lifecycle_intent BEFORE INSERT ON asset_profile_changes BEGIN SELECT RAISE(IGNORE); END")
 				case "rewritten Unit":
-					execSQL(t, s.db, "CREATE TRIGGER fail_lifecycle_intent AFTER UPDATE ON item_units BEGIN UPDATE item_units SET notes='rewritten' WHERE id=NEW.id; END")
+					execSQL(t, s.db, "CREATE TRIGGER fail_lifecycle_intent AFTER UPDATE ON item_units WHEN NEW.notes<>'rewritten' BEGIN UPDATE item_units SET notes='rewritten' WHERE id=NEW.id; END")
 				case "rewritten profile":
-					execSQL(t, s.db, "CREATE TRIGGER fail_lifecycle_intent AFTER UPDATE ON asset_profiles BEGIN UPDATE asset_profiles SET retired_at='2026-11-08T00:00:00Z' WHERE item_unit_id=NEW.item_unit_id; END")
+					execSQL(t, s.db, "CREATE TRIGGER fail_lifecycle_intent AFTER UPDATE ON asset_profiles WHEN NEW.retired_at IS NOT '2026-11-08T00:00:00Z' BEGIN UPDATE asset_profiles SET retired_at='2026-11-08T00:00:00Z' WHERE item_unit_id=NEW.item_unit_id; END")
 				case "removed original Unit counter":
 					execSQL(t, s.db, "CREATE TRIGGER fail_lifecycle_intent AFTER UPDATE ON asset_profiles BEGIN DELETE FROM current_projections WHERE entity_type='unit' AND entity_id=NEW.item_unit_id; DELETE FROM projection_revisions WHERE entity_type='unit' AND entity_id=NEW.item_unit_id; END")
 				case "removed original Asset counter":

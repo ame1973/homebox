@@ -147,6 +147,7 @@ func dsn(path string, readOnly bool) string {
 	q := url.Values{}
 	q.Set("mode", "rw")
 	q.Add("_pragma", "foreign_keys(1)")
+	q.Add("_pragma", "recursive_triggers(1)")
 	q.Add("_pragma", "busy_timeout(5000)")
 	q.Set("_defensive", "true")
 	if readOnly {
@@ -191,7 +192,7 @@ func (s *Store) capabilities(ctx context.Context) error {
 	defer func() {
 		_, _ = conn.ExecContext(context.WithoutCancel(ctx), "DROP TABLE temp.homebox_fts_probe; DROP TABLE temp.homebox_strict_probe")
 	}()
-	var valid, matches, foreignKeys int
+	var valid, matches, foreignKeys, recursiveTriggers int
 	if err = conn.QueryRowContext(ctx, "SELECT json_valid('{\"valid\":true}')").Scan(&valid); err != nil {
 		return fmt.Errorf("required SQLite JSON support: %w", err)
 	}
@@ -201,8 +202,11 @@ func (s *Store) capabilities(ctx context.Context) error {
 	if err = conn.QueryRowContext(ctx, "PRAGMA foreign_keys").Scan(&foreignKeys); err != nil {
 		return err
 	}
-	if valid != 1 || matches != 1 || foreignKeys != 1 {
-		return errors.New("SQLite JSON, FTS5, or foreign-key capability check failed")
+	if err = conn.QueryRowContext(ctx, "PRAGMA recursive_triggers").Scan(&recursiveTriggers); err != nil {
+		return err
+	}
+	if valid != 1 || matches != 1 || foreignKeys != 1 || recursiveTriggers != 1 {
+		return errors.New("SQLite JSON, FTS5, foreign-key, or recursive-trigger capability check failed")
 	}
 	return nil
 }
