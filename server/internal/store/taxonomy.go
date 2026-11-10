@@ -151,6 +151,7 @@ func validTaxonomyPage(afterID string, limit int) bool {
 }
 
 func (taxonomy *Taxonomy) CreateCategory(ctx context.Context, token, key string, parentRevision int64, input CategoryCreate) (Category, error) {
+	input.ParentID = snapshotPurchaseString(input.ParentID)
 	if !authString(input.Name, 1, 200) || input.ParentID != nil && !validDomainID(*input.ParentID) || input.ParentID == nil && parentRevision != 0 {
 		return Category{}, ErrDomainInput
 	}
@@ -184,6 +185,8 @@ func (taxonomy *Taxonomy) CreateCategory(ctx context.Context, token, key string,
 }
 
 func (taxonomy *Taxonomy) PatchCategory(ctx context.Context, token, key, id string, revision int64, input CategoryPatch) (Category, error) {
+	input.Name = snapshotPurchaseString(input.Name)
+	input.ParentID.Value = snapshotPurchaseString(input.ParentID.Value)
 	if !validDomainID(id) || input.Name == nil && !input.ParentID.Set ||
 		input.Name != nil && !authString(*input.Name, 1, 200) ||
 		!input.ParentID.Set && input.ParentID.Value != nil || input.ParentID.Value != nil && !validDomainID(*input.ParentID.Value) {
