@@ -7,7 +7,7 @@ import * as mediaAPI from '@/lib/api/media'
 import { readMediaMembership, readOwnerMedia } from './model'
 
 vi.mock('@/lib/api/catalog', () => ({ fetchItem: vi.fn(), fetchItemsPage: vi.fn() }))
-vi.mock('@/lib/api/holdings', () => ({ fetchUnit: vi.fn(), fetchItemUnitsPage: vi.fn() }))
+vi.mock('@/lib/api/holdings', () => ({ fetchUnit: vi.fn(), fetchUnitByIdentity: vi.fn(), fetchItemUnitsPage: vi.fn() }))
 vi.mock('@/lib/api/locations', () => ({ fetchLocation: vi.fn(), fetchLocationsPage: vi.fn() }))
 vi.mock('@/lib/api/media', () => ({ fetchMedia: vi.fn(), fetchMediaLinksPage: vi.fn(), fetchOwnerMediaLinksPage: vi.fn() }))
 
@@ -26,6 +26,7 @@ beforeEach(() => {
   vi.mocked(catalog.fetchItem).mockResolvedValue(item)
   vi.mocked(catalog.fetchItemsPage).mockResolvedValue({ data: [item], next_cursor: null })
   vi.mocked(holdings.fetchUnit).mockResolvedValue(unit)
+  vi.mocked(holdings.fetchUnitByIdentity).mockResolvedValue(unit)
   vi.mocked(holdings.fetchItemUnitsPage).mockResolvedValue({ data: [unit], next_cursor: null })
   vi.mocked(locations.fetchLocation).mockResolvedValue(location)
   vi.mocked(locations.fetchLocationsPage).mockResolvedValue({ data: [location], next_cursor: null })
@@ -142,20 +143,21 @@ it('searches every actual Item list page when a retained owner ID cannot be addr
   expect(catalog.fetchItemsPage).toHaveBeenNthCalledWith(4, { limit: 100, cursor: 'again' }, abort)
 })
 
-it('resolves a path-unaddressable Unit through its actual Item collection without inventing a proof', async () => {
-  const legacyUnit = { ...unit, id: 'unit/\0😀' }, unitLink = { ...link, owner_type: 'unit' as const, owner_id: legacyUnit.id }
-  vi.mocked(holdings.fetchItemUnitsPage).mockResolvedValue({ data: [legacyUnit], next_cursor: null })
+it('resolves a path-unaddressable Unit and parent directly from exact actual Unit source', async () => {
+  const legacyUnit = { ...unit, id: 'unit/\0😀', item_id: 'item/\0😀' }, unitLink = { ...link, owner_type: 'unit' as const, owner_id: legacyUnit.id }
+  vi.mocked(holdings.fetchUnitByIdentity).mockResolvedValue(legacyUnit)
   vi.mocked(mediaAPI.fetchOwnerMediaLinksPage).mockResolvedValueOnce({ data: [unitLink], next_cursor: null })
   const abort = signal()
-  expect(await readOwnerMedia({ kind: 'unit', id: legacyUnit.id, itemID: item.id }, abort)).toEqual({ owner: { kind: 'unit', value: legacyUnit }, links: [unitLink] })
-  expect(holdings.fetchUnit).not.toHaveBeenCalled(); expect(holdings.fetchItemUnitsPage).toHaveBeenCalledTimes(2)
-  expect(holdings.fetchItemUnitsPage).toHaveBeenNthCalledWith(1, item.id, { limit: 100 }, abort)
+  expect(await readOwnerMedia({ kind: 'unit', id: legacyUnit.id }, abort)).toEqual({ owner: { kind: 'unit', value: legacyUnit }, links: [unitLink] })
+  expect(holdings.fetchUnit).not.toHaveBeenCalled(); expect(holdings.fetchItemUnitsPage).not.toHaveBeenCalled()
+  expect(holdings.fetchUnitByIdentity).toHaveBeenCalledTimes(2)
+  expect(holdings.fetchUnitByIdentity).toHaveBeenNthCalledWith(1, legacyUnit.id, abort)
 })
 
-it('rejects unsupported Unit paths, conflicting parent scope and absent or failed authoritative list reads', async () => {
-  await expect(readOwnerMedia({ kind: 'unit', id: 'unsafe/unit' }, signal())).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
-  await expect(readOwnerMedia({ kind: 'unit', id: 'unsafe/unit', itemID: 'unsafe/item' }, signal())).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
+it('rejects a conflicting parent scope and propagates actual missing or failed authoritative source', async () => {
   await expect(readOwnerMedia({ kind: 'unit', id: unit.id, itemID: 'other-item' }, signal())).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+  vi.mocked(holdings.fetchUnitByIdentity).mockRejectedValueOnce(new ApiError('NOT_FOUND', { status: 404 }))
+  await expect(readOwnerMedia({ kind: 'unit', id: 'unsafe/unit', itemID: 'unsafe/item' }, signal())).rejects.toMatchObject({ code: 'NOT_FOUND', status: 404 })
   vi.mocked(catalog.fetchItemsPage).mockResolvedValueOnce({ data: [], next_cursor: null })
   const missing = await readOwnerMedia({ kind: 'item', id: 'unsafe/item' }, signal()).catch((failure: unknown) => failure)
   expect(missing).toMatchObject({ code: 'NOT_FOUND' }); expect((missing as ApiError).status).toBeUndefined()

@@ -20,7 +20,7 @@ type holdingOperationTest struct{ method, path, body string }
 func holdingOperationsTest() []holdingOperationTest {
 	return []holdingOperationTest{
 		{http.MethodGet, "/api/v1/items/item/units", ""}, {http.MethodPost, "/api/v1/items/item/units", `{"location_id":null}`},
-		{http.MethodGet, "/api/v1/units/unit", ""}, {http.MethodPatch, "/api/v1/units/unit", `{"notes":"Changed"}`}, {http.MethodDelete, "/api/v1/units/unit", ""},
+		{http.MethodGet, "/api/v1/units/unit", ""}, {http.MethodGet, "/api/v1/units?id=unit", ""}, {http.MethodPatch, "/api/v1/units/unit", `{"notes":"Changed"}`}, {http.MethodDelete, "/api/v1/units/unit", ""},
 		{http.MethodPost, "/api/v1/units/unit/move", `{"target_location_id":"target"}`}, {http.MethodPost, "/api/v1/units/unit/status", `{"status":"lost"}`},
 		{http.MethodGet, "/api/v1/inventory", ""}, {http.MethodPost, "/api/v1/stock/receive", `{"item_id":"item","target_location_id":"target","quantity_base":1}`},
 		{http.MethodPost, "/api/v1/stock/consume", `{"item_id":"item","source_location_id":"source","quantity_base":1}`},

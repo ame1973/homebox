@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { ApiError } from '@/lib/api/client'
 import { fetchItem, fetchItemsPage } from '@/lib/api/catalog'
 import { idSchema, input, pathIDSchema } from '@/lib/api/domain'
-import { fetchItemUnitsPage, fetchUnit, type Unit } from '@/lib/api/holdings'
+import { fetchUnit, fetchUnitByIdentity } from '@/lib/api/holdings'
 import { fetchLocation, fetchLocationsPage } from '@/lib/api/locations'
 import { fetchMedia, fetchMediaLinksPage, fetchOwnerMediaLinksPage, type Media, type MediaLinkView } from '@/lib/api/media'
 import type { MediaOwner } from '@/lib/api/media-writes'
@@ -32,9 +32,8 @@ function selected<T extends { id: string }>(rows: readonly T[], id: string): T {
   return value
 }
 
-// Retained owner IDs may not be representable as paths. Resolve such Items and
-// Locations from complete live lists, and Units from their known Item's complete
-// list. A Unit whose Item path is also unaddressable cannot be resolved here.
+// Retained Item/Location IDs may not be representable as paths; resolve them
+// from complete live lists. Unit query lookup preserves its exact identity.
 async function readOwner(scope: MediaOwnerScope, signal: AbortSignal): Promise<MediaOwner> {
   const addressable = pathIDSchema.safeParse(scope.id).success
   let owner: MediaOwner
@@ -42,13 +41,7 @@ async function readOwner(scope: MediaOwnerScope, signal: AbortSignal): Promise<M
     const value = addressable ? await fetchItem(scope.id, signal) : selected(await readAllMetadata(fetchItemsPage, signal), scope.id)
     owner = { kind: 'item', value }
   } else if (scope.kind === 'unit') {
-    let value: Unit
-    if (addressable) value = await fetchUnit(scope.id, signal)
-    else {
-      const itemID = scope.itemID
-      if (itemID === undefined || !pathIDSchema.safeParse(itemID).success) throw new ApiError('VALIDATION_ERROR')
-      value = selected(await readAllMetadata((query, signal) => fetchItemUnitsPage(itemID, query, signal), signal), scope.id)
-    }
+    const value = addressable ? await fetchUnit(scope.id, signal) : await fetchUnitByIdentity(scope.id, signal)
     owner = { kind: 'unit', value }
   } else {
     const value = addressable && scope.id !== 'tree' ? await fetchLocation(scope.id, signal)

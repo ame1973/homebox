@@ -15,7 +15,7 @@ const test = applicationTest.extend<{}, { applicationWebDirectory: string }>({
     try {
       cpSync(fileURLToPath(new URL('../../dist', import.meta.url)), web, { recursive: true })
       // The private SDK bundle is never a production test entrypoint.
-      writeFileSync(entry, `export * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/media.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/media-writes.ts', import.meta.url)))};\nexport { fetchItem } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/catalog.ts', import.meta.url)))};\nexport { createUnit } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/holdings.ts', import.meta.url)))};\nexport { createLocation } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/locations.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/features/media/model.ts', import.meta.url)))};\n`)
+      writeFileSync(entry, `export * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/media.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/media-writes.ts', import.meta.url)))};\nexport { fetchItem } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/catalog.ts', import.meta.url)))};\nexport { createUnit, fetchUnitByIdentity } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/holdings.ts', import.meta.url)))};\nexport { createLocation } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/locations.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/features/media/model.ts', import.meta.url)))};\n`)
       await build({ configFile: false, logLevel: 'silent', resolve: { alias: { '@': fileURLToPath(new URL('../../src', import.meta.url)) } },
         build: { outDir: sdk, minify: false, lib: { entry, formats: ['es'], fileName: 'media-sdk' } } })
       cpSync(join(sdk, 'media-sdk.js'), join(web, 'assets', 'media-sdk.js'))
@@ -58,8 +58,8 @@ function prepareMediaFixture(database: string, count = 51, legacy = false) {
       item.run(itemID, 'Legacy owner', 'individual', now, now)
       baseline('item', itemID, 1, { id: itemID, name: 'Legacy owner', brand: null, model: null, category_id: null, description: '', notes: '', tracking_mode: 'individual', unit_code: 'pcs', base_unit: 'pcs', scale_factor: 1, status: 'active' })
       counter.run('search_doc', JSON.stringify(['item', itemID]), 1)
-      db.prepare('INSERT INTO item_units(id,item_id,asset_code,status,created_at,updated_at) VALUES(?,?,?,?,?,?)').run(unitID, empty, 'LEGACY-ASSET', 'stored', now, now)
-      baseline('unit', unitID, 1, { id: unitID, item_id: empty, location_id: null, asset_code: 'LEGACY-ASSET', serial_number: null, notes: '', status: 'stored' })
+      db.prepare('INSERT INTO item_units(id,item_id,asset_code,status,created_at,updated_at) VALUES(?,?,?,?,?,?)').run(unitID, itemID, 'LEGACY-ASSET', 'stored', now, now)
+      baseline('unit', unitID, 1, { id: unitID, item_id: itemID, location_id: null, asset_code: 'LEGACY-ASSET', serial_number: null, notes: '', status: 'stored' })
       counter.run('search_doc', JSON.stringify(['unit', unitID]), 1)
       db.prepare('INSERT INTO locations(id,code,name,kind,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?)').run(locationID, 'LEGACY-ROOM', 'Legacy room', 'room', 'active', now, now)
       baseline('location', locationID, 1, { id: locationID, parent_id: null, code: 'LEGACY-ROOM', name: 'Legacy room', kind: 'room', status: 'active', sort_order: 0, description: '' })
@@ -439,27 +439,35 @@ test.describe('complete large Media review scopes', () => {
 test.describe('retained Media owner identities', () => {
   test.use({ applicationDatabaseFixture: { prepare(database) { prepareMediaFixture(database, 51, true) } } })
 
-  test('resolves real path-unaddressable Item and Unit and reserved Location owners from complete source lists', async ({ page, application }) => {
+  test('resolves real path-unaddressable Item and Unit plus reserved Location owners from actual source', async ({ page, application }) => {
     await provision(page, application)
-    const requests: string[] = []
-    page.on('request', (request) => { if (request.method() === 'GET') requests.push(new URL(request.url()).pathname) })
+    const requests: string[] = [], unitIDs: string[] = []
+    page.on('request', (request) => {
+      if (request.method() !== 'GET') return
+      const url = new URL(request.url())
+      requests.push(url.pathname)
+      if (url.pathname === '/api/v1/units') unitIDs.push(...url.searchParams.getAll('id'))
+    })
     await page.goto('/')
-    const result = await page.evaluate(async ({ empty }) => {
+    const result = await page.evaluate(async () => {
       const modulePath = '/assets/media-sdk.js', api = await import(modulePath), signal = () => new AbortController().signal
       return {
         item: await api.readOwnerMedia({ kind: 'item', id: 'legacy/item\0😀' }, signal()),
-        unit: await api.readOwnerMedia({ kind: 'unit', id: 'legacy/unit\0😀', itemID: empty }, signal()),
+        unit: await api.readOwnerMedia({ kind: 'unit', id: 'legacy/unit\0😀' }, signal()),
+        unitLookup: await api.fetchUnitByIdentity('legacy/unit\0😀', signal()),
         location: await api.readOwnerMedia({ kind: 'location', id: 'tree' }, signal()),
       }
-    }, { empty })
+    })
     expect(result.item.owner).toMatchObject({ kind: 'item', value: { id: 'legacy/item\0😀', revision: 1 } })
     expect(result.item.links).toMatchObject([{ id: 'legacy-item-link', owner_id: 'legacy/item\0😀' }])
-    expect(result.unit.owner).toMatchObject({ kind: 'unit', value: { id: 'legacy/unit\0😀', item_id: empty, revision: 1 } })
+    expect(result.unit.owner).toMatchObject({ kind: 'unit', value: { id: 'legacy/unit\0😀', item_id: 'legacy/item\0😀', revision: 1 } })
     expect(result.unit.links).toMatchObject([{ id: 'legacy-unit-link', owner_id: 'legacy/unit\0😀' }])
+    expect(result.unitLookup).toEqual(result.unit.owner.value)
     expect(result.location.owner).toMatchObject({ kind: 'location', value: { id: 'tree', revision: 1 } })
     expect(result.location.links).toMatchObject([{ id: 'legacy-location-link', owner_id: 'tree' }])
     expect(requests.filter((path) => path === '/api/v1/items')).toHaveLength(2)
-    expect(requests.filter((path) => path === `/api/v1/items/${empty}/units`)).toHaveLength(2)
+    expect(requests.filter((path) => path === '/api/v1/units')).toHaveLength(3)
+    expect(unitIDs).toEqual(['legacy/unit\0😀', 'legacy/unit\0😀', 'legacy/unit\0😀'])
     expect(requests.filter((path) => path === '/api/v1/locations/tree')).toHaveLength(2)
     expect(requests.filter((path) => path === '/api/v1/media/links')).toHaveLength(3)
   })

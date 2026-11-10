@@ -97,6 +97,9 @@ func exerciseHoldingsHTTP(t *testing.T, call func(string, string, string, string
 	if current := ownedReply[store.Unit](t, call(http.MethodGet, unitPath, "", "", ""), individual.ID, 8); !reflect.DeepEqual(current, unit) {
 		t.Fatal("Unit GET differed from committed source")
 	}
+	if current := ownedReply[store.Unit](t, call(http.MethodGet, "/api/v1/units?id="+url.QueryEscape(unit.ID), "", "", ""), individual.ID, 8); !reflect.DeepEqual(current, unit) {
+		t.Fatal("query Unit GET differed from the same independent source")
+	}
 	unit = ownedReply[store.Unit](t, call(http.MethodPatch, unitPath, `{"serial_number":"","notes":"\u0000Changed unit é\n"}`, "http-unit-patch", `"1"`), individual.ID, 8)
 	if unit.Revision != 2 || unit.SerialNumber == nil || *unit.SerialNumber != "" || unit.Notes != "\x00Changed unit é\n" {
 		t.Fatal("Unit partial metadata lost null/empty/Unicode distinction")
@@ -124,6 +127,7 @@ func exerciseHoldingsHTTP(t *testing.T, call func(string, string, string, string
 		t.Fatal("Unit deletion lost original proof/ack semantics or fabricated a financial disposal")
 	}
 	expectError(t, call(http.MethodGet, unitPath, "", "", ""), 404, "NOT_FOUND")
+	expectError(t, call(http.MethodGet, "/api/v1/units?id="+url.QueryEscape(unit.ID), "", "", ""), 404, "NOT_FOUND")
 	if freshLogin != nil {
 		if response := call(http.MethodPost, "/api/v1/auth/logout", "", "http-holding-logout", ""); response.Code != 200 {
 			t.Fatal("holding session logout failed")
@@ -151,7 +155,7 @@ func exerciseHoldingsHTTP(t *testing.T, call func(string, string, string, string
 	}
 }
 
-func TestHoldingsHTTPAllTwelveOperationsUseRealServicesOriginalProofsAndFrozenReplies(t *testing.T) {
+func TestHoldingsHTTPAllThirteenOperationsUseRealServicesOriginalProofsAndFrozenReplies(t *testing.T) {
 	_, handler, cookie, csrf := domainHTTPFixture(t)
 	call := func(method, path, body, key, revision string) *httptest.ResponseRecorder {
 		return respond(handler, domainRequest(method, path, body, cookie, csrf, key, revision))
@@ -159,7 +163,7 @@ func TestHoldingsHTTPAllTwelveOperationsUseRealServicesOriginalProofsAndFrozenRe
 	exerciseHoldingsHTTP(t, call, nil)
 }
 
-func TestHoldingsHTTPAllTwelveOperationsThroughVerifiedTLSAndFreshSession(t *testing.T) {
+func TestHoldingsHTTPAllThirteenOperationsThroughVerifiedTLSAndFreshSession(t *testing.T) {
 	call, login := domainTLSFixture(t)
 	exerciseHoldingsHTTP(t, call, login)
 }

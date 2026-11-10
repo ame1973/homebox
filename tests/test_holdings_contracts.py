@@ -32,6 +32,32 @@ WRITES = [
 
 
 class HoldingsContractTests(unittest.TestCase):
+    def test_exact_query_unit_lookup_preserves_retained_identity_and_independent_etag(self):
+        self.assertEqual({"get"}, set(API["paths"]["/units"]))
+        operation = API["paths"]["/units"]["get"]
+        original = API["paths"]["/units/{id}"]["get"]
+        self.assertEqual("get_unit_by_identity", operation["operationId"])
+        self.assertEqual(0, operation["x-max-body-bytes"])
+        self.assertEqual(16384, operation["x-max-query-bytes"])
+        self.assertEqual("unit", operation["x-response-revision-scope"])
+        self.assertNotEqual([], operation.get("security", API["security"]))
+        self.assertNotIn("requestBody", operation)
+        self.assertEqual([("id", "query", True)], [(param["name"], param["in"], param["required"]) for param in operation["parameters"]])
+        schema = operation["parameters"][0]["schema"]
+        self.assertEqual(SCHEMAS["Unit"]["properties"]["id"], schema)
+        identity = Draft202012Validator(schema)
+        for valid in ["legacy/item/\x00😀", "tree", ".", "😀" * 128]:
+            identity.validate(valid)
+        for invalid in ["", "😀" * 129, None, 1]:
+            with self.subTest(identity=invalid), self.assertRaises(ValidationError):
+                identity.validate(invalid)
+        response = operation["responses"]["200"]
+        self.assertEqual({"$ref": "#/components/schemas/Unit"}, response["content"]["application/json"]["schema"])
+        self.assertEqual({"Cache-Control", "ETag"}, set(response["headers"]))
+        self.assertEqual(original["responses"]["200"]["headers"]["ETag"], response["headers"]["ETag"])
+        for word in ["exact", "path", "completed session", "SQL", "not a collection"]:
+            self.assertIn(word, operation["description"])
+
     def test_unit_resources_retain_complete_bounded_independent_identity_and_offline_shape(self):
         validator("Unit").validate(UNIT)
         payload = {key: value for key, value in UNIT.items() if key != "revision"}

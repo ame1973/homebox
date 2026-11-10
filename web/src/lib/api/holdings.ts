@@ -71,6 +71,13 @@ export async function fetchUnit(id: string, signal: AbortSignal): Promise<Unit> 
   return resourceRequest(unitSchema, signal, (signal) => apiClient.GET('/units/{id}', { signal, params: { path: { id: resourceID } } }), { id: resourceID }, 8_000)
 }
 
+// Query identity preserves retained IDs that are not safe path segments. Both
+// routes read the same actual Unit and its independent revision/ETag.
+export async function fetchUnitByIdentity(id: string, signal: AbortSignal): Promise<Unit> {
+  const resourceID = input(idSchema, id)
+  return resourceRequest(unitSchema, signal, (signal) => apiClient.GET('/units', { signal, params: { query: { id: resourceID } } }), { id: resourceID }, 8_000)
+}
+
 export async function fetchItemUnitsPage(itemID: string, query: UnitPageQuery, signal: AbortSignal): Promise<UnitsPage> {
   const owner = input(pathIDSchema, itemID)
   const values = input(pageQuerySchema, query)

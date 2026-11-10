@@ -25,7 +25,7 @@ const test = applicationTest.extend<{}, { applicationWebDirectory: string }>({
 
 test.use({ trace: 'off', screenshot: 'off', video: 'off' })
 
-test('drives all seven Unit adapters with original Item/Unit proofs, exact metadata and retained receipts', async ({ page, application }) => {
+test('drives all eight Unit adapters with original Item/Unit proofs, exact metadata and retained receipts', async ({ page, application }) => {
   await provision(page, application)
   const writes = watchDomainWrites(page, ['/api/v1/items', '/api/v1/units'])
   await page.goto('/')
@@ -54,6 +54,7 @@ test('drives all seven Unit adapters with original Item/Unit proofs, exact metad
     const wrongOwner = await failureCode(() => api.fetchItemUnitsPage(other.id, { limit: 1, cursor: firstPage.next_cursor }, read()))
     const wrongLimit = await failureCode(() => api.fetchItemUnitsPage(item.id, { limit: 2, cursor: firstPage.next_cursor }, read()))
     const detail = await api.fetchUnit(created.id, read())
+    const detailByIdentity = await api.fetchUnitByIdentity(created.id, read())
     const patched = await api.patchUnit(created.id, { serial_number: '', notes: '  Reviewed é 😀  ' }, { ...context(), itemID: item.id, expectedRevision: created.revision })
     const noop = await api.patchUnit(created.id, { serial_number: '', notes: patched.notes }, { ...context(), itemID: item.id, expectedRevision: patched.revision })
     const stale = await failureCode(() => api.patchUnit(created.id, { notes: 'Not adopted' }, { ...context(), itemID: item.id, expectedRevision: created.revision }))
@@ -67,8 +68,9 @@ test('drives all seven Unit adapters with original Item/Unit proofs, exact metad
     const frozenDeletion = await api.deleteUnit(created.id, deletion)
     const frozenCreation = await api.createUnit(item.id, { location_id: null }, original)
     const missing = await failureCode(() => api.fetchUnit(created.id, read()))
+    const missingByIdentity = await failureCode(() => api.fetchUnitByIdentity(created.id, read()))
     const remaining = await api.fetchItemUnitsPage(item.id, {}, read())
-    return { item, source, target, created, second, firstPage, lastPage, wrongOwner, wrongLimit, detail, patched, noop, stale, moved, retired, operational, disposed, disposedMove, deleted, frozenDeletion, frozenCreation, missing, remaining }
+    return { item, source, target, created, second, firstPage, lastPage, wrongOwner, wrongLimit, detail, detailByIdentity, patched, noop, stale, moved, retired, operational, disposed, disposedMove, deleted, frozenDeletion, frozenCreation, missing, missingByIdentity, remaining }
   })
   expect(result.created).toMatchObject({ item_id: result.item.id, revision: 1, location_id: null, serial_number: null, notes: '', status: 'stored' })
   expect(result.created.asset_code).toMatch(/^AST-/)
@@ -78,6 +80,7 @@ test('drives all seven Unit adapters with original Item/Unit proofs, exact metad
   expect(result.wrongOwner).toBe('INVALID_CURSOR')
   expect(result.wrongLimit).toBe('INVALID_CURSOR')
   expect(result.detail).toEqual(result.created)
+  expect(result.detailByIdentity).toEqual(result.created)
   expect(result.patched).toMatchObject({ id: result.created.id, item_id: result.item.id, revision: 2, serial_number: '', notes: '  Reviewed é 😀  ' })
   expect(result.noop).toEqual(result.patched)
   expect(result.stale).toBe('REVISION_CONFLICT')
@@ -89,7 +92,7 @@ test('drives all seven Unit adapters with original Item/Unit proofs, exact metad
   expect(result.deleted).toMatchObject({ ok: true, revision: 7 })
   expect(result.frozenDeletion).toEqual(result.deleted)
   expect(result.frozenCreation).toEqual(result.created)
-  expect(result.missing).toBe('NOT_FOUND')
+  expect(result.missing).toBe('NOT_FOUND'); expect(result.missingByIdentity).toBe('NOT_FOUND')
   expect(result.remaining).toEqual({ data: [result.second], next_cursor: null })
   const creations = writes.filter((request) => request.method === 'POST' && request.path.endsWith('/units'))
   expect(creations).toHaveLength(3)

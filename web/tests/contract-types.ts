@@ -309,6 +309,16 @@ void [reviewedHoldingItem, reviewedHoldingUnit, unitWithUnknownLocation, unitWit
   nullUnitMove, textHoldingQuantity, incompleteStockTransfer, reasonlessStockAdjustment, implicitStockConversion, incompleteStockMeasurement,
   unprovenHoldingCreation, unprovenHoldingEdit, unprovenStockMutation, originlessHoldingEdit, incompleteUnitPage, incompleteStockPage, unversionedUnitDeletion]
 
+type UnitIdentityQuery = operations['get_unit_by_identity']['parameters']['query']
+const exactLegacyUnitQuery = { id: 'legacy/unit\0😀' } satisfies UnitIdentityQuery
+// @ts-expect-error A Unit identity lookup cannot silently become an unscoped collection.
+const missingUnitIdentityQuery: UnitIdentityQuery = {}
+// @ts-expect-error The sole query identity is exact string text, not a numeric coercion.
+const numericUnitIdentityQuery: UnitIdentityQuery = { id: 4 }
+// @ts-expect-error The exact lookup accepts no unrelated owner or pagination parameters.
+const extraUnitIdentityQuery: UnitIdentityQuery = { id: 'unit', item_id: 'item' }
+void [exactLegacyUnitQuery, missingUnitIdentityQuery, numericUnitIdentityQuery, extraUnitIdentityQuery]
+
 type StockReadQuery = NonNullable<operations['get_inventory']['parameters']['query']>
 const unfilteredStockRead = {} satisfies StockReadQuery
 const filteredStockRead = { item_id: 'item', from: '2026-11-05', to: '2026-11-06', currency: 'TWD', category_id: 'category', location_id: 'location', scope: 'subtree', status: 'archived', merchant: 'Exact merchant', limit: 50, cursor: 'opaque' } satisfies StockReadQuery
@@ -336,6 +346,7 @@ const reviewedQuantityItem = { ...currentItem, tracking_mode: 'quantity' as cons
 const reviewedStockContext = { ...writeContext, item: reviewedQuantityItem }
 const holdingSDKCalls = [
   holdingSDK.fetchUnit(holdingUnit.id, new AbortController().signal),
+  holdingSDK.fetchUnitByIdentity('legacy/unit\0😀', new AbortController().signal),
   holdingSDK.fetchItemUnitsPage(currentItem.id, { limit: 50 }, new AbortController().signal),
   holdingSDK.fetchStockPage(filteredStockRead, new AbortController().signal),
   holdingSDK.createUnit(currentItem.id, unitWithUnknownLocation, owningItemProof),
@@ -350,6 +361,8 @@ const holdingSDKCalls = [
   holdingSDK.transferStock(transferStock, reviewedStockContext),
   holdingSDK.adjustStock(adjustStockToZero, reviewedStockContext),
 ]
+// @ts-expect-error Exact Unit reads require caller-owned cancellation.
+const uncancellableUnitLookup = holdingSDK.fetchUnitByIdentity('unit')
 // @ts-expect-error Unit creation requires an explicit nullable location decision.
 const implicitSDKLocation = holdingSDK.createUnit(currentItem.id, {}, owningItemProof)
 // @ts-expect-error Unit creation requires the original Item proof.
@@ -382,7 +395,7 @@ const reasonlessSDKAdjust = holdingSDK.adjustStock({ ...receiveStock, quantity_b
 const filteredSDKUnits = holdingSDK.fetchItemUnitsPage(currentItem.id, { status: 'stored' }, new AbortController().signal)
 // @ts-expect-error Stock reads do not invent a text-search query.
 const searchedSDKStock = holdingSDK.fetchStockPage({ q: 'uncontracted' }, new AbortController().signal)
-void [holdingSDKCalls, implicitSDKLocation, unprovenSDKUnit, emptySDKUnitPatch, ownerlessSDKUnitPatch, ownerlessSDKUnitDelete, implicitSDKUnitMove,
+void [holdingSDKCalls, uncancellableUnitLookup, implicitSDKLocation, unprovenSDKUnit, emptySDKUnitPatch, ownerlessSDKUnitPatch, ownerlessSDKUnitDelete, implicitSDKUnitMove,
   ambiguousSDKDisposal, financialSDKDisposal, looseSDKStockProof, stockAsSDKItem, overriddenSDKStockProof, convertedSDKStock, incompleteSDKTransfer,
   reasonlessSDKAdjust, filteredSDKUnits, searchedSDKStock]
 

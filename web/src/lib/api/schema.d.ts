@@ -1879,6 +1879,26 @@ export interface paths {
         readonly patch: operations["patch_tags_id"];
         readonly trace?: never;
     };
+    readonly "/units": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /**
+         * Unit detail by exact identity
+         * @description Read the exact retained Unit identified by the id query value, including IDs that cannot be represented safely in a path. This is not a collection or a second resource; it returns the same independent Unit revision and strong ETag as the path detail. Require a completed session and revalidate authorization and actual source in SQL. Reject duplicate, missing or unknown query parameters, malformed Unicode and bodies.
+         */
+        readonly get: operations["get_unit_by_identity"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
     readonly "/units/{id}": {
         readonly parameters: {
             readonly query?: never;
@@ -9310,6 +9330,42 @@ export interface operations {
             readonly 415: components["responses"]["Error415"];
             readonly 422: components["responses"]["Error422"];
             readonly 426: components["responses"]["Error426"];
+            readonly 429: components["responses"]["Error429"];
+            readonly 503: components["responses"]["Error503"];
+        };
+    };
+    readonly get_unit_by_identity: {
+        readonly parameters: {
+            readonly query: {
+                readonly id: string;
+            };
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Success */
+            readonly 200: {
+                headers: {
+                    /** @description Protected API data is never cached by the service worker. */
+                    readonly "Cache-Control"?: "no-store";
+                    /** @description Strong quoted independent Unit revision, not an unrelated parent or current-state receipt. Numeric safe bounds and exact resource identity remain server-authoritative. */
+                    readonly ETag?: string;
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["Unit"];
+                };
+            };
+            readonly 400: components["responses"]["Error400"];
+            readonly 401: components["responses"]["Error401"];
+            readonly 403: components["responses"]["Error403"];
+            readonly 404: components["responses"]["Error404"];
+            readonly 409: components["responses"]["Error409"];
+            readonly 413: components["responses"]["Error413"];
+            readonly 415: components["responses"]["Error415"];
+            readonly 422: components["responses"]["Error422"];
             readonly 429: components["responses"]["Error429"];
             readonly 503: components["responses"]["Error503"];
         };

@@ -135,7 +135,7 @@ class MediaContractTests(unittest.TestCase):
             self.assertEqual("#/components/schemas/Media", operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"])
             self.assertEqual({"Cache-Control", "ETag"}, set(operation["responses"]["200"]["headers"]))
         self.assertEqual("get_media_id_links", API["paths"]["/media/{id}/links"]["get"]["operationId"])
-        self.assertEqual(144, sum(len(methods) for methods in API["paths"].values()))
+        self.assertEqual(145, sum(len(methods) for methods in API["paths"].values()))
 
     def test_protected_mutations_use_original_media_or_independent_link_proofs(self):
         cases = [("/media", "post", None, 33619968), ("/media/{id}", "delete", "media", 0),

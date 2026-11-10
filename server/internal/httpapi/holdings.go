@@ -11,6 +11,9 @@ import (
 )
 
 func holdingRoute(path string) (route, id, allow string) {
+	if path == "/api/v1/units" {
+		return "unit_lookup", "", http.MethodGet
+	}
 	if path == "/api/v1/inventory" {
 		return "inventory", "", http.MethodGet
 	}
@@ -49,9 +52,9 @@ func (a *authAPI) serveHoldings(w http.ResponseWriter, r *http.Request, requestI
 		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "The method is not supported for this route.", requestID)
 		return true
 	}
-	isList := route == "inventory" || route == "units" && r.Method == http.MethodGet
-	if r.URL.RawPath != "" || strings.ContainsAny(id, "\\\x00") || id == "." || id == ".." || id != "" && !boundedString(id, 1, 128) || !isList && (r.URL.RawQuery != "" || r.URL.ForceQuery) {
-		writeError(w, http.StatusBadRequest, "INVALID_HOLDING_URL", "Use an exact holding path and only documented collection parameters.", requestID)
+	allowsQuery := route == "inventory" || (route == "units" || route == "unit_lookup") && r.Method == http.MethodGet
+	if r.URL.RawPath != "" || strings.ContainsAny(id, "\\\x00") || id == "." || id == ".." || id != "" && !boundedString(id, 1, 128) || !allowsQuery && (r.URL.RawQuery != "" || r.URL.ForceQuery) {
+		writeError(w, http.StatusBadRequest, "INVALID_HOLDING_URL", "Use an exact holding path and only documented query parameters.", requestID)
 		return true
 	}
 	token, _ := sessionToken(r)
@@ -60,7 +63,14 @@ func (a *authAPI) serveHoldings(w http.ResponseWriter, r *http.Request, requestI
 			return true
 		}
 		switch route {
-		case "unit":
+		case "unit", "unit_lookup":
+			if route == "unit_lookup" {
+				var ok bool
+				id, ok = unitLookupQuery(w, r, requestID)
+				if !ok {
+					return true
+				}
+			}
 			value, err := a.inventory.GetUnit(r.Context(), token, id)
 			writeHoldingResult(w, value, value.Revision, err, requestID)
 		case "units":

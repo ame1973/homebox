@@ -19,9 +19,10 @@ const receive = { item_id: quantity.id, target_location_id: 'target', quantity_b
 
 beforeEach(() => { vi.resetModules(); fetchMock.mockReset(); vi.stubGlobal('fetch', fetchMock) })
 
-describe('twelve explicit holding transports', () => {
+describe('thirteen explicit holding transports', () => {
   const cases: { name: string; method: string; path: string; body?: unknown; result: unknown; proof?: number; etag?: string; invoke: (api: HoldingAPI) => Promise<unknown> }[] = [
     { name: 'Unit detail', method: 'GET', path: '/units/unit-1', result: unit, etag: '"2"', invoke: (api) => api.fetchUnit(unit.id, signal()) },
+    { name: 'Unit exact-identity detail', method: 'GET', path: '/units?id=unit-1', result: unit, etag: '"2"', invoke: (api) => api.fetchUnitByIdentity(unit.id, signal()) },
     { name: 'owner Unit page', method: 'GET', path: '/items/item-1/units', result: { data: [unit], next_cursor: null }, invoke: (api) => api.fetchItemUnitsPage(item.id, {}, signal()) },
     { name: 'Stock page', method: 'GET', path: '/inventory', result: { data: [stock], next_cursor: null }, invoke: (api) => api.fetchStockPage({}, signal()) },
     { name: 'Unit creation', method: 'POST', path: '/items/item-1/units', body: { location_id: null }, result: { ...unit, revision: 1, location_id: null, notes: '' }, proof: 7, etag: '"1"', invoke: (api) => api.createUnit(item.id, { location_id: null }, { ...baseContext(), expectedRevision: 7 }) },
@@ -104,6 +105,17 @@ describe('twelve explicit holding transports', () => {
     expect(fetchMock).toHaveBeenCalledTimes(4)
   })
 
+  it('uses exact query identity for legacy Unit IDs that cannot be addressed as path segments', async () => {
+    const api = await import('./holdings')
+    for (const id of ['legacy/unit/\0😀', '\0', '.', '..', 'new', 'tree', 'space +?#', 'back\\slash', '😀'.repeat(128)]) {
+      fetchMock.mockResolvedValueOnce(reply({ ...unit, id, item_id: 'legacy/item/\0😀' }, '"2"'))
+      expect(await api.fetchUnitByIdentity(id, signal())).toEqual({ ...unit, id, item_id: 'legacy/item/\0😀' })
+      const request = fetchMock.mock.lastCall?.[0] as Request, url = new URL(request.url)
+      expect(url.pathname).toBe('/api/v1/units'); expect(url.searchParams.getAll('id')).toEqual([id]); expect([...url.searchParams.keys()]).toEqual(['id'])
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(9)
+  })
+
   it('snapshots the whole reviewed Item interpretation, body, key and proof before an in-flight result', async () => {
     const api = await import('./holdings')
     let complete: ((response: Response) => void) | undefined
@@ -136,6 +148,22 @@ describe('twelve explicit holding transports', () => {
 })
 
 describe('strict holding input boundaries', () => {
+  it('rejects invalid query identities and withholds wrong Unit or ETag responses', async () => {
+    const api = await import('./holdings'), id = 'legacy/unit/\0😀'
+    for (const invalid of ['', '\uD800', '😀'.repeat(129), null, 4]) {
+      await expect(api.fetchUnitByIdentity(invalid as never, signal())).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
+    }
+    expect(fetchMock).not.toHaveBeenCalled()
+    for (const [value, etag] of [[{ ...unit, id: 'wrong' }, '"2"'], [{ ...unit, id }, undefined], [{ ...unit, id }, 'W/"2"'],
+      [{ ...unit, id }, '"3"'], [{ ...unit, id, storage_key: 'private' }, '"2"']] as const) {
+      fetchMock.mockResolvedValueOnce(reply(value, etag))
+      await expect(api.fetchUnitByIdentity(id, signal())).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+    }
+    fetchMock.mockResolvedValueOnce(reply({ error: { code: 'NOT_FOUND', message: 'private path', details: { token: 'secret' } } }, undefined, 404))
+    const missing = await api.fetchUnitByIdentity(id, signal()).catch((error: unknown) => error)
+    expect(missing).toMatchObject({ code: 'NOT_FOUND', status: 404 }); expect(JSON.stringify(missing)).not.toMatch(/private path|secret/)
+  })
+
   it('rejects invalid path/owner IDs, proofs and independent loose stock proofs before sending', async () => {
     const api = await import('./holdings')
     for (const id of ['', '.', '..', 'x/y', 'x\\y', '\0', '😀'.repeat(129), '\uD800']) {
