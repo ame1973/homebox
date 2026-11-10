@@ -4,8 +4,10 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { fileURLToPath } from 'node:url'
 import { build } from 'vite'
+import AxeBuilder from '@axe-core/playwright'
+import { messages } from '../../src/lib/messages.ts'
 import { test as applicationTest, expect } from './auth-fixture.ts'
-import { provision, writeContext } from './domain-helpers.ts'
+import { noOverflow, provision, watchDomainWrites, writeContext } from './domain-helpers.ts'
 
 const owner = 'media-sdk-owner', sibling = 'media-sdk-sibling', empty = 'media-sdk-empty'
 const test = applicationTest.extend<{}, { applicationWebDirectory: string }>({
@@ -406,6 +408,24 @@ for (const scope of ['owner', 'media'] as const) {
 test.describe('complete large Media review scopes', () => {
   test.use({ applicationDatabaseFixture: { prepare(database) { prepareMediaFixture(database, 205) } } })
 
+  test('shows and unlinks the last real owner link after completing all signed pages', async ({ page, application }) => {
+    await provision(page, application)
+    const requests: string[] = []
+    page.on('request', (request) => {
+      const url = new URL(request.url())
+      if (request.method() === 'GET' && url.pathname === '/api/v1/media/links') requests.push(url.search)
+    })
+    await page.goto(`/photos?owner_type=item&owner_id=${owner}`)
+    await expect(page.getByText(`${messages.media.total}205`)).toBeVisible()
+    expect(requests).toHaveLength(3)
+    await expect(page.getByRole('list', { name: messages.media.list }).getByRole('listitem')).toHaveCount(205)
+    const last = page.getByRole('button', { name: `${messages.media.remove} ${JSON.stringify('owner-204')}` })
+    await last.scrollIntoViewIfNeeded(); await last.click()
+    await page.getByRole('alertdialog').getByRole('button', { name: messages.media.confirmRemove }).click()
+    await expect(page.getByText(`${messages.media.total}204`)).toBeVisible()
+    await expect(page.getByRole('button', { name: `${messages.media.remove} ${JSON.stringify('owner-204')}` })).toHaveCount(0)
+  })
+
   test('reads all signed owner and Media pages between matching actual sources', async ({ page, application }) => {
     await provision(page, application)
     const ownerRequests: string[] = [], mediaRequests: string[] = []
@@ -438,6 +458,27 @@ test.describe('complete large Media review scopes', () => {
 
 test.describe('retained Media owner identities', () => {
   test.use({ applicationDatabaseFixture: { prepare(database) { prepareMediaFixture(database, 51, true) } } })
+
+  test('opens retained path-unaddressable Unit and reserved Location owners in the real interface', async ({ page, application }) => {
+    await provision(page, application)
+    const itemID = 'legacy/item\0😀', unitID = 'legacy/unit\0😀'
+    await page.goto(`/photos?owner_type=item&owner_id=${encodeURIComponent(itemID)}`)
+    await expect(page.getByRole('heading', { name: 'Legacy owner' })).toBeVisible()
+    await expect(page.getByRole('link', { name: messages.media.backItems })).toHaveAttribute('href', '/items')
+    await expect(page.getByText(`${messages.media.total}1`)).toBeVisible()
+    await page.goto(`/photos?owner_type=unit&owner_id=${encodeURIComponent(unitID)}`)
+    await expect(page.getByRole('heading', { name: 'LEGACY-ASSET' })).toBeVisible()
+    await expect(page.getByText(`${messages.media.total}1`)).toBeVisible()
+    await expect(page.getByRole('link', { name: messages.media.backItems })).toHaveAttribute('href', '/items')
+    await page.getByRole('button', { name: `${messages.media.remove} ${JSON.stringify('legacy-unit-link')}` }).click()
+    await page.getByRole('alertdialog').getByRole('button', { name: messages.media.confirmRemove }).click()
+    await expect(page.getByText(messages.mutations.done, { exact: true })).toBeVisible()
+    await expect(page.getByText(messages.media.empty, { exact: true })).toBeVisible()
+    await page.goto('/photos?owner_type=location&owner_id=tree')
+    await expect(page.getByRole('heading', { name: 'Legacy room' })).toBeVisible()
+    await expect(page.getByRole('link', { name: messages.media.backLocations })).toHaveAttribute('href', '/locations')
+    await expect(page.getByText(`${messages.media.total}1`)).toBeVisible()
+  })
 
   test('resolves real path-unaddressable Item and Unit plus reserved Location owners from actual source', async ({ page, application }) => {
     await provision(page, application)
@@ -508,6 +549,176 @@ test('freezes complete review scopes and delivers attach, edit and unlink comman
   expect(result.after.links).toEqual([])
   expect(result.membership.media).toMatchObject({ id: 'links', revision: 6, verification: 'unverified', thumb_url: null })
   expect(result.membership.links).toMatchObject([{ id: 'reserved', owner_id: sibling }])
+})
+
+test('shows actual Item links and unlinks one shared image through foreground review', async ({ page, application }, info) => {
+  await provision(page, application)
+  const writes = watchDomainWrites(page, ['/api/v1/media']), streams: string[] = []
+  page.on('request', (request) => { if (request.method() === 'GET' && /\/api\/v1\/media\/[^/]+\/(?:content|thumbnail)$/.test(new URL(request.url()).pathname)) streams.push(request.url()) })
+  await page.goto(`/items/${sibling}`)
+  await page.getByRole('link', { name: messages.media.nav, exact: true }).click()
+  await expect(page).toHaveURL(new RegExp(`/photos\\?owner_type=item&owner_id=${sibling}$`))
+  await expect(page.getByRole('heading', { name: messages.media.title, exact: true })).toBeVisible()
+  await expect(page.getByText(`${messages.media.total}2`)).toBeVisible()
+  await expect(page.getByText(messages.media.storageUnavailable)).toBeVisible()
+  await expect(page.getByText(messages.media.unverified, { exact: true })).toHaveCount(2)
+  expect(streams).toEqual([])
+  if (info.project.name === 'small-phone') {
+    await page.addStyleTag({ content: 'html { font-size: 200% }' })
+    const action = page.getByRole('button', { name: `${messages.media.remove} ${JSON.stringify('sibling')}` })
+    expect(await action.evaluate((element) => getComputedStyle(element.closest('li')!).contentVisibility)).toBe('auto')
+    expect(await action.evaluate((element) => element.getBoundingClientRect().top > innerHeight)).toBe(true)
+    await action.evaluate((element) => { element.style.transitionDuration = '10s' })
+  }
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme })
+    await expect(page.locator('html')).toHaveAttribute('data-theme', colorScheme)
+    expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze()).violations).toEqual([])
+    await noOverflow(page)
+    const action = page.getByRole('button', { name: `${messages.media.remove} ${JSON.stringify('sibling')}` })
+    expect(await action.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true)
+    if (info.project.name === 'small-phone') {
+      const state = await action.evaluate((element) => ({ color: getComputedStyle(element).color, expected: getComputedStyle(document.body).color,
+        transitions: element.getAnimations().filter((animation): animation is CSSTransition => animation instanceof CSSTransition).map((animation) => animation.transitionProperty) }))
+      expect(state.color).toBe(state.expected); expect(state.transitions).not.toContain('color'); expect(state.transitions).not.toContain('background-color')
+    }
+    if (info.project.name === 'small-phone' || info.project.name === 'desktop') await page.screenshot({ path: info.outputPath(`media-owner-${colorScheme}.png`), fullPage: true })
+  }
+  await page.getByRole('button', { name: `${messages.media.remove} ${JSON.stringify('sibling')}` }).click()
+  const dialog = page.getByRole('alertdialog')
+  await expect(dialog.getByRole('heading', { name: messages.media.reviewTitle })).toBeFocused()
+  await expect(dialog).toContainText(messages.media.removeHelp)
+  await expect(dialog).toContainText('sibling')
+  expect(writes).toHaveLength(0)
+  expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze()).violations).toEqual([])
+  await noOverflow(page)
+  expect(await dialog.getByRole('button', { name: messages.media.confirmRemove }).evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
+  await dialog.getByRole('button', { name: messages.media.confirmRemove }).click()
+  await expect(page.getByText(messages.mutations.done, { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: `${messages.media.remove} ${JSON.stringify('sibling')}` })).toHaveCount(0)
+  expect(writes).toHaveLength(1); expect(writes[0]).toMatchObject({ method: 'DELETE', path: '/api/v1/media/links/sibling', proof: '"5"', body: null })
+  const remaining = await (await page.request.get('/api/v1/media/photo/links?limit=100')).json()
+  expect(remaining.data).toHaveLength(51); expect(remaining.data.every((value: { owner_id: string }) => value.owner_id === owner)).toBe(true)
+  expect(streams).toEqual([])
+})
+
+test('keeps an uncertain unlink after the actual owner disappears and explicitly retries the original key', async ({ page, application }) => {
+  await provision(page, application)
+  let deletes = 0, committedStatus = 0
+  const keys: (string | undefined)[] = [], proofs: (string | undefined)[] = []
+  await page.route((url) => url.pathname === '/api/v1/media/links/sibling', async (route) => {
+    if (route.request().method() !== 'DELETE') { await route.continue(); return }
+    deletes++; keys.push(route.request().headers()['idempotency-key']); proofs.push(route.request().headers()['if-match'])
+    if (deletes !== 1) { await route.continue(); return }
+    committedStatus = (await route.fetch()).status()
+    await route.abort('failed')
+  })
+  await page.goto(`/photos?owner_type=item&owner_id=${sibling}`)
+  await page.getByRole('button', { name: `${messages.media.remove} ${JSON.stringify('sibling')}` }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: messages.media.confirmRemove }).click()
+  await expect(page.getByRole('heading', { name: messages.mutations.uncertain })).toBeVisible()
+  expect(committedStatus).toBe(200); expect(deletes).toBe(1)
+  const deletion = await page.request.delete(`/api/v1/items/${sibling}`, { headers: await writeContext(page, application.url, 2) })
+  expect(deletion.status()).toBe(200)
+  await page.getByRole('alertdialog').getByRole('button', { name: messages.mutations.readCurrent }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: messages.mutations.cancel }).click()
+  await expect(page.getByText(messages.media.missing, { exact: true })).toBeVisible()
+  await page.evaluate(() => window.dispatchEvent(new Event('online')))
+  expect(deletes).toBe(1)
+  await page.getByRole('button', { name: messages.mutations.openOriginal }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: messages.mutations.retryOriginal }).click()
+  await expect(page.getByText(messages.mutations.done, { exact: true })).toBeVisible()
+  expect(deletes).toBe(2); expect(keys[0]).toBeTruthy(); expect(keys[1]).toBe(keys[0]); expect(proofs).toEqual(['"5"', '"5"'])
+})
+
+test('requires a fresh review after an actual concurrent link edit', async ({ page, application }) => {
+  await provision(page, application)
+  const writes = watchDomainWrites(page, ['/api/v1/media'])
+  await page.goto(`/photos?owner_type=item&owner_id=${sibling}`)
+  const remove = page.getByRole('button', { name: `${messages.media.remove} ${JSON.stringify('sibling')}` })
+  await remove.click()
+  const changed = await page.request.patch('/api/v1/media/links/sibling', { headers: await writeContext(page, application.url, 5), data: { description: 'Concurrent' } })
+  expect(changed.status()).toBe(200)
+  const dialog = page.getByRole('alertdialog')
+  await dialog.getByRole('button', { name: messages.media.confirmRemove }).click()
+  await expect(dialog.getByText(messages.locations.conflict)).toBeVisible()
+  await expect(dialog.getByText(messages.media.reviewStale)).toBeVisible()
+  await expect(dialog.getByRole('button', { name: messages.media.confirmRemove })).toBeDisabled()
+  await dialog.getByRole('button', { name: messages.mutations.cancel }).click()
+  await remove.click()
+  await page.getByRole('alertdialog').getByRole('button', { name: messages.media.confirmRemove }).click()
+  await expect(page.getByText(messages.mutations.done, { exact: true })).toBeVisible()
+  expect(writes.map((write) => write.proof)).toEqual(['"5"', '"6"'])
+  expect(writes[0]?.key).not.toBe(writes[1]?.key)
+})
+
+test('does not submit or replay a Media unlink while offline', async ({ page, application }) => {
+  await provision(page, application)
+  const writes = watchDomainWrites(page, ['/api/v1/media'])
+  await page.goto(`/photos?owner_type=item&owner_id=${sibling}`)
+  const remove = page.getByRole('button', { name: `${messages.media.remove} ${JSON.stringify('sibling')}` })
+  await expect(remove).toBeEnabled()
+  try {
+    await page.context().setOffline(true)
+    await expect(page.getByText(messages.media.offline, { exact: true })).toBeVisible()
+    await expect(remove).toBeDisabled()
+    await page.context().setOffline(false)
+    await expect(remove).toBeEnabled()
+    expect(writes).toHaveLength(0)
+  } finally { await page.context().setOffline(false) }
+})
+
+test('opens and unlinks actual Unit and Location photos from their existing detail pages', async ({ page, application }) => {
+  await provision(page, application)
+  const locationResponse = await page.request.post('/api/v1/locations', { headers: await writeContext(page, application.url), data: { name: 'Photo room', code: 'PHOTO-ROOM' } })
+  expect(locationResponse.status()).toBe(200)
+  const location = await locationResponse.json()
+  const unitResponse = await page.request.post(`/api/v1/items/${empty}/units`, { headers: await writeContext(page, application.url, 1), data: { location_id: null } })
+  expect(unitResponse.status()).toBe(200)
+  const unit = await unitResponse.json()
+  const unitLinkResponse = await page.request.post('/api/v1/media/links/links', { headers: await writeContext(page, application.url, 3), data: { item_unit_id: unit.id, owner_revision: unit.revision } })
+  expect(unitLinkResponse.status()).toBe(200)
+  const unitLink = await unitLinkResponse.json()
+  const locationLinkResponse = await page.request.post('/api/v1/media/links/links', { headers: await writeContext(page, application.url, 4), data: { location_id: location.id, owner_revision: location.revision } })
+  expect(locationLinkResponse.status()).toBe(200)
+  const locationLink = await locationLinkResponse.json()
+  const writes = watchDomainWrites(page, ['/api/v1/media'])
+  await page.goto(`/units/${unit.id}`)
+  await page.getByRole('link', { name: messages.media.nav, exact: true }).click()
+  await expect(page.getByRole('heading', { name: unit.asset_code, exact: true })).toBeVisible()
+  await page.getByRole('button', { name: `${messages.media.remove} ${JSON.stringify(unitLink.id)}` }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: messages.media.confirmRemove }).click()
+  await expect(page.getByText(messages.media.empty, { exact: true })).toBeVisible()
+  await page.goto(`/locations/${location.id}`)
+  await page.getByRole('link', { name: messages.media.nav, exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Photo room', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: `${messages.media.remove} ${JSON.stringify(locationLink.id)}` }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: messages.media.confirmRemove }).click()
+  await expect(page.getByText(messages.media.empty, { exact: true })).toBeVisible()
+  expect(writes.map((write) => ({ method: write.method, proof: write.proof, body: write.body }))).toEqual([
+    { method: 'DELETE', proof: '"1"', body: null }, { method: 'DELETE', proof: '"1"', body: null },
+  ])
+  const remaining = await (await page.request.get('/api/v1/media/links/links')).json()
+  expect(remaining.data).toMatchObject([{ id: 'reserved', owner_id: sibling }])
+})
+
+test('returns through login with only the exact Media owner scope and safe catalog navigation', async ({ page, application }) => {
+  const password = await provision(page, application)
+  await page.goto('/items?status=active')
+  await page.getByRole('link', { name: new RegExp(sibling) }).click()
+  await page.getByRole('link', { name: messages.media.nav, exact: true }).click()
+  await expect(page.getByText(`${messages.media.total}2`)).toBeVisible()
+  await page.context().clearCookies()
+  await page.reload()
+  await expect(page.getByRole('heading', { name: messages.auth.loginHeading })).toBeVisible()
+  await page.getByLabel(new RegExp(`^${messages.auth.username}`)).fill('owner')
+  await page.getByLabel(new RegExp(`^${messages.auth.password}`)).fill(password)
+  await page.getByRole('button', { name: messages.auth.login, exact: true }).click()
+  await expect(page).toHaveURL(new RegExp(`/photos\\?owner_type=item&owner_id=${sibling}$`))
+  await expect(page.getByText(`${messages.media.total}2`)).toBeVisible()
+  await page.getByRole('link', { name: messages.media.backItem }).click()
+  await page.getByRole('link', { name: messages.catalog.back, exact: true }).click()
+  await expect(page).toHaveURL(/\/items\?status=active$/)
 })
 
 test('preserves legacy order and raw edits during explicit adoption against real Media source', async ({ page, application }) => {

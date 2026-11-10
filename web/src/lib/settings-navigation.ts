@@ -4,6 +4,7 @@ import { catalogReturnPath } from './catalog-navigation'
 import { holdingReturnPath } from './holding-navigation'
 import { purchaseReturnPath } from './purchase-navigation'
 import { assetReturnPath } from './asset-navigation'
+import { mediaReturnPath } from './media-navigation'
 
 export type TaxonomyKind = 'categories' | 'tags'
 export const taxonomyListRoute = (kind: TaxonomyKind) => `/settings/${kind}`
@@ -35,5 +36,5 @@ export function settingsReturnPath(value: unknown): string | undefined {
 }
 
 export function applicationReturnPath(value: unknown): string | undefined {
-  return locationReturnPath(value) ?? settingsReturnPath(value) ?? catalogReturnPath(value) ?? holdingReturnPath(value) ?? purchaseReturnPath(value) ?? assetReturnPath(value)
+  return locationReturnPath(value) ?? settingsReturnPath(value) ?? catalogReturnPath(value) ?? holdingReturnPath(value) ?? purchaseReturnPath(value) ?? assetReturnPath(value) ?? mediaReturnPath(value)
 }

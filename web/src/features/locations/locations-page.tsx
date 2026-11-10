@@ -9,6 +9,7 @@ import { ApiError } from '@/lib/api/client'
 import { fetchAdmin } from '@/lib/api/auth'
 import { fetchLocation } from '@/lib/api/locations'
 import { locationReturnPath, locationRoute } from '@/lib/location-navigation'
+import { mediaOwnerRoute } from '@/lib/media-navigation'
 import { messages } from '@/lib/messages'
 import { useOnline } from '@/lib/use-online'
 import { clearSessionQueries } from '@/features/auth/use-auth-action'
@@ -130,6 +131,7 @@ export default function LocationsPage({ mode }: { mode: Mode }) {
                       <dl className="space-y-4 rounded-lg border bg-card p-5">
                         {[[text.status, record.status === 'active' ? text.active : text.archived], [text.kind, isKnownKind(record.kind) ? text.kinds[record.kind] : record.kind], [text.sortOrder, String(record.sort_order)], [text.version, String(record.revision)], [text.description, record.description || text.emptyValue]].map(([label, value]) => <div key={label} className="space-y-1"><dt className="text-sm text-muted-foreground">{label}</dt><dd className="whitespace-pre-wrap text-base leading-relaxed [overflow-wrap:anywhere]">{value}</dd></div>)}
                       </dl>
+                      <Button asChild variant="outline" className={control}><Link to={mediaOwnerRoute({ kind: 'location', id: record.id })}>{messages.media.nav}</Link></Button>
                       <LocationActions key={record.id} location={record} tree={tree} operation={operation} online={online} canWrite={canWrite} />
                     </section>
                     <section className="min-w-0 space-y-4 rounded-lg border p-5" aria-labelledby="sublocation-title"><h2 id="sublocation-title" className="text-xl font-semibold">{text.sublocations}</h2>

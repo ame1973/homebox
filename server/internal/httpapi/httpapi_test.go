@@ -57,7 +57,7 @@ func TestLivenessIsMinimalPublicAndNetworkOnly(t *testing.T) {
 
 func TestSPADeepLinksNeverBecomeDirectoryListings(t *testing.T) {
 	handler := fixture(t)
-	for _, target := range []string{"/", "/settings/system", "/settings/system/", "/settings/backup", "/l/location-id", "/u/unit-id", "/items/item-id", "/assets", "/assets/"} {
+	for _, target := range []string{"/", "/settings/system", "/settings/system/", "/settings/backup", "/l/location-id", "/u/unit-id", "/items/item-id", "/assets", "/assets/", "/photos?owner_type=item&owner_id=example"} {
 		t.Run(target, func(t *testing.T) {
 			response := request(t, handler, http.MethodGet, target)
 			if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "App shell") || response.Header().Get("Cache-Control") != "no-store" {
@@ -73,7 +73,7 @@ func TestSPADeepLinksNeverBecomeDirectoryListings(t *testing.T) {
 func TestPrivateNamespacesTraversalAndUnknownAssetsNeverFallBackToHTML(t *testing.T) {
 	handler := fixture(t)
 	for _, target := range []string{
-		"/api", "/api/v1/items", "/api/v1/missing", "/auth/login", "/media/originals/photo.png",
+		"/api", "/api/v1/items", "/api/v1/missing", "/auth/login", "/media", "/media?owner_type=item&owner_id=example", "/media/originals/photo.png",
 		"/backups/backup.sqlite", "/exports/data.csv", "/worker/claim", "/data/private.css",
 		"/secrets/private.js", "/dev/README.md", "/.git/config", "/.env", "/assets/../favicon.svg",
 		"/assets/%2e%2e/favicon.svg", "/assets/%5cprivate.js", "/assets/%00private.js",
