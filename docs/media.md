@@ -1,6 +1,6 @@
 # Shared Images and Media Links
 
-**Availability: authenticated Media metadata and link reads, with database groundwork.** Migration 0019 preserves retained Media/MediaLink source and builds source-only current projections; existing Item, Unit and Location deletion transactions update affected Media membership. Four protected GET operations expose actual Media metadata and links for an actual owner or Media, with stateless typed browser read adapters. Image-file storage, Media writes and streams, gallery, upload controls and camera are not implemented yet. Do not treat schemas or database metadata as proof of file safety. Existing catalog, physical holding, purchase and Asset workflows do not depend on an AI worker.
+**Availability: authenticated Media metadata and link reads, with database and internal JPEG/PNG processing groundwork.** Migration 0019 preserves retained Media/MediaLink source and builds source-only current projections; existing Item, Unit and Location deletion transactions update affected Media membership. Four protected GET operations expose actual Media metadata and links for an actual owner or Media, with stateless typed browser read adapters. An isolated Go utility validates and re-encodes JPEG/PNG bytes, but no upload uses it yet and WebP is not yet supported by that utility. Image-file storage, Media writes and streams, gallery, upload controls and camera are not implemented. Do not treat schemas or database metadata as proof of file safety. Existing catalog, physical holding, purchase and Asset workflows do not depend on an AI worker.
 
 ## Identity, ownership and review
 
@@ -66,16 +66,27 @@ Strip GPS and other sensitive location metadata before storage. Visible text or 
 
 A safe implementation must use a private staging area, durable file/directory synchronization, atomic promotion under a server-controlled content key, and recovery for crashes on either side of SQLite COMMIT. Source, counters, current/outbox, audit, idempotent response and any pending-cleanup record commit together. File cleanup runs only after commit and rechecks references, so failed writes, original-key reconciliation, duplicate content or a shared object cannot lose data. Metadata, thumbnails, private originals, receipts and credentials must not enter logs or public caches. A service worker must not cache protected API responses or originals; any future opt-in thumbnail cache has its own privacy and purge policy.
 
+## Image processing groundwork
+
+The internal `server/internal/mediaimage` utility currently accepts JPEG and PNG bytes only. It checks the declared MIME without parameters against the actual format, applies the 32 MiB input, 16,384-per-dimension and 64-million-pixel ceilings before full decoding, and permits callers to specify stricter limits. PNG chunk framing and CRCs are checked across the entire file; APNG control/frame chunks are rejected. JPEG segment and scan framing requires one complete image with no appended data. Malformed or duplicate EXIF orientation is rejected rather than guessed. Input may already occupy memory: a future HTTP boundary must independently bound and stage the multipart stream before calling it.
+
+After complete decoding, the utility applies the eight TIFF orientation values, then re-encodes JPEG at quality 90 or PNG with the standard Go codecs. The output drops source metadata, including GPS and color profiles; stripping color profiles can change displayed colors. The result's MIME, dimensions, byte count and SHA-256 describe the new bytes, not the raw request. Distinct files with different private metadata can produce identical sanitized bytes: future upload idempotency must still bind a server-keyed digest of the exact raw bytes and normalized declared MIME. Visible GPS text in image pixels is not removed. On any error the caller must discard the entire output. One process-wide decode slot limits simultaneous image processing; large images can still require substantial memory, cancellation is cooperative, and future admission must separately limit concurrent staging.
+
+Tests use generated image pixels, actual GPS-bearing EXIF, eight orientations, progressive JPEG scans, 16-bit alpha PNG, malformed/truncated data, CRCs, APNG, limits, cancellation and fuzzing. This is an internal byte-processing component, not an upload handler, thumbnail generator, private file store, file-integrity check, recovery protocol or proof of real-device acceptance. **WebP still needs a supported decoder and complete container/animation validation before the contracted upload can be enabled.**
+
 ## Verification and remaining work
 
 ```sh
 uv run --frozen python -m unittest tests.test_media_contracts -v
 go -C server test ./internal/store -run '^TestMedia' -count=1
 go -C server test ./internal/httpapi -run '^TestMediaHTTP' -count=1
+go -C server test -race -count=1 ./internal/mediaimage
+go -C server test ./internal/mediaimage -run '^$' -fuzz FuzzSanitize -fuzztime=10s -parallel=2
+go -C server test ./internal/mediaimage -run '^$' -fuzz FuzzEXIFOrientation -fuzztime=10s -parallel=2
 npm --prefix web run api:check
 npm --prefix web run typecheck
 npm --prefix web test -- --coverage.enabled=false src/lib/api/client.test.ts src/lib/api/media.test.ts
 npm --prefix web run test:e2e -- --project=phone tests/e2e/media-api.spec.ts
 ```
 
-These checks validate the executable schemas, original independent proofs, authenticated Media/link source reads and complete live HTTP pages, stateless browser read validation, safe error-code allowlist, typed owner exclusivity, source-only migration and shared-owner deletion/rollback/replay without changing version-one offline payload shapes. The browser test drives the actual read adapters against a private Go server with retained source prepared offline. These checks do **not** decode images, create image files, validate GPS removal, prove file crash recovery or run a real camera. Media file storage, writes and streams, browser mutation/gallery workflows, receipt attachments, offline thumbnails, search/AI integration and physical-device acceptance remain required work.
+These checks validate the executable schemas, original independent proofs, authenticated Media/link source reads and complete live HTTP pages, stateless browser read validation, safe error-code allowlist, typed owner exclusivity, source-only migration and shared-owner deletion/rollback/replay without changing version-one offline payload shapes. The browser test drives the actual read adapters against a private Go server with retained source prepared offline. The isolated image tests also decode and re-encode generated JPEG/PNG bytes with GPS-bearing EXIF and validate their output, but do not test WebP, create durable image files, prove crash recovery or run a real camera. Media file storage, writes and streams, browser mutation/gallery workflows, receipt attachments, offline thumbnails, search/AI integration and physical-device acceptance remain required work.

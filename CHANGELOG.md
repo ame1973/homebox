@@ -4,6 +4,8 @@
 
 ### Added
 
+- Add an isolated standard-library JPEG/PNG byte processor with bounded pre-decode dimensions, complete decoding, APNG rejection, eight EXIF orientations, GPS/source-metadata removal and SHA-256 of the re-encoded result. Cover exact PNG pixel/16-bit transparency preservation, JPEG orientation and progressive scans, private GPS metadata, raw-versus-sanitized identity, malformed frames, limits, cancellation and fuzzing. The processor is not connected to uploads; WebP, thumbnail generation, private storage/recovery, streaming and real-device acceptance remain unfinished.
+
 - Add stateless browser Media metadata and scoped-link read adapters. Validate independent Media ETags, owner/Media identity, repeated Media consistency within a page, signed cursor bounds, the reserved `links` escape and verified-versus-unverified thumbnail representation without claiming actual image safety or silently retrying. Add runtime/type and private actual-SDK/Go browser coverage for real pages, owner deletion/replay and inconsistent response withholding. Media file storage, writes and streams, gallery/camera and physical acceptance remain unfinished.
 
 - Expose four protected Media metadata and owner- or Media-scoped link reads with actual independent revisions, signed live continuations, completed-session checks and SQL authorization revalidation. Preserve the reserved `links` Media-ID escape, unverified legacy claims and sibling membership through owner deletion; never expose private storage keys or unreviewed OCR. Add boundary, actual TLS/cookie-jar, owner-deletion replay, parser fuzz and compiled-server/socket contract checks. Image files, writes and streams, SDK/gallery/camera and physical acceptance remained unfinished at this stage.
