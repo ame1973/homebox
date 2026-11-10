@@ -141,22 +141,27 @@ func validateMediaLinkAuthority(ctx context.Context, query queryer, link retaine
 	if _, err := loadMedia(ctx, query, link.MediaID); err != nil {
 		return mediaAuthorityError(err)
 	}
+	return mediaAuthorityError(loadMediaOwner(ctx, query, link.OwnerType, link.OwnerID))
+}
+
+func loadMediaOwner(ctx context.Context, query queryer, ownerType, ownerID string) error {
 	var err error
-	switch link.OwnerType {
+	switch ownerType {
 	case "item":
-		_, err = loadItem(ctx, query, link.OwnerID)
+		_, err = loadItem(ctx, query, ownerID)
 	case "unit":
 		var unit Unit
-		unit, err = loadUnit(ctx, query, link.OwnerID)
+		unit, err = loadUnit(ctx, query, ownerID)
 		if err == nil {
 			_, err = loadItem(ctx, query, unit.ItemID)
+			err = mediaAuthorityError(err)
 		}
 	case "location":
-		_, err = loadLocation(ctx, query, link.OwnerID)
+		_, err = loadLocation(ctx, query, ownerID)
 	default:
-		return ErrDomainState
+		return ErrDomainInput
 	}
-	return mediaAuthorityError(err)
+	return err
 }
 
 func loadMediaLink(ctx context.Context, query queryer, id string) (retainedMediaLink, error) {

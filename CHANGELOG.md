@@ -4,6 +4,8 @@
 
 ### Added
 
+- Add authenticated private Go reads for retained Media and owner- or Media-scoped link pages. Preserve independent link and Media revisions, historical claims and actual owner authority; bind live cursors to their separate scope and validate lookahead without exposing private storage keys or inventing thumbnails. Media files, HTTP handlers, SDK and gallery remain unfinished.
+
 - Add migration 0019 for explicitly unverified retained Media, independently versioned Media/MediaLink source projections and stable owner/Media link indexes. Preserve legacy source claims, counter-only identities, existing current/frozen bytes, duplicate covers, negative positions and epoch; validate real owners, counters, bounds and materialization transactionally without inventing thumbnails, image safety, OCR publication or history. Existing Item/Unit/Location deletion now validates complete shared memberships, emits only owned link tombstones and advances each affected Media once while retaining other owners and original-key replay. Guard ignored/late migration-ledger writes and roll all failures back. File storage, media HTTP/SDK/gallery/camera, full sync and physical acceptance remain unfinished.
 
 - Preserve unverified historical Media metadata without treating its claimed MIME, dimensions or digest as proof of safe bytes. The target HTTP contract now requires explicit verification status, null thumbnails for unverified records and verified JPEG/PNG/WebP upload replies; actual file integrity remains a runtime requirement. The version-one offline payload is unchanged, and no media handler or file-verification workflow is implemented by this contract change.
