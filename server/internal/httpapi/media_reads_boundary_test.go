@@ -27,10 +27,17 @@ func TestMediaHTTPReadAdmissionMethodsPathsAndPrivacy(t *testing.T) {
 		r.Header.Set("Origin", "https://foreign.test")
 		expectError(t, respond(f.handler, r), 403, "ORIGIN_REJECTED")
 		for _, method := range []string{http.MethodHead, http.MethodOptions, http.MethodPost, http.MethodPatch, http.MethodDelete} {
+			allow := "GET"
+			if path == "/api/v1/media/photo/links" {
+				allow = "GET, POST"
+				if method == http.MethodPost {
+					continue
+				}
+			}
 			response := respond(f.handler, domainRequest(method, path, "", f.cookie, f.csrf, "media-unsupported-method", `"1"`))
 			expectError(t, response, 405, "METHOD_NOT_ALLOWED")
-			if response.Header().Get("Allow") != "GET" {
-				t.Fatal("read-only Media route advertised an unimplemented method")
+			if response.Header().Get("Allow") != allow {
+				t.Fatal("Media route advertised the wrong supported methods")
 			}
 		}
 		for _, mutate := range []func(*http.Request){
@@ -196,6 +203,53 @@ func TestMediaHTTPThroughVerifiedTLSAndCookieJar(t *testing.T) {
 			}
 		}
 	}
+	csrfRequest, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL+"/api/v1/auth/csrf", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	csrfRequest.Header.Set("Origin", origin)
+	response, err = client.Do(csrfRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var csrf struct {
+		Token string `json:"token"`
+	}
+	decodeErr := json.NewDecoder(response.Body).Decode(&csrf)
+	closeErr = response.Body.Close()
+	if response.StatusCode != 200 || decodeErr != nil || closeErr != nil || csrf.Token == "" {
+		t.Fatal("verified-TLS session could not obtain its CSRF token", response.StatusCode, decodeErr, closeErr)
+	}
+	body := fmt.Sprintf(`{"item_id":%q,"owner_revision":%d}`, f.empty.ID, f.empty.Revision)
+	var original []byte
+	for range 2 {
+		request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, server.URL+"/api/v1/media/empty-media/links", strings.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Header.Set("Origin", origin)
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("X-CSRF-Token", csrf.Token)
+		request.Header.Set("Idempotency-Key", "media-tls-original-attach")
+		request.Header.Set("X-HomeBox-Client-Version", supportedClientVersion+"-dev")
+		request.Header.Set("If-Match", `"1"`)
+		response, err = client.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, readErr := io.ReadAll(response.Body)
+		closeErr = response.Body.Close()
+		var link store.MediaLink
+		if response.StatusCode != 200 || readErr != nil || closeErr != nil || json.Unmarshal(data, &link) != nil || link.Revision != 1 ||
+			link.MediaID != "empty-media" || link.OwnerID != f.empty.ID || response.Header.Get("ETag") != `"1"` ||
+			response.Header.Get("Cache-Control") != "no-store" || response.Header.Get("Strict-Transport-Security") == "" || response.Header.Get("Set-Cookie") != "" {
+			t.Fatal("verified-TLS attachment or independent link proof failed", response.StatusCode, readErr, closeErr)
+		}
+		if original != nil && !bytes.Equal(original, data) {
+			t.Fatal("verified-TLS original-key retry changed the frozen response")
+		}
+		original = data
+	}
 }
 
 func TestMediaHTTPErrorMappingDoesNotExposeSource(t *testing.T) {
@@ -206,6 +260,9 @@ func TestMediaHTTPErrorMappingDoesNotExposeSource(t *testing.T) {
 	}{
 		{store.ErrAuthentication, 401, "AUTHENTICATION_REQUIRED"}, {store.ErrPasswordChangeRequired, 403, "PASSWORD_CHANGE_REQUIRED"},
 		{store.ErrDomainInput, 422, "VALIDATION_ERROR"}, {store.ErrNotFound, 404, "NOT_FOUND"}, {store.ErrInvalidCursor, 400, "INVALID_CURSOR"},
+		{store.ErrPreconditionRequired, 409, "PRECONDITION_REQUIRED"}, {store.ErrRevisionConflict, 409, "REVISION_CONFLICT"},
+		{store.ErrIdempotencyConflict, 409, "IDEMPOTENCY_CONFLICT"}, {store.ErrIdempotencyExpired, 409, "IDEMPOTENCY_EXPIRED"},
+		{store.ErrMediaCoverConflict, 409, "MEDIA_COVER_CONFLICT"},
 		{store.ErrDomainState, 503, "SERVICE_UNAVAILABLE"}, {errors.New("private /data/homebox.sqlite secret-credential"), 503, "SERVICE_UNAVAILABLE"},
 	} {
 		w := httptest.NewRecorder()

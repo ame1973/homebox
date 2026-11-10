@@ -107,6 +107,37 @@ test('reads genuine scoped Media pages and observes owner deletion without inven
   expect(after.links.data).toMatchObject([{ id: 'sibling', revision: 5, owner_id: sibling, media: { id: 'photo', revision: 8 } }])
 })
 
+test('attaches the reserved Media through same-origin browser requests and reconciles the original key', async ({ page, application }) => {
+  await provision(page, application)
+  await page.goto('/')
+  const result = await page.evaluate(async ({ empty }) => {
+    const csrfResponse = await fetch('/api/v1/auth/csrf')
+    const csrf = (await csrfResponse.json()).token as string
+    const headers = { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf, 'X-HomeBox-Client-Version': '0.1.0-dev', 'Idempotency-Key': crypto.randomUUID(), 'If-Match': '"3"' }
+    const body = JSON.stringify({ item_id: empty, owner_revision: 1, is_cover: true, sort_order: 0, description: 'Exact é\ncaption' })
+    const attach = async () => {
+      const response = await fetch('/api/v1/media/links/links', { method: 'POST', headers, body })
+      return { status: response.status, etag: response.headers.get('ETag'), cache: response.headers.get('Cache-Control'), value: await response.json() }
+    }
+    const first = await attach(), retry = await attach()
+    const imageResponse = await fetch('/api/v1/media/links/view')
+    const ownerResponse = await fetch(`/api/v1/media/links?owner_type=item&owner_id=${encodeURIComponent(empty)}`)
+    const membershipResponse = await fetch('/api/v1/media/links/links')
+    return { csrfStatus: csrfResponse.status, first, retry, imageStatus: imageResponse.status, image: await imageResponse.json(), owner: await ownerResponse.json(), membership: await membershipResponse.json() }
+  }, { empty })
+  expect(result.csrfStatus).toBe(200)
+  expect(result.first).toMatchObject({ status: 200, etag: '"1"', cache: 'no-store', value: { media_id: 'links', owner_type: 'item', owner_id: empty, revision: 1, is_cover: true, sort_order: 0, description: 'Exact é\ncaption' } })
+  expect(result.first.value.id).toBeTruthy()
+  expect(Object.keys(result.first.value).sort()).toEqual(['description', 'id', 'is_cover', 'media_id', 'owner_id', 'owner_type', 'revision', 'sort_order'])
+  expect(result.retry).toEqual(result.first)
+  expect(result.imageStatus).toBe(200)
+  expect(result.image).toMatchObject({ id: 'links', revision: 4, verification: 'unverified', thumb_url: null, thumb_sha256: null })
+  expect(result.owner.data).toMatchObject([{ id: result.first.value.id, media: { id: 'links', revision: 4 } }])
+  expect(result.membership.data).toHaveLength(2)
+  expect(result.membership.data.some((link: { id: string }) => link.id === result.first.value.id)).toBe(true)
+  expect(JSON.stringify(result)).not.toContain('private-links')
+})
+
 test('rejects inconsistent real-server page replies rather than returning a partial selection', async ({ page, application }) => {
   await provision(page, application)
   let tamper = true

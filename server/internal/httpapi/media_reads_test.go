@@ -27,10 +27,11 @@ type mediaHTTPFixture struct {
 	owner, sibling, empty store.Item
 	unit                  store.Unit
 	location              store.Location
+	legacyOwner           string
 }
 
-// Seed retained source offline because no upload or MediaLink writer exists yet.
-// Real owner services create their own source, counters, projections and events.
+// Seed retained image and legacy link source offline because upload is not yet
+// implemented. Real owner services create their source, counters and events.
 func newMediaHTTPFixture(t *testing.T) mediaHTTPFixture {
 	t.Helper()
 	directory := t.TempDir()
@@ -121,6 +122,9 @@ func newMediaHTTPFixture(t *testing.T) mediaHTTPFixture {
 		exec("INSERT INTO projection_revisions(entity_type,entity_id,revision) VALUES(?,?,?)", kind, id, revision)
 		exec("INSERT INTO current_projections(entity_type,entity_id,entity_revision,payload_json,updated_at) VALUES(?,?,?,?,?)", kind, id, revision, string(payload), "2026-11-06T00:00:00Z")
 	}
+	fixture.legacyOwner = "legacy/\x00" + strings.Repeat("界", 118)
+	exec(`INSERT INTO items(id,name,tracking_mode,created_at,updated_at) VALUES(?,'Legacy owner','individual','2026','2026')`, fixture.legacyOwner)
+	exec(`INSERT INTO projection_revisions(entity_type,entity_id,revision) VALUES('item',?,7)`, fixture.legacyOwner)
 	type mediaProjection struct {
 		ID             string  `json:"id"`
 		SHA256         string  `json:"sha256"`
