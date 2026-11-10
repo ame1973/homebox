@@ -131,6 +131,9 @@ func listLocations(ctx context.Context, tx *sql.Tx, afterID string, limit int) (
 // Create checks a non-root parent's aggregate revision inside the write
 // transaction. A root creation has no parent precondition (parentRevision=0).
 func (l *Locations) Create(ctx context.Context, token, key string, parentRevision int64, input LocationCreate) (Location, error) {
+	input.ParentID = snapshotPurchaseString(input.ParentID)
+	input.Kind = snapshotPurchaseString(input.Kind)
+	input.Status = snapshotPurchaseString(input.Status)
 	data := LocationData{ParentID: input.ParentID, Code: input.Code, Name: input.Name, Kind: "other", Status: "active", SortOrder: input.SortOrder, Description: input.Description}
 	if input.Kind != nil {
 		data.Kind = *input.Kind
@@ -183,6 +186,13 @@ func (l *Locations) Create(ctx context.Context, token, key string, parentRevisio
 }
 
 func (l *Locations) Patch(ctx context.Context, token, key, id string, revision int64, input LocationPatch) (Location, error) {
+	input.ParentID.Value = snapshotPurchaseString(input.ParentID.Value)
+	input.Code = snapshotPurchaseString(input.Code)
+	input.Name = snapshotPurchaseString(input.Name)
+	input.Kind = snapshotPurchaseString(input.Kind)
+	input.Status = snapshotPurchaseString(input.Status)
+	input.SortOrder = snapshotAssetNumber(input.SortOrder)
+	input.Description = snapshotPurchaseString(input.Description)
 	if !validDomainID(id) || !input.hasFields() || (!input.ParentID.Set && input.ParentID.Value != nil) {
 		return Location{}, ErrDomainInput
 	}
@@ -200,6 +210,7 @@ func (l *Locations) Patch(ctx context.Context, token, key, id string, revision i
 }
 
 func (l *Locations) Move(ctx context.Context, token, key, id string, revision int64, parentID *string) (Location, error) {
+	parentID = snapshotPurchaseString(parentID)
 	if !validDomainID(id) || (parentID != nil && !validDomainID(*parentID)) {
 		return Location{}, ErrDomainInput
 	}
