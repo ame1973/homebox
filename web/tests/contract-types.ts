@@ -1137,3 +1137,18 @@ const credentialInMediaReview = mediaCommands.freezeMediaCommand({ kind: 'unlink
 const uncancellableMediaCommand = mediaCommands.sendMediaCommand(reviewedUnlinkCommand, 'csrf')
 void [reviewedAttachCommand, reviewedPatchCommand, reviewedUnlinkCommand, sentMediaCommand, unreviewedMediaAttachment, unselectedMediaEdit, emptyReviewedMediaEdit,
   looseReviewedMediaProof, credentialInMediaReview, uncancellableMediaCommand]
+
+// Form values retain exact raw position text and an actual link baseline.
+declare const mediaForms: typeof import('../src/features/media/form')
+const newMediaValues = mediaForms.mediaLinkDefaults()
+const newMediaBody: components['schemas']['MediaLinkWrite'] = mediaForms.mediaLinkCreateBody(newMediaValues)
+const existingMediaValues = mediaForms.mediaLinkDefaults(mediaLinkView)
+const reviewedMediaPatch: import('../src/lib/api/media-writes').MediaLinkPatchInput | undefined = mediaForms.mediaLinkPatch(existingMediaValues, mediaLink)
+const retainedMediaValues = mediaForms.retainMediaLinkEdits(existingMediaValues, mediaLinkView, mediaLink)
+// @ts-expect-error Position remains raw text until explicitly validated.
+const roundedMediaPosition = mediaForms.mediaLinkCreateBody({ is_cover: false, sort_order: 1, description: '' })
+// @ts-expect-error The cover checkbox is not an implicit string/null decision.
+const invalidMediaCover = mediaForms.mediaLinkCreateBody({ is_cover: 'yes', sort_order: '0', description: '' })
+// @ts-expect-error An existing edit retains the whole independent link baseline.
+const unprovenMediaForm = mediaForms.mediaLinkPatch(existingMediaValues, { id: 'link', revision: 1 })
+void [newMediaBody, reviewedMediaPatch, retainedMediaValues, roundedMediaPosition, invalidMediaCover, unprovenMediaForm]

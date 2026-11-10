@@ -15,7 +15,7 @@ const test = applicationTest.extend<{}, { applicationWebDirectory: string }>({
     try {
       cpSync(fileURLToPath(new URL('../../dist', import.meta.url)), web, { recursive: true })
       // The private SDK bundle is never a production test entrypoint.
-      writeFileSync(entry, `export * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/media.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/media-writes.ts', import.meta.url)))};\nexport { fetchItem } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/catalog.ts', import.meta.url)))};\nexport { createUnit, fetchUnitByIdentity, moveUnit } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/holdings.ts', import.meta.url)))};\nexport { createLocation, fetchLocation } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/locations.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/features/media/model.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/features/media/commands.ts', import.meta.url)))};\n`)
+      writeFileSync(entry, `export * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/media.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/media-writes.ts', import.meta.url)))};\nexport { fetchItem } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/catalog.ts', import.meta.url)))};\nexport { createUnit, fetchUnitByIdentity, moveUnit } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/holdings.ts', import.meta.url)))};\nexport { createLocation, fetchLocation } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/locations.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/features/media/model.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/features/media/commands.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/features/media/form.ts', import.meta.url)))};\n`)
       await build({ configFile: false, logLevel: 'silent', resolve: { alias: { '@': fileURLToPath(new URL('../../src', import.meta.url)) } },
         build: { outDir: sdk, minify: false, lib: { entry, formats: ['es'], fileName: 'media-sdk' } } })
       cpSync(join(sdk, 'media-sdk.js'), join(web, 'assets', 'media-sdk.js'))
@@ -508,6 +508,47 @@ test('freezes complete review scopes and delivers attach, edit and unlink comman
   expect(result.after.links).toEqual([])
   expect(result.membership.media).toMatchObject({ id: 'links', revision: 6, verification: 'unverified', thumb_url: null })
   expect(result.membership.links).toMatchObject([{ id: 'reserved', owner_id: sibling }])
+})
+
+test('preserves legacy order and raw edits during explicit adoption against real Media source', async ({ page, application }) => {
+  await provision(page, application)
+  const bodies: unknown[] = []
+  page.on('request', (request) => {
+    if (request.method() === 'PATCH' && new URL(request.url()).pathname === '/api/v1/media/links/sibling') bodies.push(request.postDataJSON())
+  })
+  await page.goto('/')
+  const result = await page.evaluate(async ({ sibling }) => {
+    const modulePath = '/assets/media-sdk.js', api = await import(modulePath), signal = () => new AbortController().signal
+    const csrf = (await (await fetch('/api/v1/auth/csrf')).json()).token as string
+    const source = await api.readOwnerMedia({ kind: 'item', id: sibling }, signal())
+    const original = source.links.find((value: { id: string }) => value.id === 'sibling')
+    if (!original) throw new Error('Fixture link missing')
+    const defaults = api.mediaLinkDefaults(original)
+    const firstBody = api.mediaLinkPatch({ ...defaults, description: '' }, original)
+    const first = await api.sendMediaCommand(api.freezeMediaCommand({ kind: 'patch-link', source, linkID: original.id, body: firstBody }), csrf, signal())
+    const reviewed = await api.readOwnerMedia({ kind: 'item', id: sibling }, signal())
+    const before = reviewed.links.find((value: { id: string }) => value.id === 'sibling')
+    if (!before) throw new Error('Reviewed link missing')
+    const local = { ...api.mediaLinkDefaults(before), sort_order: '01', description: 'Local é\n' }
+    await api.patchMediaLink(before.id, { is_cover: false, sort_order: 6, description: 'Concurrent' }, {
+      csrfToken: csrf, idempotencyKey: crypto.randomUUID(), signal: signal(), link: before,
+    })
+    const updated = await api.readOwnerMedia({ kind: 'item', id: sibling }, signal())
+    const current = updated.links.find((value: { id: string }) => value.id === 'sibling')
+    if (!current) throw new Error('Current link missing')
+    const retained = api.retainMediaLinkEdits(local, before, current)
+    let invalid: unknown
+    try { api.mediaLinkPatch(retained, current) } catch (error) { invalid = error instanceof Error && 'code' in error ? error.code : 'unexpected' }
+    const finalBody = api.mediaLinkPatch({ ...retained, sort_order: '0' }, current)
+    const final = await api.sendMediaCommand(api.freezeMediaCommand({ kind: 'patch-link', source: updated, linkID: current.id, body: finalBody }), csrf, signal())
+    return { defaults, first, retained, invalid, final }
+  }, { sibling })
+  expect(result.defaults).toEqual({ is_cover: true, sort_order: '-3', description: '\0Exact é\n' })
+  expect(result.first).toMatchObject({ revision: 6, is_cover: true, sort_order: -3, description: '' })
+  expect(result.retained).toEqual({ is_cover: false, sort_order: '01', description: 'Local é\n' })
+  expect(result.invalid).toBe('VALIDATION_ERROR')
+  expect(result.final).toMatchObject({ revision: 8, is_cover: false, sort_order: 0, description: 'Local é\n' })
+  expect(bodies).toEqual([{ description: '' }, { is_cover: false, sort_order: 6, description: 'Concurrent' }, { sort_order: 0, description: 'Local é\n' }])
 })
 
 test('invalidates Unit location scope even when the Unit moves after link review', async ({ page, application }) => {
