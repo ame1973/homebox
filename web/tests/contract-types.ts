@@ -1084,3 +1084,19 @@ const unreviewedMediaUnlink = mediaWrites.unlinkMediaLink('link', { ...writeCont
 const looseMediaUnlink = mediaWrites.unlinkMediaLink('link', { ...mediaRowContext, expectedRevision: 2 })
 void [mediaWriteCalls, mediaAttachWithoutSnapshot, mediaAttachWithoutOwner, mediaAttachWrongOwner, mediaAttachLooseRevision, mediaAttachInjectedOwner,
   emptyMediaLinkPatch, reassignMediaLinkPatch, unreviewedMediaLinkPatch, unreviewedMediaUnlink, looseMediaUnlink]
+
+// Complete live review scopes retain only the selected actual source and links.
+declare const mediaModels: typeof import('../src/features/media/model')
+const reviewedItemMedia: Promise<import('../src/features/media/model').OwnerMedia> = mediaModels.readOwnerMedia({ kind: 'item', id: currentItem.id }, new AbortController().signal)
+const reviewedUnitMedia = mediaModels.readOwnerMedia({ kind: 'unit', id: holdingUnit.id, itemID: currentItem.id }, new AbortController().signal)
+const reviewedLocationMedia = mediaModels.readOwnerMedia({ kind: 'location', id: locationMediaOwner.id }, new AbortController().signal)
+const reviewedMediaMembership: Promise<import('../src/features/media/model').MediaMembership> = mediaModels.readMediaMembership(mediaMetadata.id, new AbortController().signal)
+// @ts-expect-error Purchase is not an implemented MediaLink owner.
+const unsupportedMediaScope = mediaModels.readOwnerMedia({ kind: 'purchase', id: 'purchase' }, new AbortController().signal)
+// @ts-expect-error Owner scope must identify the actual selected owner.
+const implicitMediaScope = mediaModels.readOwnerMedia({ kind: 'item' }, new AbortController().signal)
+// @ts-expect-error Item parent hints cannot be attached to a Location scope.
+const unrelatedMediaScope = mediaModels.readOwnerMedia({ kind: 'location', id: 'location', itemID: 'item' }, new AbortController().signal)
+// @ts-expect-error Every live review read retains caller-owned cancellation.
+const uncancellableMediaScope = mediaModels.readMediaMembership('media')
+void [reviewedItemMedia, reviewedUnitMedia, reviewedLocationMedia, reviewedMediaMembership, unsupportedMediaScope, implicitMediaScope, unrelatedMediaScope, uncancellableMediaScope]

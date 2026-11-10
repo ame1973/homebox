@@ -15,15 +15,16 @@ const test = applicationTest.extend<{}, { applicationWebDirectory: string }>({
     try {
       cpSync(fileURLToPath(new URL('../../dist', import.meta.url)), web, { recursive: true })
       // The private SDK bundle is never a production test entrypoint.
-      writeFileSync(entry, `export * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/media.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/media-writes.ts', import.meta.url)))};\nexport { fetchItem } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/catalog.ts', import.meta.url)))};\nexport { createUnit } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/holdings.ts', import.meta.url)))};\nexport { createLocation } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/locations.ts', import.meta.url)))};\n`)
-      await build({ configFile: false, logLevel: 'silent', build: { outDir: sdk, minify: false, lib: { entry, formats: ['es'], fileName: 'media-sdk' } } })
+      writeFileSync(entry, `export * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/media.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/media-writes.ts', import.meta.url)))};\nexport { fetchItem } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/catalog.ts', import.meta.url)))};\nexport { createUnit } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/holdings.ts', import.meta.url)))};\nexport { createLocation } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/locations.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/features/media/model.ts', import.meta.url)))};\n`)
+      await build({ configFile: false, logLevel: 'silent', resolve: { alias: { '@': fileURLToPath(new URL('../../src', import.meta.url)) } },
+        build: { outDir: sdk, minify: false, lib: { entry, formats: ['es'], fileName: 'media-sdk' } } })
       cpSync(join(sdk, 'media-sdk.js'), join(web, 'assets', 'media-sdk.js'))
       await provideFixture(web)
     } finally { rmSync(directory, { recursive: true, force: true }) }
   }, { scope: 'worker' }],
 })
 
-test.use({ trace: 'off', screenshot: 'off', video: 'off', applicationDatabaseFixture: { prepare(database) {
+function prepareMediaFixture(database: string, count = 51, legacy = false) {
   // Seed retained source only while the server is stopped. No file, HTTP
   // mutation, session, audit receipt or verified image is invented.
   const db = new DatabaseSync(database), now = '2026-11-06T00:00:00Z', digest = 'a'.repeat(64)
@@ -49,13 +50,31 @@ test.use({ trace: 'off', screenshot: 'off', video: 'off', applicationDatabaseFix
       addLink.run(id, mediaID, ownerID, description)
       baseline('media_link', id, revision, { id, media_id: mediaID, owner_type: 'item', owner_id: ownerID, is_cover: true, sort_order: -3, description })
     }
-    for (let index = 0; index < 51; index++) seedLink(`owner-${String(index).padStart(3, '0')}`, 'photo', owner, 1)
+    for (let index = 0; index < count; index++) seedLink(`owner-${String(index).padStart(3, '0')}`, 'photo', owner, 1)
     seedLink('sibling', 'photo', sibling, 5)
     seedLink('reserved', 'links', sibling, 1)
+    if (legacy) {
+      const itemID = 'legacy/item\0😀', unitID = 'legacy/unit\0😀', locationID = 'tree'
+      item.run(itemID, 'Legacy owner', 'individual', now, now)
+      baseline('item', itemID, 1, { id: itemID, name: 'Legacy owner', brand: null, model: null, category_id: null, description: '', notes: '', tracking_mode: 'individual', unit_code: 'pcs', base_unit: 'pcs', scale_factor: 1, status: 'active' })
+      counter.run('search_doc', JSON.stringify(['item', itemID]), 1)
+      db.prepare('INSERT INTO item_units(id,item_id,asset_code,status,created_at,updated_at) VALUES(?,?,?,?,?,?)').run(unitID, empty, 'LEGACY-ASSET', 'stored', now, now)
+      baseline('unit', unitID, 1, { id: unitID, item_id: empty, location_id: null, asset_code: 'LEGACY-ASSET', serial_number: null, notes: '', status: 'stored' })
+      counter.run('search_doc', JSON.stringify(['unit', unitID]), 1)
+      db.prepare('INSERT INTO locations(id,code,name,kind,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?)').run(locationID, 'LEGACY-ROOM', 'Legacy room', 'room', 'active', now, now)
+      baseline('location', locationID, 1, { id: locationID, parent_id: null, code: 'LEGACY-ROOM', name: 'Legacy room', kind: 'room', status: 'active', sort_order: 0, description: '' })
+      seedLink('legacy-item-link', 'photo', itemID, 1)
+      for (const [id, kind, ownerID, column] of [['legacy-unit-link', 'unit', unitID, 'item_unit_id'], ['legacy-location-link', 'location', locationID, 'location_id']] as const) {
+        db.prepare(`INSERT INTO media_links(id,media_id,${column},is_cover,sort_order,description) VALUES(?,?,?,0,0,'')`).run(id, 'photo', ownerID)
+        baseline('media_link', id, 1, { id, media_id: 'photo', owner_type: kind, owner_id: ownerID, is_cover: false, sort_order: 0, description: '' })
+      }
+    }
     db.exec('COMMIT')
     expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
   } finally { db.close() }
-} } })
+}
+
+test.use({ trace: 'off', screenshot: 'off', video: 'off', applicationDatabaseFixture: { prepare: prepareMediaFixture } })
 
 test('reads genuine scoped Media pages and observes owner deletion without inventing images', async ({ page, application }) => {
   await provision(page, application)
@@ -349,6 +368,101 @@ test('does not replay an offline SDK unlink until an explicit original-key retry
     await page.context().setOffline(false)
     await state.dispose()
   }
+})
+
+for (const scope of ['owner', 'media'] as const) {
+  test(`withholds the ${scope} review when a real link changes between its bracketed reads`, async ({ page, application }) => {
+    await provision(page, application)
+    let changed = false, patchStatus = 0
+    await page.route((url) => url.pathname === (scope === 'owner' ? '/api/v1/media/links' : '/api/v1/media/photo/links'), async (route) => {
+      const response = await route.fetch()
+      if (!changed) {
+        changed = true
+        const headers = await writeContext(page, application.url, scope === 'owner' ? 1 : 5)
+        const id = scope === 'owner' ? 'owner-000' : 'sibling'
+        patchStatus = (await page.request.patch(`/api/v1/media/links/${id}`, { headers, data: { description: 'Changed during review' } })).status()
+      }
+      await route.fulfill({ response })
+    })
+    await page.goto('/')
+    const result = await page.evaluate(async ({ scope, owner }) => {
+      const modulePath = '/assets/media-sdk.js', api = await import(modulePath), signal = () => new AbortController().signal
+      const read = () => scope === 'owner' ? api.readOwnerMedia({ kind: 'item', id: owner }, signal()) : api.readMediaMembership('photo', signal())
+      let first: unknown
+      try { await read(); first = 'unexpected' } catch (error) { first = error instanceof Error && 'code' in error ? error.code : 'unexpected' }
+      return { first, current: await read() }
+    }, { scope, owner })
+    expect(changed).toBe(true); expect(patchStatus).toBe(200); expect(result.first).toBe('INVALID_RESPONSE')
+    if (scope === 'owner') {
+      expect(result.current.owner).toMatchObject({ kind: 'item', value: { id: owner, revision: 2 } })
+      expect(result.current.links).toContainEqual(expect.objectContaining({ id: 'owner-000', revision: 2, description: 'Changed during review' }))
+    } else {
+      expect(result.current.media).toMatchObject({ id: 'photo', revision: 8 })
+      expect(result.current.links).toContainEqual(expect.objectContaining({ id: 'sibling', revision: 6, description: 'Changed during review' }))
+    }
+  })
+}
+
+test.describe('complete large Media review scopes', () => {
+  test.use({ applicationDatabaseFixture: { prepare(database) { prepareMediaFixture(database, 205) } } })
+
+  test('reads all signed owner and Media pages between matching actual sources', async ({ page, application }) => {
+    await provision(page, application)
+    const ownerRequests: string[] = [], mediaRequests: string[] = []
+    page.on('request', (request) => {
+      const url = new URL(request.url())
+      if (request.method() !== 'GET') return
+      if (url.pathname === '/api/v1/media/links') ownerRequests.push(url.search)
+      if (url.pathname === '/api/v1/media/photo/links') mediaRequests.push(url.search)
+    })
+    await page.goto('/')
+    const result = await page.evaluate(async ({ owner }) => {
+      const modulePath = '/assets/media-sdk.js', api = await import(modulePath), signal = () => new AbortController().signal
+      return { owner: await api.readOwnerMedia({ kind: 'item', id: owner }, signal()), media: await api.readMediaMembership('photo', signal()) }
+    }, { owner })
+    expect(result.owner.owner).toMatchObject({ kind: 'item', value: { id: owner, revision: 1 } })
+    expect(result.owner.links).toHaveLength(205); expect(result.media.links).toHaveLength(206)
+    expect(result.media.media).toMatchObject({ id: 'photo', revision: 7, verification: 'unverified', thumb_url: null })
+    expect(result.media.links).toContainEqual(expect.objectContaining({ id: 'sibling', owner_id: sibling, revision: 5 }))
+    for (const requests of [ownerRequests, mediaRequests]) {
+      expect(requests).toHaveLength(3)
+      const queries = requests.map((query) => new URLSearchParams(query))
+      expect(queries.map((query) => query.get('limit'))).toEqual(['100', '100', '100'])
+      expect(queries[0]?.has('cursor')).toBe(false)
+      expect(queries[1]?.get('cursor')).toBeTruthy(); expect(queries[2]?.get('cursor')).toBeTruthy()
+      expect(queries[1]?.get('cursor')).not.toBe(queries[2]?.get('cursor'))
+    }
+    expect(JSON.stringify(result)).not.toContain('private-photo')
+  })
+})
+
+test.describe('retained Media owner identities', () => {
+  test.use({ applicationDatabaseFixture: { prepare(database) { prepareMediaFixture(database, 51, true) } } })
+
+  test('resolves real path-unaddressable Item and Unit and reserved Location owners from complete source lists', async ({ page, application }) => {
+    await provision(page, application)
+    const requests: string[] = []
+    page.on('request', (request) => { if (request.method() === 'GET') requests.push(new URL(request.url()).pathname) })
+    await page.goto('/')
+    const result = await page.evaluate(async ({ empty }) => {
+      const modulePath = '/assets/media-sdk.js', api = await import(modulePath), signal = () => new AbortController().signal
+      return {
+        item: await api.readOwnerMedia({ kind: 'item', id: 'legacy/item\0😀' }, signal()),
+        unit: await api.readOwnerMedia({ kind: 'unit', id: 'legacy/unit\0😀', itemID: empty }, signal()),
+        location: await api.readOwnerMedia({ kind: 'location', id: 'tree' }, signal()),
+      }
+    }, { empty })
+    expect(result.item.owner).toMatchObject({ kind: 'item', value: { id: 'legacy/item\0😀', revision: 1 } })
+    expect(result.item.links).toMatchObject([{ id: 'legacy-item-link', owner_id: 'legacy/item\0😀' }])
+    expect(result.unit.owner).toMatchObject({ kind: 'unit', value: { id: 'legacy/unit\0😀', item_id: empty, revision: 1 } })
+    expect(result.unit.links).toMatchObject([{ id: 'legacy-unit-link', owner_id: 'legacy/unit\0😀' }])
+    expect(result.location.owner).toMatchObject({ kind: 'location', value: { id: 'tree', revision: 1 } })
+    expect(result.location.links).toMatchObject([{ id: 'legacy-location-link', owner_id: 'tree' }])
+    expect(requests.filter((path) => path === '/api/v1/items')).toHaveLength(2)
+    expect(requests.filter((path) => path === `/api/v1/items/${empty}/units`)).toHaveLength(2)
+    expect(requests.filter((path) => path === '/api/v1/locations/tree')).toHaveLength(2)
+    expect(requests.filter((path) => path === '/api/v1/media/links')).toHaveLength(3)
+  })
 })
 
 test('rejects inconsistent real-server page replies rather than returning a partial selection', async ({ page, application }) => {
