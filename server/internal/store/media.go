@@ -249,7 +249,12 @@ func validateMediaCurrentProjection(ctx context.Context, tx *sql.Tx, kind, id st
 }
 
 func readMediaMembers(ctx context.Context, tx *sql.Tx, id string) ([]mediaMember, error) {
-	rows, err := tx.QueryContext(ctx, mediaLinkSelect+" WHERE l.media_id=? ORDER BY l.id", id)
+	return readMediaMembersFor(ctx, tx, "media_id", id)
+}
+
+// column is selected only from fixed media and owner identifiers by callers.
+func readMediaMembersFor(ctx context.Context, tx *sql.Tx, column, id string) ([]mediaMember, error) {
+	rows, err := tx.QueryContext(ctx, mediaLinkSelect+" WHERE l."+column+"=? ORDER BY l.id", id)
 	if err != nil {
 		return nil, err
 	}

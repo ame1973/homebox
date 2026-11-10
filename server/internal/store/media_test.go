@@ -12,7 +12,7 @@ import (
 )
 
 // These fixtures model real source/counters; they do not claim image-byte
-// verification or provide a media mutation/HTTP service.
+// verification or provide an image-file store.
 func seedMediaProjection(t *testing.T, s *Store, id string) {
 	t.Helper()
 	execSQL(t, s.db, "INSERT INTO projection_revisions VALUES('media',?,1)", id)

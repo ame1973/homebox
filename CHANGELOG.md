@@ -4,6 +4,8 @@
 
 ### Added
 
+- Add a private Go transaction to attach one retained Media to an Item, Unit or Location using independently reviewed Media and owner revisions. Validate both complete memberships, existing covers, real source/counters and unchanged related Media; atomically create the revision-one link and advance affected Media/owner projections with audit and exact original-key reconciliation. Exercise rollback, authorization, retained legacy source and more than one page of membership. This does not implement public Media writes, file validation/storage/streams or browser attachment workflows.
+
 - Add an isolated standard-library JPEG/PNG byte processor with bounded pre-decode dimensions, complete decoding, APNG rejection, eight EXIF orientations, GPS/source-metadata removal and SHA-256 of the re-encoded result. Cover exact PNG pixel/16-bit transparency preservation, JPEG orientation and progressive scans, private GPS metadata, raw-versus-sanitized identity, malformed frames, limits, cancellation and fuzzing. The processor is not connected to uploads; WebP, thumbnail generation, private storage/recovery, streaming and real-device acceptance remain unfinished.
 
 - Add stateless browser Media metadata and scoped-link read adapters. Validate independent Media ETags, owner/Media identity, repeated Media consistency within a page, signed cursor bounds, the reserved `links` escape and verified-versus-unverified thumbnail representation without claiming actual image safety or silently retrying. Add runtime/type and private actual-SDK/Go browser coverage for real pages, owner deletion/replay and inconsistent response withholding. Media file storage, writes and streams, gallery/camera and physical acceptance remain unfinished.
