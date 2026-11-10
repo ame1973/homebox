@@ -57,6 +57,15 @@ func (input MediaLinkCreate) owner() (string, string, string, error) {
 // Attach creates one independent link against the original Media and owner
 // proofs. Media bytes, other links and other owners are never deleted.
 func (library *MediaLibrary) Attach(ctx context.Context, token, key, mediaID string, revision int64, input MediaLinkCreate) (MediaLink, error) {
+	input.ItemID = snapshotPurchaseString(input.ItemID)
+	input.ItemUnitID = snapshotPurchaseString(input.ItemUnitID)
+	input.LocationID = snapshotPurchaseString(input.LocationID)
+	input.Description = snapshotPurchaseString(input.Description)
+	input.SortOrder = snapshotAssetNumber(input.SortOrder)
+	if input.IsCover != nil {
+		cover := *input.IsCover
+		input.IsCover = &cover
+	}
 	if !validDomainID(mediaID) {
 		return MediaLink{}, ErrDomainInput
 	}

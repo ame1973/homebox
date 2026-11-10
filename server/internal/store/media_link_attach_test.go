@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func mediaAttachInput(fixture mediaCascadeFixture, ownerType string) MediaLinkCreate {
@@ -31,6 +32,41 @@ func mediaLibraryFixture(t *testing.T, ownerType string) (mediaCascadeFixture, *
 		t.Fatal(err)
 	}
 	return fixture, library, mediaAttachInput(fixture, ownerType)
+}
+
+func TestMediaAttachSnapshotsWholeCallerInputBeforeFingerprintAndClock(t *testing.T) {
+	for _, ownerType := range []string{"item", "unit", "location"} {
+		t.Run(ownerType, func(t *testing.T) {
+			fixture, library, input := mediaLibraryFixture(t, ownerType)
+			var owner *string
+			switch ownerType {
+			case "item":
+				owner = input.ItemID
+			case "unit":
+				owner = input.ItemUnitID
+			case "location":
+				owner = input.LocationID
+			}
+			originalOwner := *owner
+			cover, position, description := false, int64(7), "Original reviewed caption"
+			input.IsCover, input.SortOrder, input.Description = &cover, &position, &description
+			clock := fixture.auth.now
+			fixture.auth.now = func() time.Time {
+				*owner, cover, position, description = "different-owner", true, 9, "Changed after fingerprint"
+				return clock()
+			}
+			link, err := library.Attach(t.Context(), fixture.token, "media-attach-input-snapshot", "shared-a", 7, input)
+			if err != nil || link.OwnerID != originalOwner || link.OwnerType != ownerType || link.IsCover || link.SortOrder != 7 || link.Description != "Original reviewed caption" {
+				t.Fatal("caller pointers changed the reviewed/fingerprinted attachment", link, err)
+			}
+			fixture.auth.now = clock
+			*owner, cover, position, description = originalOwner, false, 7, "Original reviewed caption"
+			replay, err := library.Attach(t.Context(), fixture.token, "media-attach-input-snapshot", "shared-a", 7, input)
+			if err != nil || !reflect.DeepEqual(link, replay) {
+				t.Fatal("frozen response and original request fingerprint diverged", err)
+			}
+		})
+	}
 }
 
 func TestMediaAttachPublishesIndependentLinkAndActualOwnerScopes(t *testing.T) {
