@@ -1,6 +1,6 @@
 # Shared Images and Media Links
 
-**Availability: private database groundwork, authenticated store reads and target contracts only.** Migration 0019 preserves retained Media/MediaLink source and builds source-only current projections; existing Item, Unit and Location deletion transactions update affected Media membership. The private Go store can read actual Media and page links for an actual owner or Media, but the Go image-file storage services, media HTTP handlers, browser SDK, gallery, upload controls and camera are not implemented yet. Do not send these example requests to an incomplete installation or treat schemas/database metadata as proof of file safety. Existing catalog, physical holding, purchase and Asset workflows do not depend on an AI worker.
+**Availability: authenticated Media metadata and link reads, with database groundwork.** Migration 0019 preserves retained Media/MediaLink source and builds source-only current projections; existing Item, Unit and Location deletion transactions update affected Media membership. Four protected GET operations expose actual Media metadata and links for an actual owner or Media. Image-file storage, Media writes and streams, the browser SDK, gallery, upload controls and camera are not implemented yet. Do not treat schemas or database metadata as proof of file safety. Existing catalog, physical holding, purchase and Asset workflows do not depend on an AI worker.
 
 ## Identity, ownership and review
 
@@ -37,17 +37,18 @@ Exactly one of `item_id`, `item_unit_id` or `location_id` is required and the ot
 
 ## Selected reads and reserved IDs
 
-The private `MediaLibrary` store reads actual Media source and independent counters, not current-projection payloads. It pages actual link rows for one existing Item, Unit, Location or Media, validates related Media and owner authority including lookahead, and returns an explicit empty array and null continuation for a real empty collection. Failed source, authorization or cursor checks return no partial page. A joined entry retains the independently versioned Media and link values; neither a private storage key nor raw OCR is returned. These are store methods, not public HTTP routes, and they neither inspect nor verify image files.
+The private `MediaLibrary` store reads actual Media source and independent counters, not current-projection payloads. It pages actual link rows for one existing Item, Unit, Location or Media, validates related Media and owner authority including lookahead, and returns an explicit empty array and null continuation for a real empty collection. Failed source, authorization or cursor checks return no partial page. A joined entry retains the independently versioned Media and link values; neither a private storage key nor raw OCR is returned. The protected HTTP reads use these store methods and neither inspect nor verify image files.
 
-The target HTTP read contract includes:
+The following authenticated GET operations are implemented under `/api/v1`:
 
-- `GET /media/{id}` for actual Media metadata and its independent membership ETag.
-- `GET /media/{id}/view` for the identical resource, including a retained ID equal to `links`: the path `/media/links` otherwise names the owner-scoped list. This alias is not another resource or proof.
-- `GET /media/links?owner_type=item|unit|location&owner_id=...` for that real owner's link page.
-- `GET /media/{id}/links` for all owners linked to one real Media, needed before global deletion.
-- `GET /media/{id}/content` and `/media/{id}/thumbnail` for authenticated, `no-store`, `nosniff` image streams.
+- `GET /media/{id}` returns actual Media metadata and its independent membership ETag.
+- `GET /media/{id}/view` returns the identical resource, including a retained ID equal to `links`: the path `/media/links` otherwise names the owner-scoped list. This alias is not another resource or proof.
+- `GET /media/links?owner_type=item|unit|location&owner_id=...` returns that real owner's link page.
+- `GET /media/{id}/links` returns all owners linked to one real Media, needed before global deletion.
 
-The store's two lists use stable link-ID order, a maximum of 100, required nullable `next_cursor`, and 2048-byte opaque continuations; callers explicitly supply the page size. Their independent signatures bind principal, dataset epoch, collection/owner and page size for 15 minutes. Cursor bodies are signed, not encrypted: they contain the continuation link ID and other paging metadata, but not session credentials or the owner scope. The target HTTP boundary will apply a default of 50 and a 16-KiB raw query limit. Real source, related owners and lookahead are validated before returning any prefix. These are live pages, not frozen sync snapshots or collection ETags. Complete a selected Media's link pages between matching Media reads before deletion. For an owner list, matching owner reads bracket the link collection only: embedded Media metadata can change independently and must be reread under its own proof before a write.
+All four require a completed administrator session and the configured same origin. Collection responses have no ETag; an absent Media or owner is not an empty collection. `GET /media/{id}/content` and `/media/{id}/thumbnail` are target authenticated image streams and are **not implemented**.
+
+The two lists use stable link-ID order, a default of 50, a maximum of 100, required nullable `next_cursor`, and 2048-byte opaque continuations. The HTTP boundary also limits the raw query to 16 KiB. Their independent signatures bind principal, dataset epoch, collection/owner and page size for 15 minutes. Cursor bodies are signed, not encrypted: they contain the continuation link ID and other paging metadata, but not session credentials or the owner scope. Real source, related owners and lookahead are validated before returning any prefix. These are live pages, not frozen sync snapshots or collection ETags. Complete a selected Media's link pages between matching Media reads before deletion. For an owner list, matching owner reads bracket the link collection only: embedded Media metadata can change independently and must be reread under its own proof before a write.
 
 An ETagged `MediaLink` resource includes only the independently versioned link row. List pages instead contain `MediaLinkView` entries: the same flat link fields plus actual separately versioned `media`. This distinction avoids assigning one strong row ETag to response bytes that can change merely because the shared Media changed. Runtime code must check that the embedded Media ID matches `media_id`; JSON Schema cannot compare those fields. A verified thumbnail has both a same-origin derived URL and digest; unavailable or unverified thumbnail metadata has explicit null for both. A schema cannot verify actual bytes, URL identity or that a thumbnail exists. The version-one offline Media payload is unchanged and has no verification field: its retained metadata alone must never be treated as proof of safe bytes. The new source-only backfill sets both thumbnail fields to null; previously frozen or already materialized bytes are preserved exactly, not silently rewritten. Full sync must explicitly validate and reconcile such retained projections before it can expose them, and remains unimplemented.
 
@@ -64,9 +65,10 @@ A safe implementation must use a private staging area, durable file/directory sy
 ```sh
 uv run --frozen python -m unittest tests.test_media_contracts -v
 go -C server test ./internal/store -run '^TestMedia' -count=1
+go -C server test ./internal/httpapi -run '^TestMediaHTTP' -count=1
 npm --prefix web run api:check
 npm --prefix web run typecheck
 npm --prefix web test -- --coverage.enabled=false src/lib/api/client.test.ts
 ```
 
-These checks validate the executable schemas, original independent proofs, authenticated private Media/link source reads and complete live pages, safe error-code allowlist, typed owner exclusivity, source-only migration and shared-owner deletion/rollback/replay without changing version-one offline payload shapes. They do **not** decode images, create files, validate GPS removal, exercise a media HTTP boundary, prove file crash recovery or run a real camera. Media file storage, HTTP/SDK/browser workflows, receipt attachments, offline thumbnails, search/AI integration and physical-device acceptance remain required work.
+These checks validate the executable schemas, original independent proofs, authenticated Media/link source reads and complete live HTTP pages, safe error-code allowlist, typed owner exclusivity, source-only migration and shared-owner deletion/rollback/replay without changing version-one offline payload shapes. They do **not** decode images, create image files, validate GPS removal, prove file crash recovery or run a real camera. Media file storage, writes and streams, SDK/browser workflows, receipt attachments, offline thumbnails, search/AI integration and physical-device acceptance remain required work.
