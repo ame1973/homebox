@@ -36,7 +36,7 @@ func mediaReadRoute(path string) (route, id string) {
 
 // The same two-segment path can name a Media read and a link write. In
 // particular, /media/links/links names Media membership for GET/POST and the
-// independent link ID "links" for PATCH.
+// independent link ID "links" for PATCH/DELETE.
 func mediaLinkRoute(path string) (string, bool) {
 	const prefix = "/api/v1/media/links/"
 	if !strings.HasPrefix(path, prefix) {
@@ -46,8 +46,8 @@ func mediaLinkRoute(path string) (string, bool) {
 	return id, id != "" && !strings.Contains(id, "/")
 }
 
-// Metadata and link pages do not expose image bytes. Attachment and link edits
-// change reviewed metadata only; uploads and file storage remain separate.
+// Metadata and link pages do not expose image bytes. Attachment, edits and
+// unlinking change reviewed metadata only; uploads and file storage remain separate.
 func (a *authAPI) serveMediaReads(w http.ResponseWriter, r *http.Request, requestID string) bool {
 	route, id := mediaReadRoute(r.URL.Path)
 	linkID, linkRoute := mediaLinkRoute(r.URL.Path)
@@ -65,14 +65,14 @@ func (a *authAPI) serveMediaReads(w http.ResponseWriter, r *http.Request, reques
 		methods = append(methods, http.MethodPost)
 	}
 	if linkRoute {
-		methods = append(methods, http.MethodPatch)
+		methods = append(methods, http.MethodPatch, http.MethodDelete)
 	}
 	if !slices.Contains(methods, r.Method) {
 		w.Header().Set("Allow", strings.Join(methods, ", "))
 		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "The method is not supported for this route.", requestID)
 		return true
 	}
-	if r.Method == http.MethodPatch {
+	if r.Method == http.MethodPatch || r.Method == http.MethodDelete {
 		id = linkID
 	}
 	isList := r.Method == http.MethodGet && route != "resource"
@@ -82,9 +82,21 @@ func (a *authAPI) serveMediaReads(w http.ResponseWriter, r *http.Request, reques
 		return true
 	}
 	token, _ := sessionToken(r)
-	if r.Method == http.MethodPost || r.Method == http.MethodPatch {
+	if r.Method == http.MethodPost || r.Method == http.MethodPatch || r.Method == http.MethodDelete {
 		revision, _, ok := resourceRevision(w, r, requestID, true)
 		if !ok {
+			return true
+		}
+		if r.Method == http.MethodDelete {
+			if !requireNoBody(w, r, requestID) {
+				return true
+			}
+			ack, err := a.media.Unlink(r.Context(), token, r.Header.Get("Idempotency-Key"), id, revision)
+			if err != nil {
+				writeMediaError(w, err, requestID)
+			} else {
+				writeJSON(w, ack)
+			}
 			return true
 		}
 		var value store.MediaLink

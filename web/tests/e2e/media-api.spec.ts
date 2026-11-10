@@ -170,6 +170,42 @@ test('edits an independent MediaLink through same-origin browser requests with e
   expect(JSON.stringify(result)).not.toContain('private-photo')
 })
 
+test('unlinks one shared MediaLink through same-origin browser requests with explicit original-key reconciliation', async ({ page, application }) => {
+  await provision(page, application)
+  await page.goto('/')
+  const result = await page.evaluate(async ({ sibling }) => {
+    const csrfResponse = await fetch('/api/v1/auth/csrf')
+    const csrf = (await csrfResponse.json()).token as string
+    const headers = { 'X-CSRF-Token': csrf, 'X-HomeBox-Client-Version': '0.1.0-dev', 'Idempotency-Key': crypto.randomUUID(), 'If-Match': '"5"' }
+    const unlink = async (requestHeaders: typeof headers) => {
+      const response = await fetch('/api/v1/media/links/sibling', { method: 'DELETE', headers: requestHeaders })
+      return { status: response.status, etag: response.headers.get('ETag'), cache: response.headers.get('Cache-Control'), value: await response.json() }
+    }
+    const first = await unlink(headers), retry = await unlink(headers)
+    const changedProof = await unlink({ ...headers, 'If-Match': '"6"' })
+    const missing = await unlink({ ...headers, 'Idempotency-Key': crypto.randomUUID() })
+    const imageResponse = await fetch('/api/v1/media/photo')
+    const ownerResponse = await fetch(`/api/v1/media/links?owner_type=item&owner_id=${encodeURIComponent(sibling)}`)
+    const membershipResponse = await fetch('/api/v1/media/photo/links?limit=100')
+    const reservedResponse = await fetch('/api/v1/media/links/view')
+    return { csrfStatus: csrfResponse.status, first, retry, changedProof, missing, image: await imageResponse.json(), owner: await ownerResponse.json(), membership: await membershipResponse.json(), reserved: await reservedResponse.json() }
+  }, { sibling })
+  expect(result.csrfStatus).toBe(200)
+  expect(result.first).toMatchObject({ status: 200, etag: null, cache: 'no-store', value: { ok: true, revision: 6 } })
+  expect(result.first.value.operation_id).toBeTruthy()
+  expect(Object.keys(result.first.value).sort()).toEqual(['ok', 'operation_id', 'revision'])
+  expect(result.retry).toEqual(result.first)
+  expect(result.changedProof).toMatchObject({ status: 409, etag: null, value: { error: { code: 'IDEMPOTENCY_CONFLICT' } } })
+  expect(result.missing).toMatchObject({ status: 404, etag: null, value: { error: { code: 'NOT_FOUND' } } })
+  expect(result.image).toMatchObject({ id: 'photo', revision: 8, verification: 'unverified', thumb_url: null, thumb_sha256: null })
+  expect(result.reserved).toMatchObject({ id: 'links', revision: 3 })
+  expect(result.owner.data).toMatchObject([{ id: 'reserved', media_id: 'links', owner_id: sibling }])
+  expect(result.membership.data).toHaveLength(51)
+  expect(result.membership.data.every((link: { id: string }) => link.id !== 'sibling')).toBe(true)
+  expect(result.membership.next_cursor).toBeNull()
+  expect(JSON.stringify(result)).not.toContain('private-photo')
+})
+
 test('rejects inconsistent real-server page replies rather than returning a partial selection', async ({ page, application }) => {
   await provision(page, application)
   let tamper = true

@@ -224,9 +224,9 @@ func TestMediaLinkPatchHTTPDispatchesReservedLinkIDsByMethod(t *testing.T) {
 		t.Fatal("reserved Media membership changed meaning after PATCH and POST")
 	}
 	for _, tc := range []struct{ path, allow string }{
-		{"/api/v1/media/links/view", "GET, PATCH"},
-		{"/api/v1/media/links/links", "GET, POST, PATCH"},
-		{"/api/v1/media/links/item-000", "PATCH"},
+		{"/api/v1/media/links/view", "GET, PATCH, DELETE"},
+		{"/api/v1/media/links/links", "GET, POST, PATCH, DELETE"},
+		{"/api/v1/media/links/item-000", "PATCH, DELETE"},
 		{"/api/v1/media/photo/links", "GET, POST"},
 	} {
 		response := respond(f.handler, domainRequest(http.MethodHead, tc.path, "", f.cookie, f.csrf, "", ""))

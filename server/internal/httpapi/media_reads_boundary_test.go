@@ -281,6 +281,48 @@ func TestMediaHTTPThroughVerifiedTLSAndCookieJar(t *testing.T) {
 		}
 		original = data
 	}
+	original = nil
+	for range 2 {
+		request, err := http.NewRequestWithContext(t.Context(), http.MethodDelete, server.URL+"/api/v1/media/links/"+attached.ID, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Header.Set("Origin", origin)
+		request.Header.Set("X-CSRF-Token", csrf.Token)
+		request.Header.Set("Idempotency-Key", "media-tls-original-unlink")
+		request.Header.Set("X-HomeBox-Client-Version", supportedClientVersion+"-dev")
+		request.Header.Set("If-Match", `"2"`)
+		response, err = client.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, readErr := io.ReadAll(response.Body)
+		closeErr = response.Body.Close()
+		var ack store.ActionAck
+		if response.StatusCode != 200 || readErr != nil || closeErr != nil || json.Unmarshal(data, &ack) != nil || !ack.OK || ack.OperationID == "" || ack.Revision != 3 ||
+			response.Header.Get("ETag") != "" || response.Header.Get("Cache-Control") != "no-store" || response.Header.Get("Strict-Transport-Security") == "" || response.Header.Get("Set-Cookie") != "" {
+			t.Fatal("verified-TLS unlink or independent tombstone proof failed", response.StatusCode, readErr, closeErr)
+		}
+		if original != nil && !bytes.Equal(original, data) {
+			t.Fatal("verified-TLS original-key unlink retry changed the frozen acknowledgement")
+		}
+		original = data
+	}
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL+"/api/v1/media/empty-media/links", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Origin", origin)
+	response, err = client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var page store.MediaLinkList
+	decodeErr = json.NewDecoder(response.Body).Decode(&page)
+	closeErr = response.Body.Close()
+	if response.StatusCode != 200 || decodeErr != nil || closeErr != nil || page.Data == nil || len(page.Data) != 0 || page.NextCursor != nil || response.Header.Get("ETag") != "" {
+		t.Fatal("verified-TLS unlink did not preserve an actual empty Media scope", response.StatusCode, decodeErr, closeErr)
+	}
 }
 
 func TestMediaHTTPErrorMappingDoesNotExposeSource(t *testing.T) {
