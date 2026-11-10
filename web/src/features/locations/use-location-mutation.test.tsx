@@ -89,7 +89,7 @@ it('admits only one active confirmation and invalidates reads without installing
 
 it.each([undefined, 'REVISION_CONFLICT', 'NETWORK_ERROR'] as const)('invalidates location-dependent catalog/holding scopes after sent %s without replacing current data', async (code) => {
   const work = fixture()
-  const keys = [['locations', 'tree'], ['catalog', 'items', { location_id: 'room', scope: 'subtree' }], ['holdings', 'stock', { location_id: 'room' }], ['purchases', 'list', { location_id: 'room', scope: 'subtree' }], ['assets', 'list', { location_id: 'room', scope: 'subtree' }], ['assets', 'detail', 'unit']] as const
+  const keys = [['locations', 'tree'], ['catalog', 'items', { location_id: 'room', scope: 'subtree' }], ['holdings', 'stock', { location_id: 'room' }], ['purchases', 'list', { location_id: 'room', scope: 'subtree' }], ['assets', 'list', { location_id: 'room', scope: 'subtree' }], ['assets', 'detail', 'unit'], ['media', 'owner', 'location', 'room'], ['media', 'membership', 'photo']] as const
   const current = { revision: 99, current: true }
   for (const key of [...keys, ['auth', 'me'], ['taxonomy', 'tags']]) work.client.setQueryData(key, current)
   if (code) vi.mocked(sendLocationCommand).mockRejectedValueOnce(new ApiError(code, { status: code === 'REVISION_CONFLICT' ? 409 : undefined }))

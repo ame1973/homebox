@@ -24,7 +24,7 @@ const proposals: AssetCommandInput[] = [
 ]
 const reply: AssetResult = { ...body, id: 'new-event', revision: 1, item_unit_id: unit.id, note: '', correction_of: null }
 const keys = [['assets', 'profile', unit.id], ['assets', 'usage', unit.id], ['assets', 'costs', unit.id], ['assets', 'detail', unit.id], ['assets', 'list', { currency: 'JPY' }],
-  ['catalog', 'item', item.id], ['catalog', 'items'], ['holdings', 'unit', unit.id], ['holdings', 'item', item.id], ['purchases', 'item', item.id], ['purchases', 'allocation', 'purchase', item.id]] as const
+  ['catalog', 'item', item.id], ['catalog', 'items'], ['holdings', 'unit', unit.id], ['holdings', 'item', item.id], ['purchases', 'item', item.id], ['purchases', 'allocation', 'purchase', item.id], ['media', 'owner', 'unit', unit.id], ['media', 'membership', 'photo']] as const
 const location = ['locations', 'tree'] as const
 const unrelated = [['auth', 'me'], ['taxonomy', 'categories'], ['taxonomy', 'tags']] as const
 beforeEach(() => { vi.mocked(fetchCSRF).mockReset().mockResolvedValue('csrf'); vi.mocked(sendAssetCommand).mockReset().mockResolvedValue(reply) })

@@ -14,7 +14,7 @@ const item = { id: 'item', revision: 7, name: 'Original', brand: null, model: ''
   tracking_mode: 'individual', unit_code: 'pcs', base_unit: 'pcs', scale_factor: 1, status: 'active' } as const
 const proposal: CatalogCommandInput = { kind: 'patch', subject: item, body: { name: 'Reviewed' } }
 const reply: CatalogResult = { ...item, name: 'Reviewed', revision: 8 }
-const keys = [['catalog', 'items'], ['catalog', 'item', item.id], ['taxonomy', 'categories'], ['taxonomy', 'tags'], ['holdings', 'item', item.id], ['purchases', 'item', item.id], ['purchases', 'allocation', 'purchase', item.id], ['assets', 'detail', 'unit'], ['assets', 'list', { category_id: 'category' }]] as const
+const keys = [['catalog', 'items'], ['catalog', 'item', item.id], ['taxonomy', 'categories'], ['taxonomy', 'tags'], ['holdings', 'item', item.id], ['purchases', 'item', item.id], ['purchases', 'allocation', 'purchase', item.id], ['assets', 'detail', 'unit'], ['assets', 'list', { category_id: 'category' }], ['media', 'owner', 'item', item.id], ['media', 'membership', 'photo']] as const
 beforeEach(() => {
   vi.mocked(fetchCSRF).mockReset().mockResolvedValue('csrf')
   vi.mocked(sendCatalogCommand).mockReset().mockResolvedValue(reply)

@@ -2,7 +2,7 @@ import { useReviewedMutation } from '@/lib/use-reviewed-mutation'
 import { freezeHoldingCommand, sendHoldingCommand, type HoldingCommand, type HoldingResult } from './commands'
 
 export function useHoldingMutation(onConfirmed: (command: HoldingCommand, result: HoldingResult) => void, onSessionLost: (mandatory: boolean) => void) {
-  return useReviewedMutation(freezeHoldingCommand, sendHoldingCommand, [['holdings'], ['catalog'], ['locations'], ['purchases'], ['assets']], onConfirmed, onSessionLost)
+  return useReviewedMutation(freezeHoldingCommand, sendHoldingCommand, [['holdings'], ['catalog'], ['locations'], ['purchases'], ['assets'], ['media']], onConfirmed, onSessionLost)
 }
 
 export type HoldingMutation = ReturnType<typeof useHoldingMutation>

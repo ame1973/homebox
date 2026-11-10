@@ -34,6 +34,8 @@ it('reviews without writing and confirms only once, invalidating dependent taxon
   work.client.setQueryData(['holdings', 'item', 'item'], current)
   work.client.setQueryData(['purchases', 'list', { category_id: 'parent' }], current)
   work.client.setQueryData(['assets', 'list', { category_id: 'parent' }], current)
+  work.client.setQueryData(['media', 'owner', 'item', 'item'], current)
+  work.client.setQueryData(['media', 'membership', 'photo'], current)
   work.client.setQueryData(['locations', 'tree'], current)
   act(() => { work.result.current.review(proposal) })
   expect(fetchCSRF).not.toHaveBeenCalled()
@@ -60,6 +62,10 @@ it('reviews without writing and confirms only once, invalidating dependent taxon
   expect(work.client.getQueryData(['purchases', 'list', { category_id: 'parent' }])).toBe(current)
   expect(work.client.getQueryState(['assets', 'list', { category_id: 'parent' }])?.isInvalidated).toBe(true)
   expect(work.client.getQueryData(['assets', 'list', { category_id: 'parent' }])).toBe(current)
+  for (const key of [['media', 'owner', 'item', 'item'], ['media', 'membership', 'photo']]) {
+    expect(work.client.getQueryState(key)?.isInvalidated).toBe(true)
+    expect(work.client.getQueryData(key)).toBe(current)
+  }
   expect(work.client.getQueryState(['locations', 'tree'])?.isInvalidated).toBe(false)
   work.dispose()
 })
@@ -71,6 +77,8 @@ it('retains an uncertain taxonomy request through dismissal and explicit same-ke
   work.client.setQueryData(['holdings', 'stock'], 'current')
   work.client.setQueryData(['purchases', 'allocation', 'purchase', 'item'], 'current')
   work.client.setQueryData(['assets', 'detail', 'unit'], 'current')
+  work.client.setQueryData(['media', 'owner', 'item', 'item'], 'current')
+  work.client.setQueryData(['media', 'membership', 'photo'], 'current')
   vi.mocked(sendTaxonomyCommand).mockRejectedValueOnce(new ApiError('NETWORK_ERROR'))
   act(() => { work.result.current.review(proposal) })
   const original = work.result.current.command
@@ -83,6 +91,10 @@ it('retains an uncertain taxonomy request through dismissal and explicit same-ke
   expect(work.client.getQueryData(['purchases', 'allocation', 'purchase', 'item'])).toBe('current')
   expect(work.client.getQueryState(['assets', 'detail', 'unit'])?.isInvalidated).toBe(true)
   expect(work.client.getQueryData(['assets', 'detail', 'unit'])).toBe('current')
+  for (const key of [['media', 'owner', 'item', 'item'], ['media', 'membership', 'photo']]) {
+    expect(work.client.getQueryState(key)?.isInvalidated).toBe(true)
+    expect(work.client.getQueryData(key)).toBe('current')
+  }
   act(() => { work.result.current.dismiss(); work.result.current.review({ kind: 'create-tag', body: { name: 'Must not replace' } }) })
   expect(work.result.current.command).toBe(original)
   expect(work.result.current.open).toBe(false)
@@ -103,11 +115,13 @@ it('keeps exact-name conflict editable, but a pre-send CSRF failure never become
   expect(work.result.current.phase).toBe('rejected')
   act(() => { work.result.current.dismiss(); work.result.current.review(proposal) })
   work.client.setQueryData(['assets', 'profile', 'unit'], 'current')
+  work.client.setQueryData(['media', 'owner', 'item', 'item'], 'current')
   vi.mocked(fetchCSRF).mockRejectedValueOnce(new ApiError('NETWORK_ERROR'))
   await act(async () => { await work.result.current.confirm() })
   expect(work.result.current.phase).toBe('rejected')
   expect(sendTaxonomyCommand).toHaveBeenCalledTimes(1)
   expect(work.client.getQueryState(['assets', 'profile', 'unit'])?.isInvalidated).toBe(false)
+  expect(work.client.getQueryState(['media', 'owner', 'item', 'item'])?.isInvalidated).toBe(false)
   work.dispose()
 })
 

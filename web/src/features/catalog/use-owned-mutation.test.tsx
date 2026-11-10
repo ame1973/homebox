@@ -15,7 +15,7 @@ const owner = { id: 'item', revision: 7, name: 'Owner', brand: null, model: '', 
 const subject = { id: 'alias', item_id: owner.id, revision: 2, alias: 'Original' } as const
 const proposal: OwnedCommandInput = { kind: 'patch-alias', owner, subject, body: { alias: 'Reviewed' } }
 const reply: OwnedResult = { ...subject, alias: 'Reviewed', revision: 3 }
-const keys = [['catalog', 'items'], ['catalog', 'item', owner.id], ['catalog', 'owned', owner.id], ['taxonomy', 'tags'], ['holdings', 'item', owner.id], ['purchases', 'item', owner.id], ['purchases', 'allocation', 'purchase', owner.id], ['assets', 'profile', 'unit'], ['assets', 'usage', 'unit']] as const
+const keys = [['catalog', 'items'], ['catalog', 'item', owner.id], ['catalog', 'owned', owner.id], ['taxonomy', 'tags'], ['holdings', 'item', owner.id], ['purchases', 'item', owner.id], ['purchases', 'allocation', 'purchase', owner.id], ['assets', 'profile', 'unit'], ['assets', 'usage', 'unit'], ['media', 'owner', 'item', owner.id], ['media', 'membership', 'photo']] as const
 beforeEach(() => {
   vi.mocked(fetchCSRF).mockReset().mockResolvedValue('csrf')
   vi.mocked(sendOwnedCommand).mockReset().mockResolvedValue(reply)

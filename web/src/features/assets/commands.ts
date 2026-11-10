@@ -73,7 +73,7 @@ export async function sendAssetCommand(command: AssetCommand, csrfToken: string,
 }
 
 export function assetCommandReadRoots(command: AssetCommand): readonly (readonly string[])[] {
-  const roots = [['assets'], ['catalog'], ['holdings'], ['purchases']]
+  const roots = [['assets'], ['catalog'], ['holdings'], ['purchases'], ['media']]
   if (command.kind === 'retire-asset' && !['retired', 'disposed'].includes(command.source.unit.status) || command.kind === 'dispose-asset' && command.source.unit.status !== 'disposed') roots.push(['locations'])
   return roots
 }

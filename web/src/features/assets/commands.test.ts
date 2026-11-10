@@ -113,7 +113,7 @@ it('rejects an invalid retained key and reconciles only an explicit identical or
 })
 it.each(proposals)('invalidates financial/owner roots and only possible physical location scopes for $kind', (proposal) => {
   const roots = assetCommandReadRoots(freezeAssetCommand(proposal))
-  expect(roots).toEqual([['assets'], ['catalog'], ['holdings'], ['purchases'], ...(proposal.kind === 'retire-asset' || proposal.kind === 'dispose-asset' ? [['locations']] : [])])
+  expect(roots).toEqual([['assets'], ['catalog'], ['holdings'], ['purchases'], ['media'], ...(proposal.kind === 'retire-asset' || proposal.kind === 'dispose-asset' ? [['locations']] : [])])
 })
 it.each(['retired', 'disposed'] as const)('does not invalidate unrelated locations for nonphysical retained %s retirement', (status) => {
   const proposal = proposals[3]!

@@ -23,7 +23,7 @@ const proposals: CorrectionCommandInput[] = [
   { kind: 'correct-disposal', source: { unit, item, asset, disposal, corrections: [] }, body: { asset_revision: asset.revision, action: 'void', replacement: null, reason: 'Void financial decision' } },
 ]
 const reply: CorrectionResult = { id: 'entry', revision: 1, purchase_id: purchase.id, action: 'void', reason: 'Void attribution', created_at: purchase.purchased_at, before: line, after: null }
-const keys = [['purchases', 'detail', purchase.id], ['purchases', 'corrections', purchase.id], ['catalog', 'item', item.id], ['catalog', 'items'], ['holdings', 'unit', unit.id], ['holdings', 'item', item.id], ['assets', 'detail', unit.id], ['assets', 'costs', unit.id]] as const
+const keys = [['purchases', 'detail', purchase.id], ['purchases', 'corrections', purchase.id], ['catalog', 'item', item.id], ['catalog', 'items'], ['holdings', 'unit', unit.id], ['holdings', 'item', item.id], ['assets', 'detail', unit.id], ['assets', 'costs', unit.id], ['media', 'owner', 'unit', unit.id], ['media', 'membership', 'photo']] as const
 const unrelated = [['locations', 'tree'], ['auth', 'me'], ['taxonomy', 'categories']] as const
 beforeEach(() => { vi.mocked(fetchCSRF).mockReset().mockResolvedValue('csrf'); vi.mocked(sendCorrectionCommand).mockReset().mockResolvedValue(reply) })
 function fixture() {

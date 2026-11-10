@@ -208,6 +208,8 @@
 
 ### Fixed
 
+- Invalidate Media owner and membership reads after sent catalog, owned-row, Location, Holding, taxonomy, Purchase, Asset and financial-correction mutations. These operations can advance an owner or remove its links; a confirmed or uncertain write must not leave a previously reviewed Media scope current. Preserve unrelated authentication/location boundaries, never install a frozen reply and do not invalidate when CSRF fails before sending.
+
 - Snapshot caller-owned Item creation/edit and Attribute patch pointers before validation and idempotency fingerprinting. Preserve the original nullable metadata, classification, measurement tuple, approved search and value-equal receipts if caller values change afterward; unsynchronized concurrent access remains a caller data race.
 
 - Snapshot caller-owned Category create/patch parent and name values before validation and idempotency fingerprinting. Preserve the reviewed hierarchy, approved dependent search text and equal-intent receipts if those pointers change afterward; unsynchronized concurrent access remains a caller data race.
