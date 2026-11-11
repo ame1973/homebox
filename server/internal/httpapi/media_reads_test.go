@@ -33,6 +33,10 @@ type mediaHTTPFixture struct {
 // Seed retained image and legacy link source offline because upload is not yet
 // implemented. Real owner services create their source, counters and events.
 func newMediaHTTPFixture(t *testing.T, specialLinkIDs ...string) mediaHTTPFixture {
+	return newMediaHTTPFixtureWithMedia(t, nil, specialLinkIDs...)
+}
+
+func newMediaHTTPFixtureWithMedia(t *testing.T, specialMediaIDs []string, specialLinkIDs ...string) mediaHTTPFixture {
 	t.Helper()
 	directory := t.TempDir()
 	if err := os.Chmod(directory, 0o700); err != nil {
@@ -136,12 +140,17 @@ func newMediaHTTPFixture(t *testing.T, specialLinkIDs ...string) mediaHTTPFixtur
 		Bytes          int64   `json:"bytes"`
 		PerceptualHash *string `json:"perceptual_hash"`
 	}
-	for _, image := range []struct {
-		id, mime string
-		revision int64
-	}{{"photo", "image/heic", 7}, {"links", "image/png", 3}, {"empty-media", "image/png", 1}} {
+	type fixtureMedia struct {
+		id, mime, storageKey string
+		revision             int64
+	}
+	images := []fixtureMedia{{"photo", "image/heic", "private-storage-key-photo", 7}, {"links", "image/png", "private-storage-key-links", 3}, {"empty-media", "image/png", "private-storage-key-empty-media", 1}}
+	for index, id := range specialMediaIDs {
+		images = append(images, fixtureMedia{id, "image/png", fmt.Sprintf("private-legacy-media-%d", index), 1})
+	}
+	for _, image := range images {
 		digest := strings.Repeat("a", 64)
-		exec(`INSERT INTO media(id,storage_key,sha256,mime_type,width,height,bytes,created_at) VALUES(?,?,?,?,10,20,30,?)`, image.id, "private-storage-key-"+image.id, digest, image.mime, "2026-11-06T00:00:00Z")
+		exec(`INSERT INTO media(id,storage_key,sha256,mime_type,width,height,bytes,created_at) VALUES(?,?,?,?,10,20,30,?)`, image.id, image.storageKey, digest, image.mime, "2026-11-06T00:00:00Z")
 		projection("media", image.id, image.revision, mediaProjection{ID: image.id, SHA256: digest, Width: 10, Height: 20, MIMEType: image.mime, Bytes: 30})
 	}
 	type linkProjection struct {

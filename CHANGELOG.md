@@ -4,6 +4,8 @@
 
 ### Added
 
+- Implement protected exact-query Media metadata, membership and attachment aliases without reserving retained path identities. Reuse actual Media/owner authority, scoped interchangeable live cursors, independent ETags and original-key receipts across URL forms; reject ambiguous queries and revalidate source/session after body reading. Real-source and verified-TLS checks cover retained slash/backslash/NUL/dot identities and all owner kinds. Browser review for these Media IDs remains separate.
+
 - Define exact-query Media metadata, membership-page and attachment aliases in a separate namespace for retained IDs that cannot be path segments. Preserve the existing Media revision, scoped live cursor, original Media/owner proofs and cross-form original-key receipt semantics; add executable contract and strict generated-client checks. These three aliases are contract-only at this stage, not implemented HTTP or browser workflows.
 
 - Generate an independently hashed JPEG thumbnail from validated, oriented JPEG/PNG pixels in the existing single-slot processor. Bound its longest edge to 512 pixels without upscaling, average downsampled pixels, composite transparency onto white and strip source metadata. Test orientation, 16-bit alpha, GPS removal, extreme dimensions, cancellation, failed writes and fuzzing. This internal utility is not connected to uploads, file storage or image streams; WebP and physical-device acceptance remain unfinished.

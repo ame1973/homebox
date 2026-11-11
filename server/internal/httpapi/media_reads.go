@@ -12,6 +12,12 @@ import (
 )
 
 func mediaReadRoute(path string) (route, id string) {
+	switch path {
+	case "/api/v1/media-by-identity":
+		return "identity-resource", ""
+	case "/api/v1/media-by-identity/links":
+		return "identity-membership", ""
+	}
 	const prefix = "/api/v1/media/"
 	if !strings.HasPrefix(path, prefix) {
 		return "", ""
@@ -61,7 +67,7 @@ func (a *authAPI) serveMediaReads(w http.ResponseWriter, r *http.Request, reques
 	if route != "" {
 		methods = append(methods, http.MethodGet)
 	}
-	if route == "membership" {
+	if route == "membership" || route == "identity-membership" {
 		methods = append(methods, http.MethodPost)
 	}
 	if linkRoute || route == "owner" {
@@ -73,20 +79,25 @@ func (a *authAPI) serveMediaReads(w http.ResponseWriter, r *http.Request, reques
 		return true
 	}
 	queryLink := route == "owner" && (r.Method == http.MethodPatch || r.Method == http.MethodDelete)
+	queryMedia := route == "identity-resource" || route == "identity-membership"
 	if !queryLink && (r.Method == http.MethodPatch || r.Method == http.MethodDelete) {
 		id = linkID
 	}
-	isList := r.Method == http.MethodGet && route != "resource"
+	isList := r.Method == http.MethodGet && route != "resource" && route != "identity-resource"
 	if r.URL.RawPath != "" || strings.ContainsAny(id, "\\\x00") || id == "." || id == ".." || id != "" && !boundedString(id, 1, 128) ||
-		!isList && !queryLink && (r.URL.RawQuery != "" || r.URL.ForceQuery) {
+		!isList && !queryLink && !queryMedia && (r.URL.RawQuery != "" || r.URL.ForceQuery) {
 		writeError(w, http.StatusBadRequest, "INVALID_MEDIA_URL", "Use an exact Media path and only documented parameters.", requestID)
 		return true
 	}
-	if queryLink {
+	if queryLink || queryMedia && (route == "identity-resource" || r.Method == http.MethodPost) {
 		var ok bool
 		id, ok = exactIdentityQuery(r)
 		if !ok {
-			writeError(w, http.StatusBadRequest, "INVALID_QUERY", "Use one exact MediaLink identity in the id query parameter.", requestID)
+			message := "Use one exact Media identity in the id query parameter."
+			if queryLink {
+				message = "Use one exact MediaLink identity in the id query parameter."
+			}
+			writeError(w, http.StatusBadRequest, "INVALID_QUERY", message, requestID)
 			return true
 		}
 	}
@@ -135,7 +146,7 @@ func (a *authAPI) serveMediaReads(w http.ResponseWriter, r *http.Request, reques
 		return true
 	}
 	switch route {
-	case "resource":
+	case "resource", "identity-resource":
 		image, err := a.media.Get(r.Context(), token, id)
 		if err != nil {
 			writeMediaError(w, err, requestID)
@@ -143,8 +154,15 @@ func (a *authAPI) serveMediaReads(w http.ResponseWriter, r *http.Request, reques
 			w.Header().Set("ETag", strconv.Quote(strconv.FormatInt(image.Revision, 10)))
 			writeJSON(w, image)
 		}
-	case "membership":
-		cursor, limit, ok := boundedMetadataQuery(w, r, requestID, 50, 16<<10)
+	case "membership", "identity-membership":
+		var cursor string
+		var limit int
+		var ok bool
+		if route == "identity-membership" {
+			id, cursor, limit, ok = mediaIdentityPageQuery(w, r, requestID)
+		} else {
+			cursor, limit, ok = boundedMetadataQuery(w, r, requestID, 50, 16<<10)
+		}
 		if !ok {
 			return true
 		}
@@ -167,6 +185,27 @@ func (a *authAPI) serveMediaReads(w http.ResponseWriter, r *http.Request, reques
 		}
 	}
 	return true
+}
+
+func mediaIdentityPageQuery(w http.ResponseWriter, r *http.Request, requestID string) (string, string, int, bool) {
+	invalid := func() (string, string, int, bool) {
+		writeError(w, http.StatusBadRequest, "INVALID_QUERY", "Use one exact Media identity and a bounded limit and cursor.", requestID)
+		return "", "", 0, false
+	}
+	if len(r.URL.RawQuery) > 16<<10 {
+		return invalid()
+	}
+	values, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil || len(values["id"]) != 1 || !boundedString(values.Get("id"), 1, 128) {
+		return invalid()
+	}
+	id := values.Get("id")
+	delete(values, "id")
+	cursor, limit, ok := metadataQueryValues(values, 50)
+	if !ok {
+		return invalid()
+	}
+	return id, cursor, limit, true
 }
 
 func mediaOwnerQuery(w http.ResponseWriter, r *http.Request, requestID string) (string, string, string, int, bool) {

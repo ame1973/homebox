@@ -143,7 +143,8 @@ func TestMediaHTTPOwnerDeletionChangesOnlyActualMembership(t *testing.T) {
 
 func TestMediaHTTPThroughVerifiedTLSAndCookieJar(t *testing.T) {
 	specialID := "tls/\\\x00😀"
-	f := newMediaHTTPFixture(t, specialID)
+	specialMediaID := "tls/media/\\\x00😀"
+	f := newMediaHTTPFixtureWithMedia(t, []string{specialMediaID}, specialID)
 	server := httptest.NewUnstartedServer(nil)
 	origin := "https://" + server.Listener.Addr().String()
 	handler, err := New(Config{Auth: f.auth, PublicOrigin: origin, Assets: fstest.MapFS{"index.html": {Data: []byte("<main>App</main>")}}})
@@ -176,13 +177,15 @@ func TestMediaHTTPThroughVerifiedTLSAndCookieJar(t *testing.T) {
 		t.Fatal("verified-TLS login failed", response.StatusCode, readErr, closeErr)
 	}
 	for _, check := range []struct {
-		path, etag string
-		count      int
+		path, etag, id string
+		count          int
 	}{
-		{"/api/v1/media/photo", `"7"`, -1},
-		{"/api/v1/media/links/view", `"3"`, -1},
-		{"/api/v1/media/photo/links?limit=1", "", 1},
-		{"/api/v1/media/links?owner_type=unit&owner_id=" + url.QueryEscape(f.unit.ID), "", 1},
+		{"/api/v1/media/photo", `"7"`, "photo", -1},
+		{"/api/v1/media/links/view", `"3"`, "links", -1},
+		{"/api/v1/media-by-identity?id=" + url.QueryEscape(specialMediaID), `"1"`, specialMediaID, -1},
+		{"/api/v1/media-by-identity/links?id=" + url.QueryEscape(specialMediaID), "", "", 0},
+		{"/api/v1/media/photo/links?limit=1", "", "", 1},
+		{"/api/v1/media/links?owner_type=unit&owner_id=" + url.QueryEscape(f.unit.ID), "", "", 1},
 	} {
 		r, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL+check.path, nil)
 		if err != nil {
@@ -201,12 +204,12 @@ func TestMediaHTTPThroughVerifiedTLSAndCookieJar(t *testing.T) {
 		}
 		if check.count < 0 {
 			var image store.Media
-			if json.Unmarshal(body, &image) != nil || image.Verification != "unverified" || image.ThumbURL != nil || image.ThumbSHA256 != nil {
-				t.Fatal("TLS Media read invented a verified thumbnail")
+			if json.Unmarshal(body, &image) != nil || image.ID != check.id || image.Verification != "unverified" || image.ThumbURL != nil || image.ThumbSHA256 != nil {
+				t.Fatal("TLS Media read changed its identity or invented a verified thumbnail")
 			}
 		} else {
 			var page store.MediaLinkList
-			if json.Unmarshal(body, &page) != nil || len(page.Data) != check.count || page.Data[0].Media.ID != page.Data[0].MediaID {
+			if json.Unmarshal(body, &page) != nil || len(page.Data) != check.count || check.count > 0 && page.Data[0].Media.ID != page.Data[0].MediaID {
 				t.Fatal("TLS Media link read did not join real source")
 			}
 		}
@@ -378,6 +381,51 @@ func TestMediaHTTPThroughVerifiedTLSAndCookieJar(t *testing.T) {
 	closeErr = response.Body.Close()
 	if response.StatusCode != 200 || decodeErr != nil || closeErr != nil || page.Data == nil || len(page.Data) != 0 || page.NextCursor != nil || response.Header.Get("ETag") != "" {
 		t.Fatal("verified-TLS unlink did not preserve an actual empty Media scope", response.StatusCode, decodeErr, closeErr)
+	}
+
+	body = fmt.Sprintf(`{"location_id":%q,"owner_revision":%d}`, f.location.ID, f.location.Revision)
+	original = nil
+	for range 2 {
+		request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, server.URL+"/api/v1/media-by-identity/links?id="+url.QueryEscape(specialMediaID), strings.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Header.Set("Origin", origin)
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("X-CSRF-Token", csrf.Token)
+		request.Header.Set("Idempotency-Key", "media-tls-exact-media-attach")
+		request.Header.Set("X-HomeBox-Client-Version", supportedClientVersion+"-dev")
+		request.Header.Set("If-Match", `"1"`)
+		response, err = client.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, readErr := io.ReadAll(response.Body)
+		closeErr = response.Body.Close()
+		var link store.MediaLink
+		if response.StatusCode != 200 || readErr != nil || closeErr != nil || json.Unmarshal(data, &link) != nil ||
+			link.MediaID != specialMediaID || link.OwnerType != "location" || link.OwnerID != f.location.ID || link.Revision != 1 ||
+			response.Header.Get("ETag") != `"1"` || response.Header.Get("Cache-Control") != "no-store" || response.Header.Get("Strict-Transport-Security") == "" {
+			t.Fatal("verified-TLS exact Media attachment lost identity or proof", response.StatusCode, readErr, closeErr)
+		}
+		if original != nil && !bytes.Equal(original, data) {
+			t.Fatal("verified-TLS exact Media retry changed the frozen response")
+		}
+		original = data
+	}
+	request, err = http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL+"/api/v1/media-by-identity/links?id="+url.QueryEscape(specialMediaID), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Origin", origin)
+	response, err = client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decodeErr = json.NewDecoder(response.Body).Decode(&page)
+	closeErr = response.Body.Close()
+	if response.StatusCode != 200 || decodeErr != nil || closeErr != nil || len(page.Data) != 1 || page.Data[0].MediaID != specialMediaID || page.Data[0].Media.Revision != 2 || response.Header.Get("ETag") != "" {
+		t.Fatal("verified-TLS exact Media membership did not retain source", response.StatusCode, decodeErr, closeErr)
 	}
 }
 

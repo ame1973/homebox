@@ -132,26 +132,34 @@ func boundedMetadataQuery(w http.ResponseWriter, r *http.Request, requestID stri
 	if err != nil {
 		return invalid()
 	}
+	cursor, limit, ok := metadataQueryValues(values, defaultLimit)
+	if !ok {
+		return invalid()
+	}
+	return cursor, limit, true
+}
+
+func metadataQueryValues(values url.Values, defaultLimit int) (string, int, bool) {
 	limit := defaultLimit
 	cursor := ""
 	for name, entries := range values {
 		if len(entries) != 1 {
-			return invalid()
+			return "", 0, false
 		}
 		switch name {
 		case "limit":
 			value, err := strconv.Atoi(entries[0])
 			if err != nil || value < 1 || value > 100 {
-				return invalid()
+				return "", 0, false
 			}
 			limit = value
 		case "cursor":
 			if len(entries[0]) == 0 || len(entries[0]) > 2048 {
-				return invalid()
+				return "", 0, false
 			}
 			cursor = entries[0]
 		default:
-			return invalid()
+			return "", 0, false
 		}
 	}
 	return cursor, limit, true
