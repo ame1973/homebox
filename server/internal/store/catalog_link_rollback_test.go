@@ -27,6 +27,7 @@ func TestCatalogOwnedEveryDependentWriteFailureRollsBackAndAllowsOriginalRetry(t
 			}
 			for _, failure := range failures {
 				t.Run(kind+"/"+operation+"/"+failure.table+failure.event, func(t *testing.T) {
+					t.Parallel()
 					s, catalog, auth, token := catalogFixture(t)
 					writer := catalogLinkMutators(catalog)[index]
 					item := createCatalogItem(t, catalog, token, ItemCreate{Name: "Owner"})

@@ -24,6 +24,7 @@ func TestPurchaseLineCorrectionRollsBackEveryActualFinancialSearchPublicationAnd
 			}
 			for _, mode := range []string{"ABORT,'failed allocation correction'", "IGNORE"} {
 				t.Run(action+"/"+failure.table+failure.verb+"/"+mode, func(t *testing.T) {
+					t.Parallel()
 					fixture, purchases, _, _ := purchaseAssetFixture(t)
 					s := fixture.store
 					taxonomy, err := NewTaxonomy(fixture.auth)

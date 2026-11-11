@@ -229,6 +229,7 @@ func TestMediaOwnerDeletionRollsBackEveryMembershipFailure(t *testing.T) {
 	for _, ownerType := range []string{"item", "unit", "location"} {
 		for _, failure := range failures {
 			t.Run(ownerType+"/"+failure.name, func(t *testing.T) {
+				t.Parallel()
 				fixture := newMediaCascadeFixture(t, ownerType)
 				s := fixture.store
 				switch failure.name {

@@ -10,10 +10,16 @@ import (
 	"time"
 )
 
+// Isolated parallel cases must not compete for the process-wide production KDF
+// gate during setup. Each case still provisions and logs in with real hashing.
+var completedFixtureAuthSetup sync.Mutex
+
 // Model an existing fully provisioned account without rerunning unrelated setup/password tests.
 func completedAuthFixture(t *testing.T) (*Store, *Auth, *time.Time, AuthSession, string) {
 	t.Helper()
 	s, a, now := authFixture(t)
+	completedFixtureAuthSetup.Lock()
+	defer completedFixtureAuthSetup.Unlock()
 	provision(t, a)
 	execSQL(t, s.db, "UPDATE admin_accounts SET must_change_password=0,revision=2")
 	session, token := login(t, a)
