@@ -4,6 +4,8 @@
 
 ### Added
 
+- Allow bracketed Media review sources and frozen attachment commands to preserve exact retained Media IDs, including slash, backslash, NUL and dot segments. Continue checking the complete independently read owner and Media scopes, the original proofs and explicit same-key retries. Real-Go browser tests exercise 205 owner links, 206 Media links and an intervening link change; rendered attachment support remains a separate step.
+
 - Extend the stateless Media read and attachment adapters to use exact-query aliases for retained slash/backslash/NUL/dot identities while keeping original Media and owner proofs, strict response validation and explicit same-key reconciliation. Actual-Go browser SDK tests cover all owner types, 206-link paging, offline behavior and a committed lost response after owner deletion and fresh login. The attachment review screen is a separate step; these adapters do not verify image files.
 
 - Implement protected exact-query Media metadata, membership and attachment aliases without reserving retained path identities. Reuse actual Media/owner authority, scoped interchangeable live cursors, independent ETags and original-key receipts across URL forms; reject ambiguous queries and revalidate source/session after body reading. Real-source and verified-TLS checks cover retained slash/backslash/NUL/dot identities and all owner kinds. Browser review for these Media IDs remains separate.

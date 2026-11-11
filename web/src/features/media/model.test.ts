@@ -195,6 +195,29 @@ it('completes all Media-owned pages between matching Media source reads', async 
   expect(mediaAPI.fetchOwnerMediaLinksPage).not.toHaveBeenCalled(); expect(catalog.fetchItem).not.toHaveBeenCalled()
 })
 
+it.each(['.', '..', 'legacy/photo', 'legacy\\photo', '\0', 'legacy/\0😀\r\n', 'percent%2F/plus+?&=#', '😀'.repeat(127) + '/'])(
+  'brackets the complete exact retained Media identity %j without changing it', async (id) => {
+    const selected = { ...image, id }, joined = { ...link, media_id: id, media: selected }, abort = signal()
+    vi.mocked(mediaAPI.fetchMedia).mockResolvedValue(selected)
+    vi.mocked(mediaAPI.fetchMediaLinksPage).mockResolvedValue({ data: [joined], next_cursor: null })
+    expect(await readMediaMembership(id, abort)).toEqual({ media: selected, links: [joined] })
+    expect(mediaAPI.fetchMedia).toHaveBeenNthCalledWith(1, id, abort); expect(mediaAPI.fetchMedia).toHaveBeenNthCalledWith(2, id, abort)
+    expect(mediaAPI.fetchMediaLinksPage).toHaveBeenCalledExactlyOnceWith(id, { limit: 100 }, abort)
+    expect(vi.mocked(mediaAPI.fetchMedia).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(mediaAPI.fetchMediaLinksPage).mock.invocationCallOrder[0]!)
+    expect(vi.mocked(mediaAPI.fetchMediaLinksPage).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(mediaAPI.fetchMedia).mock.invocationCallOrder[1]!)
+  },
+)
+
+it('rejects changed exact Media source and malformed identities without inventing a complete membership', async () => {
+  const id = 'legacy/\0photo', selected = { ...image, id }
+  vi.mocked(mediaAPI.fetchMedia).mockResolvedValueOnce(selected).mockResolvedValueOnce({ ...selected, revision: 8 })
+  vi.mocked(mediaAPI.fetchMediaLinksPage).mockResolvedValueOnce({ data: [], next_cursor: null })
+  await expect(readMediaMembership(id, signal())).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+  vi.mocked(mediaAPI.fetchMedia).mockClear(); vi.mocked(mediaAPI.fetchMediaLinksPage).mockClear()
+  for (const invalid of ['', '\uD800', '😀'.repeat(129)]) await expect(readMediaMembership(invalid, signal())).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
+  expect(mediaAPI.fetchMedia).not.toHaveBeenCalled(); expect(mediaAPI.fetchMediaLinksPage).not.toHaveBeenCalled()
+})
+
 it.each([{ ...image, revision: 8 }, { ...image, mime_type: 'image/changed' }])('withholds the Media collection if source changes during the read', async (after) => {
   vi.mocked(mediaAPI.fetchMedia).mockResolvedValueOnce(image).mockResolvedValueOnce(after)
   await expect(readMediaMembership(image.id, signal())).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })

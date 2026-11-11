@@ -119,7 +119,7 @@ export async function readOwnerMedia(requested: MediaOwnerScope, signal: AbortSi
 // A Media revision covers its complete membership. Bracket every live link page
 // with matching actual Media reads and compare every joined Media snapshot.
 export async function readMediaMembership(id: string, signal: AbortSignal): Promise<MediaMembership> {
-  const mediaID = input(pathIDSchema, id)
+  const mediaID = input(idSchema, id)
   requireActive(signal)
   const before = await fetchMedia(mediaID, signal)
   requireActive(signal)

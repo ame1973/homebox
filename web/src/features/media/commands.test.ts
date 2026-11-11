@@ -69,6 +69,19 @@ it.each(['.', '..', 'retained/link', 'retained\\link', '\0', 'link/\0😀\r\n', 
   for (const read of readers) expect(read).not.toHaveBeenCalled()
 })
 
+it.each(['.', '..', 'retained/media', 'retained\\media', '\0', 'media/\0😀\r\n', '😀'.repeat(127) + '/'])(
+  'freezes and sends exact retained Media %j with both original reviewed proofs', async (id) => {
+    const selected = { ...image, id }, owned = { ...link, media_id: id, media: selected }, other = { ...sibling, media_id: id, media: selected }
+    const owner = { ...source, links: [owned] }, complete = { media: selected, links: [owned, other] }, signal = new AbortController().signal
+    const command = freezeMediaCommand({ kind: 'attach', owner, membership: complete, body: { is_cover: false, description: 'Exact' } })
+    await sendMediaCommand(command, 'csrf', signal)
+    expect(api.attachMedia).toHaveBeenCalledExactlyOnceWith(id, { is_cover: false, description: 'Exact' },
+      { csrfToken: 'csrf', idempotencyKey: command.key, signal, media: selected, owner: owner.owner })
+    expect(Object.isFrozen(command)).toBe(true); expect(command.kind === 'attach' && Object.isFrozen(command.membership)).toBe(true)
+    for (const read of readers) expect(read).not.toHaveBeenCalled()
+  },
+)
+
 it('accepts semantic equality independent of field order across actual joined scopes', () => {
   const reordered = Object.fromEntries(Object.entries(image).reverse()) as typeof image
   const owner = { ...source, links: [{ ...link, media: reordered }] }
@@ -93,7 +106,7 @@ it.each([
   { ...proposals[0], membership: { media: image, links: [{ ...link, media: { ...image, revision: 8 } }] } },
   { ...proposals[0], membership: { media: image, links: [sibling] } },
   { ...proposals[0], membership: { media: image, links: [{ ...link, description: 'Different source' }, sibling] } },
-  { ...proposals[0], membership: { media: { ...image, id: 'unsafe/media' }, links: [] } },
+  { ...proposals[0], membership: { media: { ...image, id: '\uD800' }, links: [] } },
   { ...proposals[0], body: { sort_order: -1 } }, { ...proposals[0], body: { description: null } },
   { ...proposals[1], linkID: 'absent' }, { ...proposals[1], linkID: 'unsafe/link' }, { ...proposals[1], linkID: '' },
   { ...proposals[1], linkID: '\uD800' }, { ...proposals[1], linkID: '😀'.repeat(129) }, { ...proposals[1], body: {} },

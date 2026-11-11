@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { ApiError, type WriteContext } from '@/lib/api/client'
-import { idSchema, input, pathIDSchema, text } from '@/lib/api/domain'
+import { idSchema, input, text } from '@/lib/api/domain'
 import type { MediaLink, MediaLinkView } from '@/lib/api/media'
 import * as api from '@/lib/api/media-writes'
 import type { components } from '@/lib/api/schema'
@@ -48,7 +48,6 @@ function checkedProposal(value: unknown): MediaCommandInput {
   if (proposal.kind === 'attach') {
     const owner = reviewedOwnerMedia(proposal.owner), membership = reviewedMediaMembership(proposal.membership)
     const body = input(api.mediaLinkMetadataSchema, proposal.body)
-    input(pathIDSchema, membership.media.id)
     if (!mediaScopesConsistent(owner, membership)) throw new ApiError('VALIDATION_ERROR')
     if (body.is_cover && owner.links.some((link) => link.is_cover)) throw new ApiError('MEDIA_COVER_CONFLICT')
     return { kind: proposal.kind, owner, membership, body }

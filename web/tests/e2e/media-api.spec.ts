@@ -796,6 +796,63 @@ test.describe('large exact Media SDK membership', () => {
     expect(parsed.map((query) => query.get('limit'))).toEqual(['100', '100', '100'])
     expect(parsed[0]?.has('cursor')).toBe(false); expect(parsed[1]?.get('cursor')).toBe(result.first.next_cursor); expect(parsed[2]?.get('cursor')).toBe(result.second.next_cursor)
   })
+
+  test('brackets complete exact Media membership and freezes original proofs before attachment', async ({ page, application }) => {
+    await provision(page, application)
+    const writes: { query: [string, string][]; proof: string | undefined; key: string | undefined; body: unknown }[] = []
+    page.on('request', (request) => {
+      const url = new URL(request.url())
+      if (request.method() === 'POST' && url.pathname === '/api/v1/media-by-identity/links') writes.push({
+        query: Array.from(url.searchParams), proof: request.headers()['if-match'], key: request.headers()['idempotency-key'], body: request.postDataJSON(),
+      })
+    })
+    await page.goto('/')
+    const result = await page.evaluate(async ({ id, owner }) => {
+      const modulePath = '/assets/media-sdk.js', api = await import(modulePath), signal = () => new AbortController().signal
+      const csrf = (await (await fetch('/api/v1/auth/csrf')).json()).token as string
+      const selectedOwner = await api.readOwnerMedia({ kind: 'item', id: owner }, signal())
+      const membership = await api.readMediaMembership(id, signal())
+      const command = api.freezeMediaCommand({ kind: 'attach', owner: selectedOwner, membership, body: { is_cover: false, sort_order: 0, description: 'Complete exact scope' } })
+      const frozen = Object.isFrozen(command) && Object.isFrozen(command.owner.links) && Object.isFrozen(command.membership.media)
+      const created = await api.sendMediaCommand(command, csrf, signal()), replay = await api.sendMediaCommand(command, csrf, signal())
+      return { owner: selectedOwner, membership, frozen, created, replay, current: await api.readMediaMembership(id, signal()) }
+    }, { id, owner })
+    expect(result.owner.links).toHaveLength(205); expect(result.membership.links).toHaveLength(206)
+    expect(result.membership.media).toMatchObject({ id, revision: 1 }); expect(result.frozen).toBe(true)
+    expect(result.created).toMatchObject({ media_id: id, owner_type: 'item', owner_id: owner, revision: 1, description: 'Complete exact scope' })
+    expect(result.replay).toEqual(result.created)
+    expect(result.current.media).toMatchObject({ id, revision: 2 }); expect(result.current.links).toHaveLength(207)
+    expect(result.current.links).toContainEqual(expect.objectContaining({ id: result.created.id, media_id: id }))
+    expect(writes.map(({ query, proof, body }) => ({ query, proof, body }))).toEqual(Array(2).fill({ query: [['id', id]], proof: '"1"',
+      body: { item_id: owner, owner_revision: 1, is_cover: false, sort_order: 0, description: 'Complete exact scope' } }))
+    expect(writes[0]?.key).toBeTruthy(); expect(writes[1]?.key).toBe(writes[0]?.key)
+  })
+
+  test('withholds an exact Media review when a real link changes between bracketed reads', async ({ page, application }) => {
+    await provision(page, application)
+    let changed = false, patchStatus = 0
+    await page.route((url) => url.pathname === '/api/v1/media-by-identity/links' && url.searchParams.get('id') === id, async (route) => {
+      const response = await route.fetch()
+      if (!changed) {
+        changed = true
+        patchStatus = (await page.request.patch('/api/v1/media/links/owner-000', {
+          headers: await writeContext(page, application.url, 1), data: { description: 'Concurrent exact Media change' },
+        })).status()
+      }
+      await route.fulfill({ response })
+    })
+    await page.goto('/')
+    const result = await page.evaluate(async ({ id }) => {
+      const modulePath = '/assets/media-sdk.js', api = await import(modulePath), signal = () => new AbortController().signal
+      let first: unknown
+      try { await api.readMediaMembership(id, signal()); first = 'unexpected' }
+      catch (error) { first = error instanceof Error && 'code' in error ? error.code : 'unexpected' }
+      return { first, current: await api.readMediaMembership(id, signal()) }
+    }, { id })
+    expect(changed).toBe(true); expect(patchStatus).toBe(200); expect(result.first).toBe('INVALID_RESPONSE')
+    expect(result.current.media).toMatchObject({ id, revision: 2 }); expect(result.current.links).toHaveLength(206)
+    expect(result.current.links).toContainEqual(expect.objectContaining({ id: 'owner-000', revision: 2, description: 'Concurrent exact Media change' }))
+  })
 })
 
 test.describe('exact retained MediaLink SDK identities', () => {
