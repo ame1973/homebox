@@ -4,6 +4,8 @@
 
 ### Added
 
+- Add an internal bounded multipart reader for one raw Media file, preserving its exact bytes and normalized declared MIME without trusting the filename. Test declared and chunked file/body ceilings, extra or encoded parts, cancellation, late read failures and a test-only HTTP socket. This parser does not authorize, validate image bytes, stage files or enable the upload route; WebP decoding remains unavailable.
+
 - Add a paged existing-Media picker to the attachment screen for Item, Unit and Location owners. Preserve exact retained IDs, withhold duplicate or cyclic live pages, and re-read both complete scopes before foreground review instead of using discovery metadata as proof. Actual-Go browser tests cover concurrent changes, session loss, explicit original-key reconciliation and accessible enlarged layouts. The picker does not upload or request image bytes; file storage, streams, gallery and camera remain unfinished.
 
 - Add a stateless browser adapter for one global linked or unlinked Media metadata page. Validate exact identities, duplicate rows, nullable cursors, page bounds and absent collection ETags without hidden pagination, storage or retry. Actual-Go browser tests cover signed pages, fresh login, offline recovery and altered replies. The picker and image files were separate work at this stage; discovery is not membership or file-integrity proof.
