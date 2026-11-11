@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { ApiError, type Admin } from '@/lib/api/auth'
+import { notifySessionCleared } from '@/lib/session-lifecycle'
 
 export type AuthOutcome = { kind: 'login'; admin: Admin } | { kind: 'setup' | 'password' | 'logout' }
 export type AuthNotice = 'setup' | 'password' | 'logout' | 'expired' | 'uncertain'
 type AuthAction = AuthOutcome['kind']
 
 export function clearSessionQueries(client: QueryClient) {
+  notifySessionCleared()
   void client.cancelQueries()
   client.clear()
 }

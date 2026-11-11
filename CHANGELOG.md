@@ -8,6 +8,8 @@
 
 ### Added
 
+- Add an internal browser camera-stream hook with explicit gesture-triggered rear/front requests, secure-context checks, same-page and best-effort same-origin cross-window session-purge signals, and track cleanup on background, completion, unmount or late permission results. Signals contain no private data; cross-window query/offline-cache purge is not implemented. The camera interface, capture, scanner and actual-device acceptance remain unfinished.
+
 - Add an internal bounded multipart reader for one raw Media file, preserving its exact bytes and normalized declared MIME without trusting the filename. Test declared and chunked file/body ceilings, extra or encoded parts, cancellation, late read failures and a test-only HTTP socket. This parser does not authorize, validate image bytes, stage files or enable the upload route; WebP decoding remains unavailable.
 
 - Add a paged existing-Media picker to the attachment screen for Item, Unit and Location owners. Preserve exact retained IDs, withhold duplicate or cyclic live pages, and re-read both complete scopes before foreground review instead of using discovery metadata as proof. Actual-Go browser tests cover concurrent changes, session loss, explicit original-key reconciliation and accessible enlarged layouts. The picker does not upload or request image bytes; file storage, streams, gallery and camera remain unfinished.
