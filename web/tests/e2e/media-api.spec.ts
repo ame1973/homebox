@@ -27,7 +27,7 @@ const test = applicationTest.extend<{}, { applicationWebDirectory: string }>({
   }, { scope: 'worker' }],
 })
 
-function prepareMediaFixture(database: string, count = 51, legacy = false, specialMedia = false) {
+function prepareMediaFixture(database: string, count = 51, legacy = false, specialMedia = false, specialLinks: readonly string[] = []) {
   // Seed retained source only while the server is stopped. No file, HTTP
   // mutation, session, audit receipt or verified image is invented.
   const db = new DatabaseSync(database), now = '2026-11-06T00:00:00Z', digest = 'a'.repeat(64)
@@ -61,6 +61,7 @@ function prepareMediaFixture(database: string, count = 51, legacy = false, speci
     for (let index = 0; index < count; index++) seedLink(`owner-${String(index).padStart(3, '0')}`, 'photo', owner, 1)
     seedLink('sibling', 'photo', sibling, 5)
     seedLink('reserved', 'links', sibling, 1)
+    for (const id of specialLinks) seedLink(id, 'photo', empty, 1)
     if (legacy) {
       const itemID = 'legacy/item\0😀', unitID = 'legacy/unit\0😀', locationID = 'tree'
       item.run(itemID, 'Legacy owner', 'individual', now, now)
@@ -614,6 +615,92 @@ test('freezes complete review scopes and delivers attach, edit and unlink comman
   expect(result.after.links).toEqual([])
   expect(result.membership.media).toMatchObject({ id: 'links', revision: 6, verification: 'unverified', thumb_url: null })
   expect(result.membership.links).toMatchObject([{ id: 'reserved', owner_id: sibling }])
+})
+
+test.describe('exact retained MediaLink SDK identities', () => {
+  const ids = ['legacy/link', 'legacy\\link', '\0', '.', '..', 'legacy/\0😀', '😀'.repeat(127) + '/']
+  test.use({ applicationDatabaseFixture: { prepare(database) { prepareMediaFixture(database, 0, false, false, ids) } } })
+
+  test('edits and unlinks exact retained IDs with independent proofs against the real Go server', async ({ page, application }) => {
+    await provision(page, application)
+    const writes: { method: string; id: string | null; proof: string | undefined; key: string | undefined; body: unknown }[] = []
+    page.on('request', (request) => {
+      const url = new URL(request.url())
+      if (url.pathname !== '/api/v1/media/links' || !['PATCH', 'DELETE'].includes(request.method())) return
+      writes.push({ method: request.method(), id: url.searchParams.get('id'), proof: request.headers()['if-match'],
+        key: request.headers()['idempotency-key'], body: request.postData() === null ? null : request.postDataJSON() })
+    })
+    await page.goto('/')
+    const result = await page.evaluate(async ({ empty }) => {
+      const modulePath = '/assets/media-sdk.js', api = await import(modulePath), signal = () => new AbortController().signal
+      const csrf = (await (await fetch('/api/v1/auth/csrf')).json()).token as string
+      const source = await api.fetchOwnerMediaLinksPage('item', empty, { limit: 100 }, signal())
+      const decisions = []
+      for (const link of source.data) {
+        const editContext = { csrfToken: csrf, idempotencyKey: crypto.randomUUID(), signal: signal(), link }
+        const edited = await api.patchMediaLink(link.id, { description: 'Exact review' }, editContext)
+        const editedReplay = await api.patchMediaLink(link.id, { description: 'Exact review' }, editContext)
+        const unlinkContext = { csrfToken: csrf, idempotencyKey: crypto.randomUUID(), signal: signal(), link: edited }
+        const removed = await api.unlinkMediaLink(link.id, unlinkContext)
+        const removedReplay = await api.unlinkMediaLink(link.id, unlinkContext)
+        decisions.push({ original: link, edited, editedReplay, removed, removedReplay })
+      }
+      return { decisions, after: await api.fetchOwnerMediaLinksPage('item', empty, {}, signal()), image: await api.fetchMedia('photo', signal()) }
+    }, { empty })
+    expect(result.decisions.map((decision: { original: { id: string } }) => decision.original.id).sort()).toEqual([...ids].sort())
+    for (const decision of result.decisions) {
+      expect(decision.edited).toMatchObject({ id: decision.original.id, revision: 2, description: 'Exact review', sort_order: -3 })
+      expect(decision.editedReplay).toEqual(decision.edited)
+      expect(decision.removed).toMatchObject({ ok: true, revision: 3 }); expect(decision.removedReplay).toEqual(decision.removed)
+    }
+    expect(result.after).toEqual({ data: [], next_cursor: null })
+    expect(result.image.revision).toBe(7 + 2 * ids.length)
+    expect(writes).toHaveLength(4 * ids.length)
+    for (const id of ids) {
+      const selected = writes.filter((write) => write.id === id)
+      expect(selected.map(({ method, proof, body }) => ({ method, proof, body }))).toEqual([
+        { method: 'PATCH', proof: '"1"', body: { description: 'Exact review' } },
+        { method: 'PATCH', proof: '"1"', body: { description: 'Exact review' } },
+        { method: 'DELETE', proof: '"2"', body: null }, { method: 'DELETE', proof: '"2"', body: null },
+      ])
+      expect(selected[0]?.key).toBeTruthy(); expect(selected[0]?.key).toBe(selected[1]?.key)
+      expect(selected[2]?.key).toBeTruthy(); expect(selected[2]?.key).toBe(selected[3]?.key); expect(selected[2]?.key).not.toBe(selected[0]?.key)
+    }
+  })
+
+  test('reconciles a committed lost unlink only with the same key after owner deletion', async ({ page, application }) => {
+    await provision(page, application)
+    const id = 'legacy/\0😀', keys: (string | undefined)[] = [], proofs: (string | undefined)[] = []
+    let committedStatus = 0
+    await page.route((url) => url.pathname === '/api/v1/media/links' && url.searchParams.get('id') === id, async (route) => {
+      if (route.request().method() !== 'DELETE') { await route.continue(); return }
+      keys.push(route.request().headers()['idempotency-key']); proofs.push(route.request().headers()['if-match'])
+      if (keys.length > 1) { await route.continue(); return }
+      committedStatus = (await route.fetch()).status(); await route.abort('failed')
+    })
+    await page.goto('/')
+    const state = await page.evaluateHandle(async ({ empty, id }) => {
+      const modulePath = '/assets/media-sdk.js', api = await import(modulePath), signal = () => new AbortController().signal
+      const csrf = (await (await fetch('/api/v1/auth/csrf')).json()).token as string
+      const source = await api.fetchOwnerMediaLinksPage('item', empty, { limit: 100 }, signal())
+      const link = source.data.find((value: { id: string }) => value.id === id)
+      if (!link) throw new Error('Retained link missing')
+      return { api, csrf, link, key: crypto.randomUUID() }
+    }, { empty, id })
+    const first = await state.evaluate(async ({ api, csrf, link, key }) => {
+      try { await api.unlinkMediaLink(link.id, { csrfToken: csrf, idempotencyKey: key, signal: new AbortController().signal, link }); return 'unexpected' }
+      catch (error) { return error instanceof Error && 'code' in error ? error.code : 'unexpected' }
+    })
+    expect(first).toBe('NETWORK_ERROR'); expect(committedStatus).toBe(200); expect(keys).toHaveLength(1)
+    const deletion = await page.request.delete(`/api/v1/items/${empty}`, { headers: await writeContext(page, application.url, 2) })
+    expect(deletion.status()).toBe(200)
+    await page.evaluate(() => window.dispatchEvent(new Event('online')))
+    expect(keys).toHaveLength(1)
+    const retry = await state.evaluate(async ({ api, csrf, link, key }) => api.unlinkMediaLink(link.id, { csrfToken: csrf, idempotencyKey: key, signal: new AbortController().signal, link }))
+    expect(retry).toMatchObject({ ok: true, revision: 2 }); expect(keys).toHaveLength(2)
+    expect(keys[1]).toBe(keys[0]); expect(proofs).toEqual(['"1"', '"1"'])
+    await state.dispose()
+  })
 })
 
 test.describe('exact retained Media identity input', () => {

@@ -90,6 +90,22 @@ describe('reviewed MediaLink writes', () => {
     expect(await sent().text()).toBe('')
   })
 
+  it.each(['.', '..', 'a/b', 'a\\b', '\0', 'a/\0😀\r\n', 'percent%2F/plus+ space', '😀'.repeat(127) + '/'])('writes the exact retained link ID %j through the query alias', async (id) => {
+    const api = await import('./media-writes'), link = { ...oldLink, id }
+    fetchMock.mockResolvedValueOnce(reply({ ...link, revision: 6, description: '' }, '"6"'))
+    expect(await api.patchMediaLink(id, { description: '' }, { ...context(), link })).toEqual({ ...link, revision: 6, description: '' })
+    let url = new URL(sent().url)
+    expect(url.pathname).toBe('/api/v1/media/links'); expect([...url.searchParams]).toEqual([['id', id]])
+    expect(sent().method).toBe('PATCH'); expect(sent().headers.get('If-Match')).toBe('"5"')
+    expect(sent().headers.get('Idempotency-Key')).toBe('original-media-key'); expect(await sent().json()).toEqual({ description: '' })
+    fetchMock.mockResolvedValueOnce(reply(ack))
+    expect(await api.unlinkMediaLink(id, { ...context(), link })).toEqual(ack)
+    url = new URL(sent().url)
+    expect(url.pathname).toBe('/api/v1/media/links'); expect([...url.searchParams]).toEqual([['id', id]])
+    expect(sent().method).toBe('DELETE'); expect(sent().headers.get('If-Match')).toBe('"5"'); expect(await sent().text()).toBe('')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
   it('dispatches retained link ID links while preserving path-unaddressable Media and owner identities', async () => {
     const api = await import('./media-writes'), link = { ...oldLink, id: 'links', media_id: 'legacy/\0media' }
     fetchMock.mockResolvedValueOnce(reply({ ...link, revision: 6, description: '' }, '"6"'))

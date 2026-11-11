@@ -4,6 +4,8 @@
 
 ### Added
 
+- Extend stateless MediaLink edit and unlink adapters to preserve exact retained slash/backslash/NUL/dot identities. Select the protected query alias only when the existing path is unsafe; keep the complete original link proof, exact independent reply checks, single request and explicit original-key reconciliation. Actual-Go browser SDK tests cover seven retained identities and a committed lost unlink retried after owner deletion. Rendered review screens for these IDs remain separate.
+
 - Implement protected `PATCH` and `DELETE /media/links?id=...` for exact retained MediaLink identities, including slash, backslash, NUL, dot segments and bounded Unicode. Keep the independent row `If-Match`, same authoritative transaction and same original-key receipt as path writes; replay across URL forms survives fresh login and source removal without a second mutation. Reject ambiguous queries and unsafe bodies, revalidate session and source after body reading, and preserve all GET/reserved-ID dispatch. Real-source and verified-TLS tests cover both URL forms; browser support for these IDs remains separate.
 
 - Define exact-query MediaLink edit and unlink aliases for retained identities that cannot be represented safely in a path. Preserve the existing independent link proof, original-key receipt and all prior operations/offline payloads; require one bounded query ID and the same protected admission and response semantics as the path writes. Regenerate transport types and add executable contract and strict client fixtures. HTTP handlers, browser adapters and review screens for these aliases remain unimplemented at this contract-only stage.

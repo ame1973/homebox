@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { apiClient, requestData, type WriteContext } from './client'
 import { itemSchema, type Item } from './catalog'
-import { deleteAckSchema, input, pathIDSchema, resourceRequest, revisionHeaders, text } from './domain'
+import { deleteAckSchema, idSchema, input, pathIDSchema, resourceRequest, revisionHeaders, text } from './domain'
 import { unitSchema, type Unit } from './holdings'
 import { locationSchema, type Location } from './locations'
 import { mediaLinkSchema, mediaLinkViewSchema, mediaSchema, type Media, type MediaLink, type MediaLinkView } from './media'
@@ -42,9 +42,10 @@ export async function attachMedia(id: string, body: MediaLinkMetadataInput, cont
 }
 
 // A joined list view is accepted as review context, not as a Media proof. Only
-// the selected independent link revision is sent for editing or unlinking.
+// the selected independent link revision is sent. Retained IDs that are not
+// path-addressable use the exact query alias for the same logical mutation.
 function reviewedLink(id: string, context: MediaLinkWriteContext) {
-  const resourceID = input(pathIDSchema, id)
+  const resourceID = input(idSchema, id)
   const link = input(z.union([mediaLinkSchema, mediaLinkViewSchema]), context.link)
   input(z.undefined(), context.expectedRevision); input(z.literal(resourceID), link.id)
   return { id: resourceID, link, headers: revisionHeaders({ ...context, expectedRevision: link.revision }) }
@@ -58,13 +59,17 @@ export async function patchMediaLink(id: string, body: MediaLinkPatchInput, cont
   const schema = mediaLinkSchema.refine((link) => link.id === reviewed.id && link.media_id === before.media_id && link.owner_type === before.owner_type &&
     link.owner_id === before.owner_id && link.is_cover === cover && link.sort_order === order && link.description === description)
   return requestData(context.signal,
-    (signal) => apiClient.PATCH('/media/links/{id}', { signal, body: values, params: { path: { id: reviewed.id }, header: reviewed.headers } }), schema, 30_000,
+    (signal) => pathIDSchema.safeParse(reviewed.id).success
+      ? apiClient.PATCH('/media/links/{id}', { signal, body: values, params: { path: { id: reviewed.id }, header: reviewed.headers } })
+      : apiClient.PATCH('/media/links', { signal, body: values, params: { query: { id: reviewed.id }, header: reviewed.headers } }), schema, 30_000,
     (link, response) => link.revision === revision && response.headers.get('ETag') === `"${link.revision}"`)
 }
 
 export async function unlinkMediaLink(id: string, context: MediaLinkWriteContext): Promise<components['schemas']['ActionAck']> {
   const reviewed = reviewedLink(id, context), revision = reviewed.link.revision + 1
   return requestData(context.signal,
-    (signal) => apiClient.DELETE('/media/links/{id}', { signal, params: { path: { id: reviewed.id }, header: reviewed.headers } }), deleteAckSchema, 30_000,
+    (signal) => pathIDSchema.safeParse(reviewed.id).success
+      ? apiClient.DELETE('/media/links/{id}', { signal, params: { path: { id: reviewed.id }, header: reviewed.headers } })
+      : apiClient.DELETE('/media/links', { signal, params: { query: { id: reviewed.id }, header: reviewed.headers } }), deleteAckSchema, 30_000,
     (ack, response) => !response.headers.has('ETag') && ack.revision === revision)
 }
