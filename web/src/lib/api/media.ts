@@ -12,6 +12,7 @@ export type MediaLinkPage = components['schemas']['MediaLinkList']
 export type MediaOwnerType = MediaLink['owner_type']
 export type MediaPageQuery = NonNullable<operations['get_media_id_links']['parameters']['query']>
 type OwnerQuery = NonNullable<operations['get_media_links']['parameters']['query']>
+type MediaIdentityPageQuery = operations['get_media_membership_by_identity']['parameters']['query']
 
 const digestSchema = z.string().regex(/^[a-f0-9]{64}(?![\s\S])/)
 const thumbnailPath = /^\/api\/v1\/media\/((?:[A-Za-z0-9._~!$&'()*+,;=:@-]|%[0-9A-Fa-f]{2})+)\/thumbnail(?![\s\S])/
@@ -55,18 +56,26 @@ const mediaPageSchema: z.ZodType<MediaLinkPage> = z.strictObject({ data: z.array
 const serializeOwnerQuery = createQuerySerializer<OwnerQuery>()
 const ownerQuerySchema = pageQuerySchema.extend({ owner_type: ownerTypeSchema, owner_id: idSchema })
   .refine((query) => Object.values(query).every((value) => typeof value !== 'string' || validText(value, 0, value.length)) && serializeOwnerQuery(query).length <= 16_384)
+const serializeIdentityQuery = createQuerySerializer<MediaIdentityPageQuery>()
+const identityPageQuerySchema = pageQuerySchema.extend({ id: idSchema })
+  .refine((query) => Object.values(query).every((value) => typeof value !== 'string' || validText(value, 0, value.length)) && serializeIdentityQuery(query).length <= 16_384)
 
 export async function fetchMedia(id: string, signal: AbortSignal): Promise<Media> {
-  const resourceID = input(pathIDSchema, id)
-  return resourceRequest(mediaSchema, signal, (signal) => resourceID === 'links'
-    ? apiClient.GET('/media/{id}/view', { signal, params: { path: { id: resourceID } } })
-    : apiClient.GET('/media/{id}', { signal, params: { path: { id: resourceID } } }), { id: resourceID }, 8_000)
+  const resourceID = input(idSchema, id), addressable = pathIDSchema.safeParse(resourceID).success
+  return resourceRequest(mediaSchema, signal, (signal) => !addressable
+    ? apiClient.GET('/media-by-identity', { signal, params: { query: { id: resourceID } } })
+    : resourceID === 'links'
+      ? apiClient.GET('/media/{id}/view', { signal, params: { path: { id: resourceID } } })
+      : apiClient.GET('/media/{id}', { signal, params: { path: { id: resourceID } } }), { id: resourceID }, 8_000)
 }
 
 export async function fetchMediaLinksPage(mediaID: string, query: MediaPageQuery, signal: AbortSignal): Promise<MediaLinkPage> {
-  const selected = input(pathIDSchema, mediaID)
+  const selected = input(idSchema, mediaID)
   const values = input(ownedQuerySchema, query)
-  return requestData(signal, (signal) => apiClient.GET('/media/{id}/links', { signal, params: { path: { id: selected }, query: values } }), mediaPageSchema, 8_000,
+  const exact = pathIDSchema.safeParse(selected).success ? undefined : input(identityPageQuerySchema, { ...values, id: selected })
+  return requestData(signal, (signal) => exact
+    ? apiClient.GET('/media-by-identity/links', { signal, params: { query: exact } })
+    : apiClient.GET('/media/{id}/links', { signal, params: { path: { id: selected }, query: values } }), mediaPageSchema, 8_000,
     (page, response) => validLivePage(page, response, values) && page.data.every((link) => link.media_id === selected))
 }
 

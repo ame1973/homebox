@@ -4,6 +4,8 @@
 
 ### Added
 
+- Extend the stateless Media read and attachment adapters to use exact-query aliases for retained slash/backslash/NUL/dot identities while keeping original Media and owner proofs, strict response validation and explicit same-key reconciliation. Actual-Go browser SDK tests cover all owner types, 206-link paging, offline behavior and a committed lost response after owner deletion and fresh login. The attachment review screen is a separate step; these adapters do not verify image files.
+
 - Implement protected exact-query Media metadata, membership and attachment aliases without reserving retained path identities. Reuse actual Media/owner authority, scoped interchangeable live cursors, independent ETags and original-key receipts across URL forms; reject ambiguous queries and revalidate source/session after body reading. Real-source and verified-TLS checks cover retained slash/backslash/NUL/dot identities and all owner kinds. Browser review for these Media IDs remains separate.
 
 - Define exact-query Media metadata, membership-page and attachment aliases in a separate namespace for retained IDs that cannot be path segments. Preserve the existing Media revision, scoped live cursor, original Media/owner proofs and cross-form original-key receipt semantics; add executable contract and strict generated-client checks. These three aliases are contract-only at this stage, not implemented HTTP or browser workflows.

@@ -29,7 +29,7 @@ export const mediaOwnerSchema: z.ZodType<MediaOwner> = z.discriminatedUnion('kin
 // Owner identity and revision are derived from the same reviewed source. They
 // are JSON values, so retained owner IDs need not be addressable as paths.
 export async function attachMedia(id: string, body: MediaLinkMetadataInput, context: MediaAttachContext): Promise<MediaLink> {
-  const mediaID = input(pathIDSchema, id), values = input(mediaLinkMetadataSchema, body)
+  const mediaID = input(idSchema, id), values = input(mediaLinkMetadataSchema, body)
   const media = input(mediaSchema, context.media), owner = input(mediaOwnerSchema, context.owner)
   input(z.undefined(), context.expectedRevision); input(z.literal(mediaID), media.id)
   const headers = revisionHeaders({ ...context, expectedRevision: media.revision })
@@ -37,8 +37,9 @@ export async function attachMedia(id: string, body: MediaLinkMetadataInput, cont
   const request = { ...values, ...selected, owner_revision: owner.value.revision }
   const schema = mediaLinkSchema.refine((link) => link.media_id === mediaID && link.owner_type === owner.kind && link.owner_id === owner.value.id &&
     link.is_cover === (values.is_cover ?? false) && link.sort_order === (values.sort_order ?? 0) && link.description === (values.description ?? ''))
-  return resourceRequest(schema, context.signal,
-    (signal) => apiClient.POST('/media/{id}/links', { signal, body: request, params: { path: { id: mediaID }, header: headers } }), { creating: true })
+  return resourceRequest(schema, context.signal, (signal) => pathIDSchema.safeParse(mediaID).success
+    ? apiClient.POST('/media/{id}/links', { signal, body: request, params: { path: { id: mediaID }, header: headers } })
+    : apiClient.POST('/media-by-identity/links', { signal, body: request, params: { query: { id: mediaID }, header: headers } }), { creating: true })
 }
 
 // A joined list view is accepted as review context, not as a Media proof. Only

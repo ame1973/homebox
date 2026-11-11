@@ -47,6 +47,52 @@ describe('reviewed MediaLink writes', () => {
     expect(await request.json()).toEqual({ [field]: id, owner_revision: revision })
   })
 
+  it.each(['.', '..', 'legacy/photo', 'legacy\\photo', '\0', 'legacy/\0😀\r\n', 'percent%2F/plus+ space?&=##', '😀'.repeat(127) + '/'])('attaches exact retained Media %j with its original independent proofs', async (id) => {
+    const api = await import('./media-writes'), media = { ...image, id }
+    const created = { ...oldLink, id: 'created', revision: 1, media_id: id, is_cover: false, sort_order: 0, description: '' }
+    fetchMock.mockResolvedValueOnce(reply(created, '"1"'))
+    expect(await api.attachMedia(id, {}, { ...context(), media, owner })).toEqual(created)
+    const request = sent(), url = new URL(request.url)
+    expect(url.pathname).toBe('/api/v1/media-by-identity/links'); expect([...url.searchParams]).toEqual([['id', id]])
+    expect(request.method).toBe('POST'); expect(request.headers.get('If-Match')).toBe('"7"')
+    expect(request.headers.get('Idempotency-Key')).toBe('original-media-key')
+    expect(await request.json()).toEqual({ item_id: item.id, owner_revision: item.revision })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it.each(owners)('attaches retained Media to a reviewed $field owner', async ({ selected, field, id, revision }) => {
+    const api = await import('./media-writes'), media = { ...image, id: 'legacy/\0photo' }
+    const created = { ...oldLink, id: 'created', revision: 1, media_id: media.id, owner_type: selected.kind, owner_id: id, is_cover: false, sort_order: 0, description: '' }
+    fetchMock.mockResolvedValueOnce(reply(created, '"1"'))
+    expect(await api.attachMedia(media.id, {}, { ...context(), media, owner: selected })).toEqual(created)
+    expect([...new URL(sent().url).searchParams]).toEqual([['id', media.id]])
+    expect(sent().headers.get('If-Match')).toBe('"7"')
+    expect(await sent().json()).toEqual({ [field]: id, owner_revision: revision })
+  })
+
+  it('rejects mismatched retained Media proofs and wrong attachment responses', async () => {
+    const api = await import('./media-writes'), id = 'legacy/\0photo', media = { ...image, id }
+    await expect(api.attachMedia(id, {}, { ...context(), media: { ...media, id: 'other/\0photo' }, owner })).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
+    expect(fetchMock).not.toHaveBeenCalled()
+    const created = { ...oldLink, id: 'created', revision: 1, media_id: id, is_cover: false, sort_order: 0, description: '' }
+    fetchMock.mockResolvedValueOnce(reply({ ...created, media_id: 'other' }, '"1"'))
+    await expect(api.attachMedia(id, {}, { ...context(), media, owner })).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+    fetchMock.mockResolvedValueOnce(reply(created, 'W/"1"'))
+    await expect(api.attachMedia(id, {}, { ...context(), media, owner })).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+  })
+
+  it('does not replay an uncertain exact-identity attachment without explicit same-key retry', async () => {
+    const api = await import('./media-writes'), media = { ...image, id: 'legacy/\0photo' }, original = { ...context(), media, owner }
+    const created = { ...oldLink, id: 'created', revision: 1, media_id: media.id, is_cover: false, sort_order: 0, description: '' }
+    fetchMock.mockRejectedValueOnce(new TypeError('private transport'))
+    await expect(api.attachMedia(media.id, {}, original)).rejects.toMatchObject({ code: 'NETWORK_ERROR' })
+    window.dispatchEvent(new Event('online')); expect(fetchMock).toHaveBeenCalledTimes(1)
+    fetchMock.mockResolvedValueOnce(reply(created, '"1"'))
+    expect(await api.attachMedia(media.id, {}, original)).toEqual(created)
+    expect(sent().headers.get('Idempotency-Key')).toBe('original-media-key'); expect(sent().headers.get('If-Match')).toBe('"7"')
+    expect([...new URL(sent().url).searchParams]).toEqual([['id', media.id]]); expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
   it('preserves explicit defaults and exact Unicode while leaving omitted metadata absent on the wire', async () => {
     const api = await import('./media-writes')
     const created = { ...oldLink, id: 'created', revision: 1, is_cover: false, sort_order: 0, description: '' }

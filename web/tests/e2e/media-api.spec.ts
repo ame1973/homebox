@@ -27,7 +27,8 @@ const test = applicationTest.extend<{}, { applicationWebDirectory: string }>({
   }, { scope: 'worker' }],
 })
 
-function prepareMediaFixture(database: string, count = 51, legacy = false, specialMedia = false, specialLinks: readonly string[] = []) {
+function prepareMediaFixture(database: string, count = 51, legacy = false, specialMedia = false, specialLinks: readonly string[] = [],
+  exactMedia: { ids: readonly string[]; countedID?: string } = { ids: [] }) {
   // Seed retained source only while the server is stopped. No file, HTTP
   // mutation, session, audit receipt or verified image is invented.
   const db = new DatabaseSync(database), now = '2026-11-06T00:00:00Z', digest = 'a'.repeat(64)
@@ -52,14 +53,19 @@ function prepareMediaFixture(database: string, count = 51, legacy = false, speci
       media.run(id, 'private-control', digest, 'image/heic', now)
       baseline('media', id, 2, { id, sha256: digest, thumb_url: null, width: 10, height: 20, thumb_sha256: null, mime_type: 'image/heic', bytes: 30, perceptual_hash: null })
     }
+    for (const [index, id] of exactMedia.ids.entries()) {
+      media.run(id, `private-retained-media-${index}`, digest, 'image/heic', now)
+      baseline('media', id, 1, { id, sha256: digest, thumb_url: null, width: 10, height: 20, thumb_sha256: null, mime_type: 'image/heic', bytes: 30, perceptual_hash: null })
+    }
     const addLink = db.prepare('INSERT INTO media_links(id,media_id,item_id,is_cover,sort_order,description) VALUES(?,?,?,1,-3,?)')
     const seedLink = (id: string, mediaID: string, ownerID: string, revision: number) => {
       const description = '\0Exact é\n'
       addLink.run(id, mediaID, ownerID, description)
       baseline('media_link', id, revision, { id, media_id: mediaID, owner_type: 'item', owner_id: ownerID, is_cover: true, sort_order: -3, description })
     }
-    for (let index = 0; index < count; index++) seedLink(`owner-${String(index).padStart(3, '0')}`, 'photo', owner, 1)
-    seedLink('sibling', 'photo', sibling, 5)
+    const countedMediaID = exactMedia.countedID ?? 'photo'
+    for (let index = 0; index < count; index++) seedLink(`owner-${String(index).padStart(3, '0')}`, countedMediaID, owner, 1)
+    seedLink('sibling', countedMediaID, sibling, 5)
     seedLink('reserved', 'links', sibling, 1)
     for (const id of specialLinks) seedLink(id, 'photo', empty, 1)
     if (legacy) {
@@ -615,6 +621,181 @@ test('freezes complete review scopes and delivers attach, edit and unlink comman
   expect(result.after.links).toEqual([])
   expect(result.membership.media).toMatchObject({ id: 'links', revision: 6, verification: 'unverified', thumb_url: null })
   expect(result.membership.links).toMatchObject([{ id: 'reserved', owner_id: sibling }])
+})
+
+test.describe('exact retained Media SDK identities', () => {
+  const ids = ['.', '..', 'legacy/photo', 'legacy\\photo', '\0', 'legacy/\0😀\r\n', 'percent%2F/plus+ space?&=##', '😀'.repeat(127) + '/']
+  test.use({ applicationDatabaseFixture: { prepare(database) { prepareMediaFixture(database, 0, false, false, [], { ids }) } } })
+
+  test('reads and attaches each exact identity with actual source proofs and explicit same-key reconciliation', async ({ page, application }) => {
+    await provision(page, application)
+    const writes: { query: [string, string][]; proof: string | undefined; key: string | undefined; body: unknown }[] = []
+    page.on('request', (request) => {
+      const url = new URL(request.url())
+      if (url.pathname !== '/api/v1/media-by-identity/links' || request.method() !== 'POST') return
+      writes.push({ query: Array.from(url.searchParams), proof: request.headers()['if-match'], key: request.headers()['idempotency-key'], body: request.postDataJSON() })
+    })
+    await page.goto('/')
+    const result = await page.evaluate(async ({ ids, empty }) => {
+      const modulePath = '/assets/media-sdk.js', api = await import(modulePath), signal = () => new AbortController().signal
+      const csrf = (await (await fetch('/api/v1/auth/csrf')).json()).token as string
+      const decisions = []
+      for (const id of ids) {
+        const media = await api.fetchMedia(id, signal()), item = await api.fetchItem(empty, signal())
+        const context = { csrfToken: csrf, idempotencyKey: crypto.randomUUID(), signal: signal(), media, owner: { kind: 'item', value: item } }
+        const created = await api.attachMedia(id, { description: 'Exact retained Media' }, context)
+        const replay = await api.attachMedia(id, { description: 'Exact retained Media' }, context)
+        const membership = await api.fetchMediaLinksPage(id, {}, signal())
+        decisions.push({ media, item, created, replay, membership })
+      }
+      return decisions
+    }, { ids, empty })
+    expect(result).toHaveLength(ids.length); expect(writes).toHaveLength(ids.length * 2)
+    for (const [index, id] of ids.entries()) {
+      const decision = result[index]!, requests = writes.slice(index * 2, index * 2 + 2)
+      expect(decision.media).toMatchObject({ id, revision: 1, verification: 'unverified', thumb_url: null, thumb_sha256: null })
+      expect(decision.item.revision).toBe(index + 1)
+      expect(decision.created).toMatchObject({ media_id: id, owner_type: 'item', owner_id: empty, revision: 1, description: 'Exact retained Media' })
+      expect(decision.replay).toEqual(decision.created)
+      expect(decision.membership.data).toMatchObject([{ id: decision.created.id, media_id: id, media: { id, revision: 2 } }])
+      expect(decision.membership.next_cursor).toBeNull()
+      expect(requests.map(({ query, proof, body }) => ({ query, proof, body }))).toEqual(Array(2).fill({ query: [['id', id]], proof: '"1"',
+        body: { item_id: empty, owner_revision: index + 1, description: 'Exact retained Media' } }))
+      expect(requests[0]?.key).toBeTruthy(); expect(requests[1]?.key).toBe(requests[0]?.key)
+    }
+    expect(JSON.stringify(result)).not.toContain('private-retained-media')
+  })
+
+  test('attaches an exact Media identity to real Item, Unit and Location owners', async ({ page, application }) => {
+    await provision(page, application); await page.goto('/')
+    const id = 'legacy/\0😀\r\n'
+    const result = await page.evaluate(async ({ id, empty }) => {
+      const modulePath = '/assets/media-sdk.js', api = await import(modulePath), signal = () => new AbortController().signal
+      const csrf = (await (await fetch('/api/v1/auth/csrf')).json()).token as string
+      const context = () => ({ csrfToken: csrf, idempotencyKey: crypto.randomUUID(), signal: signal() })
+      const location = await api.createLocation({ name: 'Exact Media room', code: 'EXACT-MEDIA' }, context())
+      const item = await api.fetchItem(empty, signal())
+      const unit = await api.createUnit(empty, { location_id: null }, { ...context(), expectedRevision: item.revision })
+      const currentItem = await api.fetchItem(empty, signal())
+      const owners = [{ kind: 'item', value: currentItem }, { kind: 'unit', value: unit }, { kind: 'location', value: location }]
+      const links = []
+      for (const owner of owners) {
+        const media = await api.fetchMedia(id, signal())
+        links.push(await api.attachMedia(id, {}, { ...context(), media, owner }))
+      }
+      return { owners, links, media: await api.fetchMedia(id, signal()), membership: await api.fetchMediaLinksPage(id, {}, signal()) }
+    }, { id, empty })
+    expect(result.links.map((link: { owner_type: string; owner_id: string; media_id: string; revision: number }) => ({
+      kind: link.owner_type, id: link.owner_id, mediaID: link.media_id, revision: link.revision,
+    }))).toEqual(result.owners.map((owner: { kind: string; value: { id: string } }) => ({ kind: owner.kind, id: owner.value.id, mediaID: id, revision: 1 })))
+    expect(result.media).toMatchObject({ id, revision: 4, verification: 'unverified', thumb_url: null })
+    expect(result.membership.data).toHaveLength(3)
+  })
+
+  test('reconciles a committed lost exact-identity attachment after owner deletion and fresh login', async ({ page, application }) => {
+    const password = await provision(page, application), id = 'legacy/\0😀\r\n'
+    const keys: (string | undefined)[] = [], proofs: (string | undefined)[] = [], bodies: unknown[] = []
+    let committedStatus = 0
+    await page.route((url) => url.pathname === '/api/v1/media-by-identity/links' && url.searchParams.get('id') === id, async (route) => {
+      if (route.request().method() !== 'POST') { await route.continue(); return }
+      keys.push(route.request().headers()['idempotency-key']); proofs.push(route.request().headers()['if-match']); bodies.push(route.request().postDataJSON())
+      if (keys.length > 1) { await route.continue(); return }
+      committedStatus = (await route.fetch()).status(); await route.abort('failed')
+    })
+    await page.goto('/')
+    const state = await page.evaluateHandle(async ({ id, empty }) => {
+      const modulePath = '/assets/media-sdk.js', api = await import(modulePath), signal = () => new AbortController().signal
+      const csrf = (await (await fetch('/api/v1/auth/csrf')).json()).token as string
+      const media = await api.fetchMedia(id, signal()), item = await api.fetchItem(empty, signal())
+      return { api, csrf, media, owner: { kind: 'item', value: item }, key: crypto.randomUUID() }
+    }, { id, empty })
+    try {
+      const first = await state.evaluate(async ({ api, csrf, media, owner, key }) => {
+        try { await api.attachMedia(media.id, {}, { csrfToken: csrf, idempotencyKey: key, signal: new AbortController().signal, media, owner }); return 'unexpected' }
+        catch (error) { return error instanceof Error && 'code' in error ? error.code : 'unexpected' }
+      })
+      expect(first).toBe('NETWORK_ERROR'); expect(committedStatus).toBe(200); expect(keys).toHaveLength(1)
+      const before = await state.evaluate(async ({ api, media }) => ({
+        media: await api.fetchMedia(media.id, new AbortController().signal), membership: await api.fetchMediaLinksPage(media.id, {}, new AbortController().signal),
+      }))
+      expect(before.media.revision).toBe(2); expect(before.membership.data).toHaveLength(1)
+      expect((await page.request.delete(`/api/v1/items/${empty}`, { headers: await writeContext(page, application.url, 2) })).status()).toBe(200)
+      expect((await page.request.post('/api/v1/auth/login', { headers: { Origin: application.url }, data: { username: 'owner', password } })).status()).toBe(200)
+      const csrf = (await (await page.request.get('/api/v1/auth/csrf')).json()).token as string
+      await page.evaluate(() => window.dispatchEvent(new Event('online'))); expect(keys).toHaveLength(1)
+      const replay = await state.evaluate(async ({ api, media, owner, key }, csrf) => api.attachMedia(media.id, {}, {
+        csrfToken: csrf, idempotencyKey: key, signal: new AbortController().signal, media, owner,
+      }), csrf)
+      expect(replay).toMatchObject({ media_id: id, owner_id: empty, revision: 1 })
+      expect(keys).toHaveLength(2); expect(keys[0]).toBeTruthy(); expect(keys[1]).toBe(keys[0])
+      expect(proofs).toEqual(['"1"', '"1"']); expect(bodies).toEqual(Array(2).fill({ item_id: empty, owner_revision: 1 }))
+      const after = await state.evaluate(async ({ api, media }) => ({
+        media: await api.fetchMedia(media.id, new AbortController().signal), membership: await api.fetchMediaLinksPage(media.id, {}, new AbortController().signal),
+      }))
+      expect(after.media.revision).toBe(3); expect(after.membership).toEqual({ data: [], next_cursor: null })
+    } finally { await state.dispose() }
+  })
+
+  test('does not replay an offline exact-identity attachment on reconnect', async ({ page, application }) => {
+    await provision(page, application); await page.goto('/')
+    const id = 'legacy/\0😀\r\n', writes: string[] = []
+    page.on('request', (request) => { if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/v1/media-by-identity/links') writes.push(request.headers()['idempotency-key'] ?? '') })
+    const state = await page.evaluateHandle(async ({ id, empty }) => {
+      const modulePath = '/assets/media-sdk.js', api = await import(modulePath), signal = () => new AbortController().signal
+      const csrf = (await (await fetch('/api/v1/auth/csrf')).json()).token as string
+      return { api, csrf, media: await api.fetchMedia(id, signal()), owner: { kind: 'item', value: await api.fetchItem(empty, signal()) }, key: crypto.randomUUID() }
+    }, { id, empty })
+    try {
+      await page.context().setOffline(true)
+      const first = await state.evaluate(async ({ api, csrf, media, owner, key }) => {
+        try { await api.attachMedia(media.id, {}, { csrfToken: csrf, idempotencyKey: key, signal: new AbortController().signal, media, owner }); return 'unexpected' }
+        catch (error) { return error instanceof Error && 'code' in error ? error.code : 'unexpected' }
+      })
+      expect(first).toBe('NETWORK_ERROR'); expect(writes).toHaveLength(1)
+      await page.context().setOffline(false)
+      const before = await state.evaluate(async ({ api, media }) => api.fetchMediaLinksPage(media.id, {}, new AbortController().signal))
+      expect(before).toEqual({ data: [], next_cursor: null }); expect(writes).toHaveLength(1)
+      const retry = await state.evaluate(async ({ api, csrf, media, owner, key }) => api.attachMedia(media.id, {}, {
+        csrfToken: csrf, idempotencyKey: key, signal: new AbortController().signal, media, owner,
+      }))
+      expect(retry).toMatchObject({ media_id: id, owner_id: empty, revision: 1 }); expect(writes).toHaveLength(2); expect(writes[1]).toBe(writes[0])
+    } finally { await page.context().setOffline(false); await state.dispose() }
+  })
+})
+
+test.describe('large exact Media SDK membership', () => {
+  const id = 'large/\0😀', ids = [id]
+  test.use({ applicationDatabaseFixture: { prepare(database) { prepareMediaFixture(database, 205, false, false, [], { ids, countedID: id }) } } })
+
+  test('reads all actual signed pages without allowing the cursor to cross Media scopes', async ({ page, application }) => {
+    await provision(page, application)
+    const queries: [string, string][][] = []
+    page.on('request', (request) => {
+      const url = new URL(request.url())
+      if (request.method() === 'GET' && url.pathname === '/api/v1/media-by-identity/links') queries.push(Array.from(url.searchParams))
+    })
+    await page.goto('/')
+    const result = await page.evaluate(async ({ id }) => {
+      const modulePath = '/assets/media-sdk.js', api = await import(modulePath), signal = () => new AbortController().signal
+      const first = await api.fetchMediaLinksPage(id, { limit: 100 }, signal())
+      const second = await api.fetchMediaLinksPage(id, { limit: 100, cursor: first.next_cursor }, signal())
+      const third = await api.fetchMediaLinksPage(id, { limit: 100, cursor: second.next_cursor }, signal())
+      let wrongScope: unknown
+      try { await api.fetchMediaLinksPage('photo', { limit: 100, cursor: first.next_cursor }, signal()); wrongScope = 'unexpected' }
+      catch (error) { wrongScope = error instanceof Error && 'code' in error ? error.code : 'unexpected' }
+      return { first, second, third, wrongScope }
+    }, { id })
+    expect(result.first.data).toHaveLength(100); expect(result.second.data).toHaveLength(100); expect(result.third.data).toHaveLength(6)
+    expect(result.third.next_cursor).toBeNull(); expect(result.wrongScope).toBe('INVALID_CURSOR')
+    const links = [...result.first.data, ...result.second.data, ...result.third.data]
+    expect(new Set(links.map((link: { id: string }) => link.id)).size).toBe(206)
+    expect(links.every((link: { media_id: string; media: { id: string; revision: number } }) => link.media_id === id && link.media.id === id && link.media.revision === 1)).toBe(true)
+    expect(queries).toHaveLength(3)
+    const parsed = queries.map((query) => new URLSearchParams(query))
+    expect(parsed.map((query) => query.get('id'))).toEqual([id, id, id])
+    expect(parsed.map((query) => query.get('limit'))).toEqual(['100', '100', '100'])
+    expect(parsed[0]?.has('cursor')).toBe(false); expect(parsed[1]?.get('cursor')).toBe(result.first.next_cursor); expect(parsed[2]?.get('cursor')).toBe(result.second.next_cursor)
+  })
 })
 
 test.describe('exact retained MediaLink SDK identities', () => {
