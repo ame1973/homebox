@@ -48,7 +48,45 @@ func sourceTextRows(ctx context.Context, query queryer, statement string, args .
 	return sourceText(values...), nil
 }
 
-func purchaseSearchText(ctx context.Context, query queryer, itemID, unitID string) (string, error) {
+type purchaseSearchQueries struct {
+	*sql.Tx
+	statements map[string]*sql.Stmt
+}
+
+func preparePurchaseSearchQueries(ctx context.Context, tx *sql.Tx) (*purchaseSearchQueries, error) {
+	queries := &purchaseSearchQueries{Tx: tx, statements: make(map[string]*sql.Stmt)}
+	for _, statement := range []string{
+		purchaseSelect + " WHERE p.id=?",
+		itemSelect + " WHERE i.id=?",
+		purchaseLineCorrectionSelect + " WHERE c.line_id=?",
+	} {
+		prepared, err := tx.PrepareContext(ctx, statement)
+		if err != nil {
+			return nil, errors.Join(err, queries.close())
+		}
+		queries.statements[statement] = prepared
+	}
+	return queries, nil
+}
+
+func (queries *purchaseSearchQueries) QueryRowContext(ctx context.Context, statement string, args ...any) *sql.Row {
+	if prepared := queries.statements[statement]; prepared != nil {
+		return prepared.QueryRowContext(ctx, args...)
+	}
+	return queries.Tx.QueryRowContext(ctx, statement, args...)
+}
+
+func (queries *purchaseSearchQueries) close() error {
+	var err error
+	for _, prepared := range queries.statements {
+		err = errors.Join(err, prepared.Close())
+	}
+	return err
+}
+
+// Reuse statement plans only within this read; each lookup still reads and
+// validates current source. An empty collection does not prepare related tables.
+func purchaseSearchText(ctx context.Context, query *sql.Tx, itemID, unitID string) (text string, finalErr error) {
 	condition, args := "l.item_id=?", []any{itemID}
 	if unitID != "" {
 		condition += " AND l.item_unit_id=?"
@@ -58,7 +96,16 @@ func purchaseSearchText(ctx context.Context, query queryer, itemID, unitID strin
 	if err != nil {
 		return "", err
 	}
-	defer rows.Close()
+	var prepared *purchaseSearchQueries
+	defer func() {
+		closeErr := rows.Close()
+		if prepared != nil {
+			closeErr = errors.Join(closeErr, prepared.close())
+		}
+		if closeErr != nil {
+			text, finalErr = "", errors.Join(finalErr, closeErr)
+		}
+	}()
 	parents := make(map[string]string)
 	var notes []string
 	for rows.Next() {
@@ -69,11 +116,17 @@ func purchaseSearchText(ctx context.Context, query queryer, itemID, unitID strin
 		if line.ItemID != itemID || unitID != "" && (line.ItemUnitID == nil || *line.ItemUnitID != unitID) {
 			return "", ErrDomainState
 		}
-		purchase, err := loadPurchaseLineAuthority(ctx, query, line)
+		if prepared == nil {
+			prepared, err = preparePurchaseSearchQueries(ctx, query)
+			if err != nil {
+				return "", err
+			}
+		}
+		purchase, err := loadPurchaseLineAuthority(ctx, prepared, line)
 		if err != nil {
 			return "", err
 		}
-		active, err := purchaseLineIsActive(ctx, query, line)
+		active, err := purchaseLineIsActive(ctx, prepared, line)
 		if err != nil {
 			return "", err
 		}
@@ -82,7 +135,7 @@ func purchaseSearchText(ctx context.Context, query queryer, itemID, unitID strin
 			notes = append(notes, line.Note)
 		}
 	}
-	if err = errors.Join(rows.Err(), rows.Close()); err != nil {
+	if err = rows.Err(); err != nil {
 		return "", err
 	}
 	ids := make([]string, 0, len(parents))
@@ -176,7 +229,7 @@ type searchText struct {
 // accepted labels must not resurrect a later user override. Only approved free
 // OCR text contributes separately; raw jobs/results and old caches never do.
 // Unit searches include only purchase evidence attached to that exact unit.
-func loadSearchText(ctx context.Context, query queryer, item ItemData, unitID string) (searchText, error) {
+func loadSearchText(ctx context.Context, query *sql.Tx, item ItemData, unitID string) (searchText, error) {
 	category, err := categoryPathText(ctx, query, item.CategoryID)
 	if err != nil {
 		return searchText{}, err

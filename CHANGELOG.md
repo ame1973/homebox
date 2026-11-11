@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- Reuse transaction-scoped SQLite statement plans while rebuilding purchase search evidence. Each lookup still re-reads and validates actual source and correction history; no financial or search results are cached.
+
 ### Added
 
 - Add an internal bounded multipart reader for one raw Media file, preserving its exact bytes and normalized declared MIME without trusting the filename. Test declared and chunked file/body ceilings, extra or encoded parts, cancellation, late read failures and a test-only HTTP socket. This parser does not authorize, validate image bytes, stage files or enable the upload route; WebP decoding remains unavailable.
