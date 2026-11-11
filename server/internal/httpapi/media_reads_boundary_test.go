@@ -34,6 +34,13 @@ func TestMediaHTTPReadAdmissionMethodsPathsAndPrivacy(t *testing.T) {
 					continue
 				}
 			}
+			if strings.HasPrefix(path, "/api/v1/media/links?") {
+				allow = "GET, PATCH, DELETE"
+				if method == http.MethodPatch || method == http.MethodDelete {
+					expectError(t, respond(f.handler, domainRequest(method, path, "", f.cookie, f.csrf, "media-invalid-owner-write", `"1"`)), 400, "INVALID_QUERY")
+					continue
+				}
+			}
 			response := respond(f.handler, domainRequest(method, path, "", f.cookie, f.csrf, "media-unsupported-method", `"1"`))
 			expectError(t, response, 405, "METHOD_NOT_ALLOWED")
 			if response.Header().Get("Allow") != allow {
@@ -135,7 +142,8 @@ func TestMediaHTTPOwnerDeletionChangesOnlyActualMembership(t *testing.T) {
 }
 
 func TestMediaHTTPThroughVerifiedTLSAndCookieJar(t *testing.T) {
-	f := newMediaHTTPFixture(t)
+	specialID := "tls/\\\x00😀"
+	f := newMediaHTTPFixture(t, specialID)
 	server := httptest.NewUnstartedServer(nil)
 	origin := "https://" + server.Listener.Addr().String()
 	handler, err := New(Config{Auth: f.auth, PublicOrigin: origin, Assets: fstest.MapFS{"index.html": {Data: []byte("<main>App</main>")}}})
@@ -253,8 +261,12 @@ func TestMediaHTTPThroughVerifiedTLSAndCookieJar(t *testing.T) {
 		attached = link
 	}
 	original = nil
-	for range 2 {
-		request, err := http.NewRequestWithContext(t.Context(), http.MethodPatch, server.URL+"/api/v1/media/links/"+attached.ID, strings.NewReader(`{"description":"TLS reviewed edit"}`))
+	for attempt := range 2 {
+		path := "/api/v1/media/links/" + attached.ID
+		if attempt == 1 {
+			path = "/api/v1/media/links?id=" + url.QueryEscape(attached.ID)
+		}
+		request, err := http.NewRequestWithContext(t.Context(), http.MethodPatch, server.URL+path, strings.NewReader(`{"description":"TLS reviewed edit"}`))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -282,8 +294,12 @@ func TestMediaHTTPThroughVerifiedTLSAndCookieJar(t *testing.T) {
 		original = data
 	}
 	original = nil
-	for range 2 {
-		request, err := http.NewRequestWithContext(t.Context(), http.MethodDelete, server.URL+"/api/v1/media/links/"+attached.ID, nil)
+	for attempt := range 2 {
+		path := "/api/v1/media/links?id=" + url.QueryEscape(attached.ID)
+		if attempt == 1 {
+			path = "/api/v1/media/links/" + attached.ID
+		}
+		request, err := http.NewRequestWithContext(t.Context(), http.MethodDelete, server.URL+path, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -307,6 +323,46 @@ func TestMediaHTTPThroughVerifiedTLSAndCookieJar(t *testing.T) {
 			t.Fatal("verified-TLS original-key unlink retry changed the frozen acknowledgement")
 		}
 		original = data
+	}
+	for _, action := range []struct {
+		method, body, key, proof, etag string
+	}{
+		{http.MethodPatch, `{"description":"TLS exact identity"}`, "media-tls-exact-edit", `"1"`, `"2"`},
+		{http.MethodDelete, "", "media-tls-exact-unlink", `"2"`, ""},
+	} {
+		request, err := http.NewRequestWithContext(t.Context(), action.method, server.URL+"/api/v1/media/links?id="+url.QueryEscape(specialID), strings.NewReader(action.body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Header.Set("Origin", origin)
+		if action.body != "" {
+			request.Header.Set("Content-Type", "application/json")
+		}
+		request.Header.Set("X-CSRF-Token", csrf.Token)
+		request.Header.Set("Idempotency-Key", action.key)
+		request.Header.Set("X-HomeBox-Client-Version", supportedClientVersion+"-dev")
+		request.Header.Set("If-Match", action.proof)
+		response, err = client.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, readErr := io.ReadAll(response.Body)
+		closeErr = response.Body.Close()
+		if response.StatusCode != 200 || readErr != nil || closeErr != nil || response.Header.Get("ETag") != action.etag ||
+			response.Header.Get("Cache-Control") != "no-store" || response.Header.Get("Strict-Transport-Security") == "" || response.Header.Get("Set-Cookie") != "" {
+			t.Fatalf("verified-TLS exact identity %s failed: %d %s", action.method, response.StatusCode, data)
+		}
+		if action.method == http.MethodPatch {
+			var link store.MediaLink
+			if json.Unmarshal(data, &link) != nil || link.ID != specialID || link.OwnerID != f.empty.ID || link.Revision != 2 || link.Description != "TLS exact identity" {
+				t.Fatal("verified-TLS edit changed the exact retained identity")
+			}
+		} else {
+			var ack store.ActionAck
+			if json.Unmarshal(data, &ack) != nil || !ack.OK || ack.Revision != 3 {
+				t.Fatal("verified-TLS unlink changed the independent tombstone")
+			}
+		}
 	}
 	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL+"/api/v1/media/empty-media/links", nil)
 	if err != nil {

@@ -64,7 +64,7 @@ func (a *authAPI) serveMediaReads(w http.ResponseWriter, r *http.Request, reques
 	if route == "membership" {
 		methods = append(methods, http.MethodPost)
 	}
-	if linkRoute {
+	if linkRoute || route == "owner" {
 		methods = append(methods, http.MethodPatch, http.MethodDelete)
 	}
 	if !slices.Contains(methods, r.Method) {
@@ -72,14 +72,23 @@ func (a *authAPI) serveMediaReads(w http.ResponseWriter, r *http.Request, reques
 		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "The method is not supported for this route.", requestID)
 		return true
 	}
-	if r.Method == http.MethodPatch || r.Method == http.MethodDelete {
+	queryLink := route == "owner" && (r.Method == http.MethodPatch || r.Method == http.MethodDelete)
+	if !queryLink && (r.Method == http.MethodPatch || r.Method == http.MethodDelete) {
 		id = linkID
 	}
 	isList := r.Method == http.MethodGet && route != "resource"
 	if r.URL.RawPath != "" || strings.ContainsAny(id, "\\\x00") || id == "." || id == ".." || id != "" && !boundedString(id, 1, 128) ||
-		!isList && (r.URL.RawQuery != "" || r.URL.ForceQuery) {
-		writeError(w, http.StatusBadRequest, "INVALID_MEDIA_URL", "Use an exact Media path and only documented list parameters.", requestID)
+		!isList && !queryLink && (r.URL.RawQuery != "" || r.URL.ForceQuery) {
+		writeError(w, http.StatusBadRequest, "INVALID_MEDIA_URL", "Use an exact Media path and only documented parameters.", requestID)
 		return true
+	}
+	if queryLink {
+		var ok bool
+		id, ok = exactIdentityQuery(r)
+		if !ok {
+			writeError(w, http.StatusBadRequest, "INVALID_QUERY", "Use one exact MediaLink identity in the id query parameter.", requestID)
+			return true
+		}
 	}
 	token, _ := sessionToken(r)
 	if r.Method == http.MethodPost || r.Method == http.MethodPatch || r.Method == http.MethodDelete {

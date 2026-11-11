@@ -17,14 +17,11 @@ func unitLookupQuery(w http.ResponseWriter, r *http.Request, requestID string) (
 		writeError(w, http.StatusBadRequest, "INVALID_QUERY", "Use one exact Unit identity in the id query parameter.", requestID)
 		return "", false
 	}
-	if len(r.URL.RawQuery) > 16<<10 {
+	id, ok := exactIdentityQuery(r)
+	if !ok {
 		return invalid()
 	}
-	values, err := url.ParseQuery(r.URL.RawQuery)
-	if err != nil || len(values) != 1 || len(values["id"]) != 1 || !boundedString(values["id"][0], 1, 128) {
-		return invalid()
-	}
-	return values["id"][0], true
+	return id, true
 }
 
 func stockListQuery(w http.ResponseWriter, r *http.Request, requestID string) (string, int, store.StockFilters, bool) {

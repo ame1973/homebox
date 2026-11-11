@@ -105,6 +105,17 @@ func resourceRevision(w http.ResponseWriter, r *http.Request, requestID string, 
 	return revision, true, true
 }
 
+func exactIdentityQuery(r *http.Request) (string, bool) {
+	if len(r.URL.RawQuery) > 16<<10 {
+		return "", false
+	}
+	values, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil || len(values) != 1 || len(values["id"]) != 1 || !boundedString(values["id"][0], 1, 128) {
+		return "", false
+	}
+	return values["id"][0], true
+}
+
 func metadataListQuery(w http.ResponseWriter, r *http.Request, requestID string) (string, int, bool) {
 	return boundedMetadataQuery(w, r, requestID, 100, 2300)
 }
