@@ -1,14 +1,14 @@
 import { z } from 'zod'
 import { validText } from './api/client'
-import { idSchema, input, pathIDSchema } from './api/domain'
+import { idSchema, input } from './api/domain'
 
 const scopeSchema = z.strictObject({ kind: z.enum(['item', 'unit', 'location']), id: idSchema })
-const editScopeSchema = scopeSchema.extend({ linkID: pathIDSchema })
+const editScopeSchema = scopeSchema.extend({ linkID: idSchema })
 export type MediaRouteScope = z.infer<typeof scopeSchema>
 export type MediaEditScope = z.infer<typeof editScopeSchema>
 
-// Owner identities are query values, not path segments; legacy slash, NUL and
-// dot IDs must round-trip without becoming a different resource or route.
+// Owner and link identities are query values, not path segments; legacy slash,
+// NUL and dot IDs must round-trip without changing the resource or route.
 export function mediaOwnerRoute(scope: MediaRouteScope): string {
   const checked = input(scopeSchema, scope)
   return `/photos?${new URLSearchParams({ owner_type: checked.kind, owner_id: checked.id })}`

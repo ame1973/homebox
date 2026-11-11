@@ -58,6 +58,17 @@ it.each(proposals)('sends only the original $kind, caller CSRF, key and signal w
   for (const read of readers) expect(read).not.toHaveBeenCalled()
 })
 
+it.each(['.', '..', 'retained/link', 'retained\\link', '\0', 'link/\0😀\r\n', '😀'.repeat(127) + '/'])('freezes and sends the exact retained link %j with its independent proof', async (id) => {
+  const retained = { ...link, id }, selected = { ...source, links: [retained] }, signal = new AbortController().signal
+  const patch = freezeMediaCommand({ kind: 'patch-link', source: selected, linkID: id, body: { description: 'Reviewed' } })
+  const unlink = freezeMediaCommand({ kind: 'unlink', source: selected, linkID: id })
+  await sendMediaCommand(patch, 'csrf', signal); await sendMediaCommand(unlink, 'csrf', signal)
+  expect(api.patchMediaLink).toHaveBeenCalledExactlyOnceWith(id, { description: 'Reviewed' }, { csrfToken: 'csrf', idempotencyKey: patch.key, signal, link: retained })
+  expect(api.unlinkMediaLink).toHaveBeenCalledExactlyOnceWith(id, { csrfToken: 'csrf', idempotencyKey: unlink.key, signal, link: retained })
+  expect(patch.key).not.toBe(unlink.key)
+  for (const read of readers) expect(read).not.toHaveBeenCalled()
+})
+
 it('accepts semantic equality independent of field order across actual joined scopes', () => {
   const reordered = Object.fromEntries(Object.entries(image).reverse()) as typeof image
   const owner = { ...source, links: [{ ...link, media: reordered }] }
@@ -84,7 +95,8 @@ it.each([
   { ...proposals[0], membership: { media: image, links: [{ ...link, description: 'Different source' }, sibling] } },
   { ...proposals[0], membership: { media: { ...image, id: 'unsafe/media' }, links: [] } },
   { ...proposals[0], body: { sort_order: -1 } }, { ...proposals[0], body: { description: null } },
-  { ...proposals[1], linkID: 'absent' }, { ...proposals[1], linkID: 'unsafe/link' }, { ...proposals[1], body: {} },
+  { ...proposals[1], linkID: 'absent' }, { ...proposals[1], linkID: 'unsafe/link' }, { ...proposals[1], linkID: '' },
+  { ...proposals[1], linkID: '\uD800' }, { ...proposals[1], linkID: '😀'.repeat(129) }, { ...proposals[1], body: {} },
   { ...proposals[2], source: { ...source, owner: { kind: 'item', value: { ...item, revision: 0 } } } },
 ])('rejects malformed review context %# before freeze or dispatch', async (proposal) => {
   expect(() => freezeMediaCommand(proposal as never)).toThrowError(expect.objectContaining({ code: 'VALIDATION_ERROR' }))

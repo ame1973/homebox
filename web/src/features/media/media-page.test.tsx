@@ -136,10 +136,18 @@ it('shows a local missing owner as missing rather than an empty collection', asy
   expect(screen.queryByText(text.empty, { exact: true })).not.toBeInTheDocument()
 })
 
-it('keeps path-unaddressable retained link IDs visible but does not invent a write route', async () => {
-  current = { ...initial, links: [{ ...link, id: 'unsafe/link\0😀' }] }; mount(); await ready()
-  expect(screen.getByRole('button', { name: removeName('unsafe/link\0😀') })).toBeDisabled()
-  expect(screen.getByText(text.unaddressableLink)).toBeVisible()
+it('reviews and unlinks a retained link with an exact query identity', async () => {
+  const selected = { ...link, id: 'unsafe/link\0😀' }, source: OwnerMedia = { ...initial, links: [selected] }
+  current = source; mount(); await ready()
+  const query = new URLSearchParams({ owner_type: 'item', owner_id: item.id, link_id: selected.id })
+  expect(screen.getByRole('link', { name: `${text.edit} ${JSON.stringify(selected.id)}` })).toHaveAttribute('href', `/photos/edit?${query}`)
+  const user = userEvent.setup(), remove = screen.getByRole('button', { name: removeName(selected.id) })
+  expect(remove).toBeEnabled(); await user.click(remove)
+  const dialog = screen.getByRole('alertdialog')
+  expect(dialog).toHaveTextContent(JSON.stringify(selected.id)); expect(sendMediaCommand).not.toHaveBeenCalled()
+  await user.click(within(dialog).getByRole('button', { name: text.confirmRemove }))
+  await screen.findByText(messages.mutations.done, { exact: true })
+  expect(vi.mocked(sendMediaCommand).mock.calls[0]?.[0]).toMatchObject({ kind: 'unlink', source, linkID: selected.id, key: expect.any(String) })
 })
 
 it('returns reserved and path-unaddressable owners to a real list instead of an unsafe detail route', async () => {

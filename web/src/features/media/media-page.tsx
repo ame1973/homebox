@@ -114,7 +114,7 @@ export default function MediaPage({ mode }: { mode: 'list' | 'edit' | 'attach' }
   const currentAttach = !!(canWrite && current && currentMembership && attach && selectedMediaID === attach.membership.media.id &&
     sameOwnerMedia(current, attach.owner) && sameMediaMembership(currentMembership, attach.membership) && mediaScopesConsistent(current, currentMembership))
   function unlink(id: string) {
-    if (!canWrite || !current || !pathIDSchema.safeParse(id).success) return
+    if (!canWrite || !current) return
     try { setLocalError(undefined); operation.review({ kind: 'unlink', source: current, linkID: id }) } catch (error) { setLocalError(error) }
   }
   const destination = back(scope)
@@ -142,14 +142,12 @@ export default function MediaPage({ mode }: { mode: 'list' | 'edit' | 'attach' }
                 {scope && canWrite && operation.phase !== 'pending' && operation.phase !== 'uncertain' ? <Button asChild variant="outline" className={control}><Link to={mediaAttachRoute(scope)} state={navigationState}>{text.attach}</Link></Button> : <Button type="button" variant="outline" disabled className={control}>{text.attach}</Button>}
                 {links.length === 0 ? <div className="space-y-2 border-y py-6"><h3 className="text-lg font-semibold">{text.empty}</h3><p className="text-base text-muted-foreground">{text.emptyHelp}</p></div>
                   : <ul aria-label={text.list} className="divide-y border-y">{links.map((link) => {
-                    const addressable = pathIDSchema.safeParse(link.id).success
-                    const editable = !!scope && canWrite && addressable && operation.phase !== 'pending' && operation.phase !== 'uncertain'
+                    const editable = !!scope && canWrite && operation.phase !== 'pending' && operation.phase !== 'uncertain'
                     return <li key={link.id} className="min-w-0 space-y-4 py-5 [content-visibility:auto] [contain-intrinsic-size:auto_18rem]"><div className="flex min-w-0 flex-wrap items-start justify-between gap-3"><div className="min-w-0 space-y-2"><p className="text-base font-medium">{link.media.verification === 'verified' ? text.verified : text.unverified}</p>{link.is_cover && <p className="inline-block rounded-md bg-muted px-2 py-1 text-sm font-medium">{text.cover}</p>}</div>
                       <div className="flex flex-wrap gap-2">{editable && scope ? <Button asChild variant="outline" className={control}><Link to={mediaEditRoute({ ...scope, linkID: link.id })} state={navigationState} aria-label={`${text.edit} ${JSON.stringify(link.id)}`}>{text.edit}</Link></Button> : <Button type="button" variant="outline" disabled aria-label={`${text.edit} ${JSON.stringify(link.id)}`} className={control}>{text.edit}</Button>}
-                        <Button type="button" variant="outline" aria-label={`${text.remove} ${JSON.stringify(link.id)}`} disabled={!canWrite || !addressable || operation.phase === 'pending' || operation.phase === 'uncertain'} className={control} onClick={() => unlink(link.id)}>{text.remove}</Button></div></div>
+                        <Button type="button" variant="outline" aria-label={`${text.remove} ${JSON.stringify(link.id)}`} disabled={!canWrite || operation.phase === 'pending' || operation.phase === 'uncertain'} className={control} onClick={() => unlink(link.id)}>{text.remove}</Button></div></div>
                       <dl className="grid min-w-0 gap-3 sm:grid-cols-2">{[[text.order, String(link.sort_order)], [text.description, JSON.stringify(link.description)], [text.linkID, JSON.stringify(link.id)], [text.mediaID, JSON.stringify(link.media_id)], [text.linkVersion, String(link.revision)], [text.mediaVersion, String(link.media.revision)]]
-                        .map(([label, value]) => <div key={label} className="min-w-0 space-y-1"><dt className="text-sm text-muted-foreground">{label}</dt><dd className="whitespace-pre-wrap text-base [overflow-wrap:anywhere]">{value}</dd></div>)}</dl>
-                      {!addressable && <p className="text-sm leading-relaxed text-muted-foreground">{text.unaddressableLink}</p>}</li>
+                        .map(([label, value]) => <div key={label} className="min-w-0 space-y-1"><dt className="text-sm text-muted-foreground">{label}</dt><dd className="whitespace-pre-wrap text-base [overflow-wrap:anywhere]">{value}</dd></div>)}</dl></li>
                   })}</ul>}
               </section>
               <aside className="min-w-0 space-y-3 border-l-4 border-primary pl-4" aria-labelledby="media-storage-title"><ImageOff aria-hidden="true" className="size-6 text-primary" /><h2 id="media-storage-title" className="text-lg font-semibold">{text.storageTitle}</h2><p className="text-base leading-relaxed text-muted-foreground">{text.storageUnavailable}</p><p className="text-sm leading-relaxed text-muted-foreground">{text.verificationHelp}</p></aside>

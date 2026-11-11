@@ -93,6 +93,35 @@ it('opens the selected original link and confirms only changed fields with its i
   expect(vi.mocked(sendMediaCommand).mock.calls[0]?.[0]).toMatchObject({ kind: 'patch-link', source: initial, linkID: 'first', body: { description: '' }, key: expect.any(String) })
 })
 
+it.each(['.', 'retained\\link', 'unsafe/link\0😀'])('edits the exact retained link identity %j after review', async (id) => {
+  const selected = { ...link, id }, source: OwnerMedia = { ...initial, links: [other, selected] }
+  current = source
+  const work = mount(list); await screen.findByText('Fixture owner', { exact: true })
+  const user = userEvent.setup()
+  await user.click(screen.getByRole('link', { name: `${text.edit} ${JSON.stringify(id)}` })); await ready()
+  expect(new URLSearchParams(work.router.state.location.search).get('link_id')).toBe(id)
+  await user.clear(screen.getByRole('textbox', { name: text.description }))
+  await user.click(screen.getByRole('button', { name: text.reviewEdit }))
+  const dialog = screen.getByRole('alertdialog')
+  expect(dialog).toHaveTextContent(JSON.stringify(id)); expect(sendMediaCommand).not.toHaveBeenCalled()
+  await user.click(within(dialog).getByRole('button', { name: text.confirmEdit }))
+  await waitFor(() => expect(work.router.state.location.pathname).toBe('/photos'))
+  expect(vi.mocked(sendMediaCommand).mock.calls[0]?.[0]).toMatchObject({ kind: 'patch-link', source, linkID: id, body: { description: '' }, key: expect.any(String) })
+})
+
+it('retains only the exact special link scope through a dirty-session purge', async () => {
+  const id = 'retained/\0😀\r\n', search = new URLSearchParams({ owner_type: 'item', owner_id: item.id, link_id: id })
+  current = { ...initial, links: [other, { ...link, id }] }
+  const returnTo = `/photos/edit?${search}`, work = mount(returnTo, { privateBody: 'never-forward' }); await ready()
+  await userEvent.setup().clear(screen.getByRole('textbox', { name: text.description }))
+  vi.mocked(readOwnerMedia).mockRejectedValueOnce(new ApiError('AUTHENTICATION_REQUIRED', { status: 401 }))
+  await act(async () => { await work.client.invalidateQueries({ queryKey: ['media'] }) })
+  await screen.findByRole('heading', { name: messages.auth.loginHeading })
+  expect(work.router.state.location.state).toMatchObject({ returnTo })
+  expect(work.router.state.location.state).not.toHaveProperty('privateBody')
+  expect(work.client.getQueryData(['media', 'owner', 'item', item.id])).toBeUndefined()
+})
+
 it('keeps invalid raw edits during explicit adoption of a concurrent link', async () => {
   const work = mount(); await ready()
   const user = userEvent.setup(), order = screen.getByRole('textbox', { name: text.order }), description = screen.getByRole('textbox', { name: text.description })

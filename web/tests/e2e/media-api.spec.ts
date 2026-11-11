@@ -703,6 +703,231 @@ test.describe('exact retained MediaLink SDK identities', () => {
   })
 })
 
+test.describe('exact retained MediaLink review screens', () => {
+  const identities = [
+    ['slash', 'legacy/link'], ['backslash', 'legacy\\link'], ['NUL', '\0'], ['dot', '.'], ['dot-dot', '..'],
+    ['Unicode and controls', 'legacy/\0😀\r\n'], ['128 code points', '😀'.repeat(127) + '/'],
+  ] as const
+  const ids = identities.map(([, id]) => id), list = `/photos?${new URLSearchParams({ owner_type: 'item', owner_id: empty })}`
+  const identityURL = (id: string) => `/api/v1/media/links?${new URLSearchParams({ id })}`
+  test.use({ applicationDatabaseFixture: { prepare(database) { prepareMediaFixture(database, 0, false, false, ids) } } })
+
+  function watchIdentityWrites(page: Page) {
+    const writes: { method: string; query: [string, string][]; key: string | undefined; proof: string | undefined; body: unknown }[] = []
+    page.on('request', (request) => {
+      const url = new URL(request.url())
+      if (url.pathname !== '/api/v1/media/links' || !['PATCH', 'DELETE'].includes(request.method())) return
+      writes.push({ method: request.method(), query: Array.from(url.searchParams), key: request.headers()['idempotency-key'],
+        proof: request.headers()['if-match'], body: request.postData() === null ? null : request.postDataJSON() })
+    })
+    return writes
+  }
+
+  for (const [label, id] of identities) {
+    test(`reviews, edits and unlinks the exact ${label} identity`, async ({ page, application }) => {
+      await provision(page, application)
+      const writes = watchIdentityWrites(page)
+      await page.goto(list)
+      await page.getByRole('link', { name: `${messages.media.edit} ${JSON.stringify(id)}`, exact: true }).click()
+      await expect(page.getByRole('textbox', { name: messages.media.order })).toHaveValue('-3')
+      expect(new URL(page.url()).searchParams.get('link_id')).toBe(id)
+      await page.getByRole('textbox', { name: messages.media.description }).fill('Reviewed exact identity')
+      await page.getByRole('button', { name: messages.media.reviewEdit }).click()
+      const edit = page.getByRole('alertdialog')
+      await expect(edit).toContainText(JSON.stringify(id)); expect(writes).toHaveLength(0)
+      await edit.getByRole('button', { name: messages.media.confirmEdit }).click()
+      await expect(page.getByText(messages.mutations.done, { exact: true })).toBeVisible()
+      const remove = page.getByRole('button', { name: `${messages.media.remove} ${JSON.stringify(id)}`, exact: true })
+      await expect(remove).toBeEnabled(); await remove.click()
+      const unlink = page.getByRole('alertdialog')
+      await expect(unlink).toContainText(JSON.stringify(id)); expect(writes).toHaveLength(1)
+      await unlink.getByRole('button', { name: messages.media.confirmRemove }).click()
+      await expect.poll(() => writes.length).toBe(2)
+      await expect(unlink).toHaveCount(0)
+      await expect(page.getByText(`${messages.media.total}${ids.length - 1}`, { exact: true })).toBeVisible()
+      await expect(remove).toHaveCount(0)
+      expect(writes.map(({ method, query, proof, body }) => ({ method, query, proof, body }))).toEqual([
+        { method: 'PATCH', query: [['id', id]], proof: '"1"', body: { description: 'Reviewed exact identity' } },
+        { method: 'DELETE', query: [['id', id]], proof: '"2"', body: null },
+      ])
+      expect(writes[0]?.key).toBeTruthy(); expect(writes[1]?.key).toBeTruthy(); expect(writes[0]?.key).not.toBe(writes[1]?.key)
+      const remaining = await (await page.request.get(`/api/v1/media/links?owner_type=item&owner_id=${empty}`)).json()
+      expect(remaining.data).toHaveLength(ids.length - 1)
+      expect(remaining.data.some((value: { id: string }) => value.id === id)).toBe(false)
+    })
+  }
+
+  test('requires explicit adoption after a concurrent edit to the exact identity', async ({ page, application }) => {
+    await provision(page, application)
+    const id = 'legacy/\0😀\r\n', writes = watchIdentityWrites(page)
+    await page.goto(list)
+    await page.getByRole('link', { name: `${messages.media.edit} ${JSON.stringify(id)}`, exact: true }).click()
+    const order = page.getByRole('textbox', { name: messages.media.order }), description = page.getByRole('textbox', { name: messages.media.description })
+    await order.fill('0'); await description.fill('Local draft')
+    await page.getByRole('button', { name: messages.media.reviewEdit }).click()
+    const changed = await page.request.patch(identityURL(id), { headers: await writeContext(page, application.url, 1), data: { is_cover: false, sort_order: 6, description: 'Concurrent' } })
+    expect(changed.status()).toBe(200)
+    const dialog = page.getByRole('alertdialog')
+    await dialog.getByRole('button', { name: messages.media.confirmEdit }).click()
+    await expect(dialog.getByText(messages.locations.conflict)).toBeVisible()
+    await expect(dialog.getByText(messages.media.reviewStale)).toBeVisible()
+    await expect(dialog.getByRole('button', { name: messages.media.confirmEdit })).toBeDisabled()
+    await dialog.getByRole('button', { name: messages.mutations.cancel }).click()
+    await expect(page.getByText(messages.media.changed, { exact: true })).toBeVisible()
+    await order.fill('01'); await page.getByRole('button', { name: messages.media.keepEdits }).click()
+    await expect(order).toHaveValue('01'); await expect(description).toHaveValue('Local draft')
+    await expect(page.getByRole('checkbox', { name: messages.media.cover })).not.toBeChecked()
+    await page.getByRole('button', { name: messages.media.reviewEdit }).click()
+    await expect(page.getByText(messages.media.orderError, { exact: true })).toBeVisible()
+    await order.fill('0'); await page.getByRole('button', { name: messages.media.reviewEdit }).click()
+    await page.getByRole('alertdialog').getByRole('button', { name: messages.media.confirmEdit }).click()
+    await expect(page.getByText(messages.mutations.done, { exact: true })).toBeVisible()
+    expect(writes.map(({ method, query, proof, body }) => ({ method, query, proof, body }))).toEqual([
+      { method: 'PATCH', query: [['id', id]], proof: '"1"', body: { sort_order: 0, description: 'Local draft' } },
+      { method: 'PATCH', query: [['id', id]], proof: '"2"', body: { sort_order: 0, description: 'Local draft' } },
+    ])
+    expect(writes[0]?.key).toBeTruthy(); expect(writes[0]?.key).not.toBe(writes[1]?.key)
+  })
+
+  for (const kind of ['edit', 'unlink'] as const) {
+    test(`reconciles a committed lost ${kind} after the owner is deleted`, async ({ page, application }) => {
+      await provision(page, application)
+      const id = 'legacy/\0😀\r\n', method = kind === 'edit' ? 'PATCH' : 'DELETE', writes = watchIdentityWrites(page)
+      let committedStatus = 0, attempts = 0
+      await page.route((url) => url.pathname === '/api/v1/media/links' && url.searchParams.get('id') === id, async (route) => {
+        if (route.request().method() !== method) { await route.continue(); return }
+        if (++attempts > 1) { await route.continue(); return }
+        committedStatus = (await route.fetch()).status(); await route.abort('failed')
+      })
+      await page.goto(list)
+      if (kind === 'edit') {
+        await page.getByRole('link', { name: `${messages.media.edit} ${JSON.stringify(id)}`, exact: true }).click()
+        await page.getByRole('textbox', { name: messages.media.description }).fill('Lost reply')
+        await page.getByRole('button', { name: messages.media.reviewEdit }).click()
+      } else await page.getByRole('button', { name: `${messages.media.remove} ${JSON.stringify(id)}`, exact: true }).click()
+      await page.getByRole('alertdialog').getByRole('button', { name: kind === 'edit' ? messages.media.confirmEdit : messages.media.confirmRemove }).click()
+      await expect(page.getByRole('heading', { name: messages.mutations.uncertain })).toBeVisible()
+      expect(committedStatus).toBe(200); expect(attempts).toBe(1)
+      expect((await page.request.delete(`/api/v1/items/${empty}`, { headers: await writeContext(page, application.url, 2) })).status()).toBe(200)
+      await page.getByRole('alertdialog').getByRole('button', { name: messages.mutations.readCurrent }).click()
+      await page.getByRole('alertdialog').getByRole('button', { name: messages.mutations.cancel }).click()
+      await expect(page.getByText(messages.media.missing, { exact: true })).toBeVisible()
+      await page.evaluate(() => window.dispatchEvent(new Event('online')))
+      expect(attempts).toBe(1)
+      await page.getByRole('button', { name: messages.mutations.openOriginal }).click()
+      await page.getByRole('alertdialog').getByRole('button', { name: messages.mutations.retryOriginal }).click()
+      await expect(page.getByText(messages.mutations.done, { exact: true })).toBeVisible()
+      expect(attempts).toBe(2); expect(writes).toHaveLength(2)
+      expect(writes[0]?.key).toBeTruthy(); expect(writes[1]?.key).toBe(writes[0]?.key)
+      expect(writes.map(({ method, query, proof, body }) => ({ method, query, proof, body }))).toEqual(Array(2).fill({
+        method, query: [['id', id]], proof: '"1"', body: kind === 'edit' ? { description: 'Lost reply' } : null,
+      }))
+    })
+  }
+
+  test('keeps an offline draft without submitting or replaying its exact identity', async ({ page, application }) => {
+    await provision(page, application)
+    const id = 'legacy\\link', writes = watchIdentityWrites(page)
+    await page.goto(list)
+    const remove = page.getByRole('button', { name: `${messages.media.remove} ${JSON.stringify(id)}`, exact: true })
+    await expect(remove).toBeEnabled()
+    try {
+      await page.context().setOffline(true)
+      await expect(remove).toBeDisabled(); await page.context().setOffline(false)
+      await expect(remove).toBeEnabled(); expect(writes).toHaveLength(0)
+      await page.getByRole('link', { name: `${messages.media.edit} ${JSON.stringify(id)}`, exact: true }).click()
+      const description = page.getByRole('textbox', { name: messages.media.description }), review = page.getByRole('button', { name: messages.media.reviewEdit })
+      await description.fill('Offline draft'); await page.context().setOffline(true)
+      await expect(review).toBeDisabled(); await expect(description).toHaveValue('Offline draft')
+      await page.context().setOffline(false); await expect(review).toBeEnabled(); expect(writes).toHaveLength(0)
+      await review.click(); await page.getByRole('alertdialog').getByRole('button', { name: messages.media.confirmEdit }).click()
+      await expect(page.getByText(messages.mutations.done, { exact: true })).toBeVisible()
+      expect(writes).toMatchObject([{ method: 'PATCH', query: [['id', id]], proof: '"1"', body: { description: 'Offline draft' } }])
+    } finally { await page.context().setOffline(false) }
+  })
+
+  test('returns through login with the exact link identity but without its draft', async ({ page, application }) => {
+    const password = await provision(page, application), id = 'legacy/\0😀\r\n'
+    await page.goto(list)
+    await page.getByRole('link', { name: `${messages.media.edit} ${JSON.stringify(id)}`, exact: true }).click()
+    await page.getByRole('textbox', { name: messages.media.description }).fill('Private draft')
+    await page.context().clearCookies(); await page.getByRole('button', { name: messages.media.refresh }).click()
+    await expect(page.getByRole('heading', { name: messages.auth.loginHeading })).toBeVisible()
+    await page.getByLabel(new RegExp(`^${messages.auth.username}`)).fill('owner')
+    await page.getByLabel(new RegExp(`^${messages.auth.password}`)).fill(password)
+    await page.getByRole('button', { name: messages.auth.login, exact: true }).click()
+    await expect(page.getByRole('textbox', { name: messages.media.description })).toHaveValue('\0Exact é\n')
+    const url = new URL(page.url())
+    expect(url.pathname).toBe('/photos/edit')
+    expect(Array.from(url.searchParams)).toEqual([['owner_type', 'item'], ['owner_id', empty], ['link_id', id]])
+  })
+
+  test('keeps long exact identities accessible at enlarged text in both themes', async ({ page, application }, info) => {
+    await provision(page, application)
+    const id = '😀'.repeat(127) + '/'
+    await page.goto(list); await page.addStyleTag({ content: 'html { font-size: 200% }' })
+    const check = async () => {
+      await noOverflow(page)
+      if (info.project.name === 'small-phone') expect(await page.evaluate(() => document.documentElement.scrollWidth <= 320)).toBe(true)
+      expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze()).violations).toEqual([])
+    }
+    for (const colorScheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme }); await expect(page.locator('html')).toHaveAttribute('data-theme', colorScheme)
+      await check()
+    }
+    await page.getByRole('link', { name: `${messages.media.edit} ${JSON.stringify(id)}`, exact: true }).click()
+    await expect(page.getByRole('textbox', { name: messages.media.order })).toHaveValue('-3')
+    await page.getByRole('textbox', { name: messages.media.description }).fill('Accessible review')
+    for (const colorScheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme }); await expect(page.locator('html')).toHaveAttribute('data-theme', colorScheme)
+      await check()
+      if (info.project.name === 'small-phone' || info.project.name === 'desktop') await page.screenshot({ path: info.outputPath(`exact-link-editor-${colorScheme}.png`), fullPage: true })
+    }
+    await page.getByRole('button', { name: messages.media.reviewEdit }).click()
+    const dialog = page.getByRole('alertdialog')
+    await expect(dialog.getByRole('heading', { name: messages.media.editReviewTitle })).toBeFocused()
+    for (const colorScheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme }); await expect(page.locator('html')).toHaveAttribute('data-theme', colorScheme)
+      await check()
+      expect(await dialog.getByRole('button', { name: messages.media.confirmEdit }).evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
+      if (info.project.name === 'small-phone' || info.project.name === 'desktop') await page.screenshot({ path: info.outputPath(`exact-link-review-${colorScheme}.png`), fullPage: true })
+    }
+  })
+})
+
+test.describe('encoded MediaLink identity metacharacters', () => {
+  const id = 'link&owner_id=other?x#y%+\\'
+  test.use({ applicationDatabaseFixture: { prepare(database) { prepareMediaFixture(database, 0, false, false, [id]) } } })
+
+  test('keeps query metacharacters in the selected identity without adding parameters', async ({ page, application }) => {
+    await provision(page, application)
+    const writes: { method: string; query: [string, string][]; proof: string | undefined }[] = []
+    page.on('request', (request) => {
+      const url = new URL(request.url())
+      if (url.pathname === '/api/v1/media/links' && ['PATCH', 'DELETE'].includes(request.method())) {
+        writes.push({ method: request.method(), query: Array.from(url.searchParams), proof: request.headers()['if-match'] })
+      }
+    })
+    await page.goto(`/photos?owner_type=item&owner_id=${empty}`)
+    await page.getByRole('link', { name: `${messages.media.edit} ${JSON.stringify(id)}`, exact: true }).click()
+    await expect(page.getByRole('textbox', { name: messages.media.order })).toHaveValue('-3')
+    expect(Array.from(new URL(page.url()).searchParams)).toEqual([['owner_type', 'item'], ['owner_id', empty], ['link_id', id]])
+    await page.getByRole('textbox', { name: messages.media.description }).fill('Exact metacharacters')
+    await page.getByRole('button', { name: messages.media.reviewEdit }).click()
+    await page.getByRole('alertdialog').getByRole('button', { name: messages.media.confirmEdit }).click()
+    const remove = page.getByRole('button', { name: `${messages.media.remove} ${JSON.stringify(id)}`, exact: true })
+    await expect(remove).toBeEnabled(); await remove.click()
+    const dialog = page.getByRole('alertdialog')
+    await dialog.getByRole('button', { name: messages.media.confirmRemove }).click()
+    await expect.poll(() => writes.length).toBe(2); await expect(dialog).toHaveCount(0)
+    await expect(page.getByText(`${messages.media.total}0`, { exact: true })).toBeVisible()
+    expect(writes).toEqual([
+      { method: 'PATCH', query: [['id', id]], proof: '"1"' },
+      { method: 'DELETE', query: [['id', id]], proof: '"2"' },
+    ])
+  })
+})
+
 test.describe('exact retained Media identity input', () => {
   test.use({ applicationDatabaseFixture: { prepare(database) { prepareMediaFixture(database, 0, false, true) } } })
 

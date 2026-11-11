@@ -58,11 +58,18 @@ it('normalizes attachment return identities without retaining a selected Media o
   }
 })
 
-it.each(examples)('round-trips an exact $kind owner and addressable link through the edit route and login return', (scope) => {
+it.each(examples)('round-trips an exact $kind owner and link through the edit route and login return', (scope) => {
   const selected = { ...scope, linkID: 'links 😀%?' }
   const path = mediaEditRoute(selected)
   expect(path.startsWith('/photos/edit?')).toBe(true)
   expect(mediaEditScope(path.slice('/photos/edit'.length))).toEqual(selected)
+  expect(mediaReturnPath(path)).toBe(path)
+  expect(applicationReturnPath(path)).toBe(path)
+})
+
+it.each(['.', '..', 'bad/link', 'bad\\link', '\0', 'link/\0😀\r\n', 'link&owner_id=other?x#y%+\\', '😀'.repeat(127) + '/'])('round-trips an exact retained link identity through edit and login: %j', (linkID) => {
+  const scope = { kind: 'item' as const, id: 'owner/\0😀', linkID }, path = mediaEditRoute(scope)
+  expect(mediaEditScope(path.slice('/photos/edit'.length))).toEqual(scope)
   expect(mediaReturnPath(path)).toBe(path)
   expect(applicationReturnPath(path)).toBe(path)
 })
@@ -77,17 +84,16 @@ it('normalizes only the three validated edit parameters', () => {
 it.each([
   '/photos/edit', '/photos/edit?owner_type=item&owner_id=x', '/photos/edit?owner_type=item&owner_id=x&link_id=',
   '/photos/edit?owner_type=item&owner_id=x&link_id=a&link_id=b', '/photos/edit?owner_type=item&owner_id=x&link_id=a&body=private',
-  '/photos/edit?owner_type=item&owner_id=x&link_id=%2F', '/photos/edit?owner_type=item&owner_id=x&link_id=%00',
-  '/photos/edit?owner_type=item&owner_id=x&link_id=..', '/photos/edit?owner_type=item&owner_id=x&link_id=%FF',
-  '/photos/edit?owner_type=item&owner_id=x&link_id=a%5Cb', '/photos/edit?owner_type=item&owner_id=x&link_id=a#fragment',
+  '/photos/edit?owner_type=item&owner_id=x&link_id=%', '/photos/edit?owner_type=item&owner_id=x&link_id=%FF',
+  '/photos/edit?owner_type=item&owner_id=x&link_id=%ED%A0%80', '/photos/edit?owner_type=item&owner_id=x&link_id=a#fragment',
   `/photos/edit?owner_type=item&owner_id=x&link_id=${'x'.repeat(129)}`,
 ])('rejects unsafe or incomplete edit route %j', (path) => {
   expect(mediaReturnPath(path)).toBeUndefined()
   expect(applicationReturnPath(path)).toBeUndefined()
 })
 
-it('rejects unsafe link identities when constructing an edit route', () => {
-  for (const linkID of ['', '.', '..', 'bad/link', 'bad\\link', '\0', '\uD800', '😀'.repeat(129)]) {
+it('rejects invalid link identities when constructing an edit route', () => {
+  for (const linkID of ['', '\uD800', '😀'.repeat(129)]) {
     expect(() => mediaEditRoute({ kind: 'item', id: 'owner', linkID })).toThrowError(expect.objectContaining({ code: 'VALIDATION_ERROR' }))
   }
 })

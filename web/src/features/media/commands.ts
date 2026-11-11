@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { ApiError, type WriteContext } from '@/lib/api/client'
-import { input, pathIDSchema, text } from '@/lib/api/domain'
+import { idSchema, input, pathIDSchema, text } from '@/lib/api/domain'
 import type { MediaLink, MediaLinkView } from '@/lib/api/media'
 import * as api from '@/lib/api/media-writes'
 import type { components } from '@/lib/api/schema'
@@ -38,7 +38,7 @@ export function mediaScopesConsistent(owner: OwnerMedia, membership: MediaMember
 }
 
 function selectedLink(source: OwnerMedia, id: string): MediaLinkView {
-  const linkID = input(pathIDSchema, id), link = source.links.find((value) => value.id === linkID)
+  const linkID = input(idSchema, id), link = source.links.find((value) => value.id === linkID)
   if (!link) throw new ApiError('VALIDATION_ERROR')
   return link
 }
