@@ -130,6 +130,16 @@ declare const patchCatalogItem: typeof import('../src/lib/api/catalog').patchIte
 declare const archiveCatalogItem: typeof import('../src/lib/api/catalog').archiveItem
 declare const deleteCatalogItem: typeof import('../src/lib/api/catalog').deleteItem
 declare const fetchCatalogPage: typeof import('../src/lib/api/catalog').fetchItemsPage
+declare const fetchItemByIdentity: typeof import('../src/lib/api/catalog').fetchItemByIdentity
+const itemIdentityQuery = { id: 'legacy/item\0😀' } satisfies operations['get_item_by_identity']['parameters']['query']
+const exactItemRead: Promise<components['schemas']['Item']> = fetchItemByIdentity(itemIdentityQuery.id, new AbortController().signal)
+// @ts-expect-error Exact Item lookup requires one string identity.
+const missingItemIdentity: operations['get_item_by_identity']['parameters']['query'] = {}
+// @ts-expect-error Exact Item lookup is not an Item collection or filter.
+const filteredItemIdentity: operations['get_item_by_identity']['parameters']['query'] = { id: 'item', status: 'active' }
+// @ts-expect-error Exact Item reads retain caller-owned cancellation.
+const uncancellableItemIdentity = fetchItemByIdentity('item')
+void [itemIdentityQuery, exactItemRead, missingItemIdentity, filteredItemIdentity, uncancellableItemIdentity]
 const createMinimalCatalog = createCatalogItem({ name: 'Item' }, writeContext)
 const createDefaultSubset = createCatalogItem({ name: 'Item', unit_code: 'pcs' }, writeContext)
 const createMeasuredCatalog = createCatalogItem(measuredItem, writeContext)

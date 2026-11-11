@@ -1409,7 +1409,7 @@ paths:
       description: Read current catalog metadata, including archived items, using an active completed session. No body or query parameters. The strong ETag matches the returned item aggregate revision; a historical mutation acknowledgement is not a substitute for this read.
       tags:
       - items
-      responses:
+      responses: &itemIdentityReadResponses
         '200':
           description: Success
           content:
@@ -1645,6 +1645,25 @@ paths:
         description: Exact configured public origin; independent of the session and CSRF proof.
       x-max-body-bytes: 0
       description: Delete only an item without unit, balance, purchase-line, or movement history; disposed units and zero balances still retain history. Archive instead when any such reference exists. Remove only owned catalog links and their independent tombstones, preserve shared media, and commit source/search/projections/audit/frozen acknowledgement atomically. No body or query parameters; the original item aggregate proof protects the reviewed deletion scope.
+  /items-by-identity:
+    get:
+      operationId: get_item_by_identity
+      x-max-body-bytes: 0
+      x-max-query-bytes: 16384
+      x-response-revision-scope: item
+      summary: Item detail by exact identity
+      description: Read the exact retained Item identified by the id query value, including IDs that cannot be represented safely in a path. This is not a collection or a second resource; it returns the same current Item and aggregate revision/strong ETag as the path detail, including archived metadata. Require a completed session and revalidate authorization and actual source in SQL after body reading. Reject duplicate, missing or unknown query parameters, malformed Unicode and bodies. This alias does not add Item write routes.
+      tags:
+      - items
+      responses: *itemIdentityReadResponses
+      parameters:
+      - name: id
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
   /items/{id}/archive:
     post:
       operationId: post_items_id_archive

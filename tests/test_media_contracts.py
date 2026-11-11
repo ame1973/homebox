@@ -159,7 +159,7 @@ class MediaContractTests(unittest.TestCase):
             self.assertEqual("#/components/schemas/Media", operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"])
             self.assertEqual({"Cache-Control", "ETag"}, set(operation["responses"]["200"]["headers"]))
         self.assertEqual("get_media_id_links", API["paths"]["/media/{id}/links"]["get"]["operationId"])
-        self.assertEqual(151, sum(len(methods) for methods in API["paths"].values()))
+        self.assertEqual(152, sum(len(methods) for methods in API["paths"].values()))
 
     def test_exact_media_identity_reads_and_attachment_share_path_authority(self):
         cases = [

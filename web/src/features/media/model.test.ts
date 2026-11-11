@@ -6,7 +6,7 @@ import * as locations from '@/lib/api/locations'
 import * as mediaAPI from '@/lib/api/media'
 import { readMediaMembership, readOwnerMedia, sameMediaMembership, sameOwnerMedia } from './model'
 
-vi.mock('@/lib/api/catalog', async (original) => ({ ...await original<typeof import('@/lib/api/catalog')>(), fetchItem: vi.fn(), fetchItemsPage: vi.fn() }))
+vi.mock('@/lib/api/catalog', async (original) => ({ ...await original<typeof import('@/lib/api/catalog')>(), fetchItem: vi.fn(), fetchItemByIdentity: vi.fn(), fetchItemsPage: vi.fn() }))
 vi.mock('@/lib/api/holdings', async (original) => ({ ...await original<typeof import('@/lib/api/holdings')>(), fetchUnit: vi.fn(), fetchUnitByIdentity: vi.fn(), fetchItemUnitsPage: vi.fn() }))
 vi.mock('@/lib/api/locations', async (original) => ({ ...await original<typeof import('@/lib/api/locations')>(), fetchLocation: vi.fn(), fetchLocationsPage: vi.fn() }))
 vi.mock('@/lib/api/media', async (original) => ({ ...await original<typeof import('@/lib/api/media')>(), fetchMedia: vi.fn(), fetchMediaLinksPage: vi.fn(), fetchOwnerMediaLinksPage: vi.fn() }))
@@ -24,6 +24,7 @@ const link = { id: 'link', revision: 2, media_id: image.id, owner_type: 'item', 
 beforeEach(() => {
   vi.resetAllMocks()
   vi.mocked(catalog.fetchItem).mockResolvedValue(item)
+  vi.mocked(catalog.fetchItemByIdentity).mockResolvedValue(item)
   vi.mocked(catalog.fetchItemsPage).mockResolvedValue({ data: [item], next_cursor: null })
   vi.mocked(holdings.fetchUnit).mockResolvedValue(unit)
   vi.mocked(holdings.fetchUnitByIdentity).mockResolvedValue(unit)
@@ -135,29 +136,33 @@ it('snapshots the requested scope before any asynchronous source read settles', 
   expect(mediaAPI.fetchOwnerMediaLinksPage).toHaveBeenCalledWith('item', item.id, { limit: 100 }, abort)
 })
 
-it('resolves path-unaddressable retained Item and Location owners from their complete actual lists', async () => {
+it('resolves path-unaddressable Item by exact identity and reserved Location from its complete actual list', async () => {
   const legacyItem = { ...item, id: 'item/\0😀' }, legacyLocation = { ...location, id: 'tree' }
   const itemLink = { ...link, owner_id: legacyItem.id }, locationLink = { ...link, owner_type: 'location' as const, owner_id: legacyLocation.id }
-  vi.mocked(catalog.fetchItemsPage).mockResolvedValue({ data: [legacyItem], next_cursor: null })
+  vi.mocked(catalog.fetchItemByIdentity).mockResolvedValue(legacyItem)
   vi.mocked(locations.fetchLocationsPage).mockResolvedValue({ data: [legacyLocation], next_cursor: null })
   vi.mocked(mediaAPI.fetchOwnerMediaLinksPage).mockResolvedValueOnce({ data: [itemLink], next_cursor: null }).mockResolvedValueOnce({ data: [locationLink], next_cursor: null })
   const abort = signal()
   expect(await readOwnerMedia({ kind: 'item', id: legacyItem.id }, abort)).toEqual({ owner: { kind: 'item', value: legacyItem }, links: [itemLink] })
   expect(await readOwnerMedia({ kind: 'location', id: legacyLocation.id }, abort)).toEqual({ owner: { kind: 'location', value: legacyLocation }, links: [locationLink] })
-  expect(catalog.fetchItem).not.toHaveBeenCalled(); expect(catalog.fetchItemsPage).toHaveBeenCalledTimes(2)
+  expect(catalog.fetchItem).not.toHaveBeenCalled(); expect(catalog.fetchItemsPage).not.toHaveBeenCalled()
+  expect(catalog.fetchItemByIdentity).toHaveBeenNthCalledWith(1, legacyItem.id, abort)
+  expect(catalog.fetchItemByIdentity).toHaveBeenNthCalledWith(2, legacyItem.id, abort)
   expect(locations.fetchLocation).not.toHaveBeenCalled(); expect(locations.fetchLocationsPage).toHaveBeenCalledTimes(2)
   expect(mediaAPI.fetchOwnerMediaLinksPage).toHaveBeenNthCalledWith(1, 'item', legacyItem.id, { limit: 100 }, abort)
 })
 
-it('searches every actual Item list page when a retained owner ID cannot be addressed as a path', async () => {
-  const legacy = { ...item, id: 'unsafe/item' }, rows = Array.from({ length: 100 }, (_, index) => ({ ...item, id: `item-${index}` }))
-  vi.mocked(catalog.fetchItemsPage).mockResolvedValueOnce({ data: rows, next_cursor: 'next' }).mockResolvedValueOnce({ data: [legacy], next_cursor: null })
-    .mockResolvedValueOnce({ data: rows, next_cursor: 'again' }).mockResolvedValueOnce({ data: [legacy], next_cursor: null })
+it('withholds path-unaddressable Item links when either exact bracketed source changes', async () => {
+  const legacy = { ...item, id: 'unsafe/item' }
+  vi.mocked(catalog.fetchItemByIdentity).mockResolvedValueOnce(legacy).mockResolvedValueOnce({ ...legacy, revision: 5 })
   vi.mocked(mediaAPI.fetchOwnerMediaLinksPage).mockResolvedValueOnce({ data: [], next_cursor: null })
   const abort = signal()
-  expect(await readOwnerMedia({ kind: 'item', id: legacy.id }, abort)).toEqual({ owner: { kind: 'item', value: legacy }, links: [] })
-  expect(catalog.fetchItemsPage).toHaveBeenNthCalledWith(2, { limit: 100, cursor: 'next' }, abort)
-  expect(catalog.fetchItemsPage).toHaveBeenNthCalledWith(4, { limit: 100, cursor: 'again' }, abort)
+  await expect(readOwnerMedia({ kind: 'item', id: legacy.id }, abort)).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+  expect(catalog.fetchItemsPage).not.toHaveBeenCalled()
+  expect(catalog.fetchItemByIdentity).toHaveBeenNthCalledWith(1, legacy.id, abort)
+  expect(catalog.fetchItemByIdentity).toHaveBeenNthCalledWith(2, legacy.id, abort)
+  expect(vi.mocked(catalog.fetchItemByIdentity).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(mediaAPI.fetchOwnerMediaLinksPage).mock.invocationCallOrder[0]!)
+  expect(vi.mocked(mediaAPI.fetchOwnerMediaLinksPage).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(catalog.fetchItemByIdentity).mock.invocationCallOrder[1]!)
 })
 
 it('resolves a path-unaddressable Unit and parent directly from exact actual Unit source', async () => {
@@ -175,9 +180,8 @@ it('rejects a conflicting parent scope and propagates actual missing or failed a
   await expect(readOwnerMedia({ kind: 'unit', id: unit.id, itemID: 'other-item' }, signal())).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
   vi.mocked(holdings.fetchUnitByIdentity).mockRejectedValueOnce(new ApiError('NOT_FOUND', { status: 404 }))
   await expect(readOwnerMedia({ kind: 'unit', id: 'unsafe/unit', itemID: 'unsafe/item' }, signal())).rejects.toMatchObject({ code: 'NOT_FOUND', status: 404 })
-  vi.mocked(catalog.fetchItemsPage).mockResolvedValueOnce({ data: [], next_cursor: null })
-  const missing = await readOwnerMedia({ kind: 'item', id: 'unsafe/item' }, signal()).catch((failure: unknown) => failure)
-  expect(missing).toMatchObject({ code: 'NOT_FOUND' }); expect((missing as ApiError).status).toBeUndefined()
+  vi.mocked(catalog.fetchItemByIdentity).mockRejectedValueOnce(new ApiError('NOT_FOUND', { status: 404 }))
+  await expect(readOwnerMedia({ kind: 'item', id: 'unsafe/item' }, signal())).rejects.toMatchObject({ code: 'NOT_FOUND', status: 404 })
   vi.mocked(locations.fetchLocationsPage).mockRejectedValueOnce(new ApiError('NETWORK_ERROR'))
   await expect(readOwnerMedia({ kind: 'location', id: 'tree' }, signal())).rejects.toMatchObject({ code: 'NETWORK_ERROR' })
   expect(mediaAPI.fetchOwnerMediaLinksPage).not.toHaveBeenCalled()

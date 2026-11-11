@@ -13,6 +13,9 @@ import (
 
 func catalogRoute(path string) (route, id, allow string) {
 	const prefix = "/api/v1/items"
+	if path == "/api/v1/items-by-identity" {
+		return "identity", "", http.MethodGet
+	}
 	if path == prefix {
 		return "collection", "", "GET, POST"
 	}
@@ -45,8 +48,9 @@ func (a *authAPI) serveCatalog(w http.ResponseWriter, r *http.Request, requestID
 		return true
 	}
 	isList := route == "collection" && r.Method == http.MethodGet
+	isIdentity := route == "identity" && r.Method == http.MethodGet
 	if r.URL.RawPath != "" || strings.ContainsAny(id, "\\\x00") || id == "." || id == ".." || id != "" && !boundedString(id, 1, 128) ||
-		!isList && (r.URL.RawQuery != "" || r.URL.ForceQuery) {
+		!isList && !isIdentity && (r.URL.RawQuery != "" || r.URL.ForceQuery) {
 		writeError(w, http.StatusBadRequest, "INVALID_CATALOG_URL", "Use an exact catalog path and only documented list parameters.", requestID)
 		return true
 	}
@@ -72,6 +76,14 @@ func (a *authAPI) serveCatalog(w http.ResponseWriter, r *http.Request, requestID
 	if r.Method == http.MethodGet {
 		if !requireNoBody(w, r, requestID) {
 			return true
+		}
+		if isIdentity {
+			var ok bool
+			id, ok = exactIdentityQuery(r)
+			if !ok {
+				writeError(w, http.StatusBadRequest, "INVALID_QUERY", "Use one exact Item identity in the id query parameter.", requestID)
+				return true
+			}
 		}
 		item, err := a.catalog.Get(r.Context(), token, id)
 		writeCatalogResult(w, item, err, requestID)

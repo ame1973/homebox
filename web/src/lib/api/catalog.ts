@@ -48,6 +48,13 @@ export async function fetchItem(id: string, signal: AbortSignal): Promise<Item> 
   return resourceRequest(itemSchema, signal, (signal) => apiClient.GET('/items/{id}', { signal, params: { path: { id: resourceID } } }), { id: resourceID }, 8_000)
 }
 
+// Both forms read the same actual Item and aggregate revision. The query form
+// preserves retained identities that cannot be represented as path segments.
+export async function fetchItemByIdentity(id: string, signal: AbortSignal): Promise<Item> {
+  const resourceID = input(idSchema, id)
+  return resourceRequest(itemSchema, signal, (signal) => apiClient.GET('/items-by-identity', { signal, params: { query: { id: resourceID } } }), { id: resourceID }, 8_000)
+}
+
 // One explicit live page, never hidden pagination, persistence or a snapshot
 // claim. q/filter text remains caller-owned; the server binds its effective scope.
 export async function fetchItemsPage(query: ItemPageQuery, signal: AbortSignal): Promise<ItemsPage> {

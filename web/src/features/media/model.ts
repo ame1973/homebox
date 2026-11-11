@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { ApiError } from '@/lib/api/client'
-import { fetchItem, fetchItemsPage } from '@/lib/api/catalog'
+import { fetchItem, fetchItemByIdentity } from '@/lib/api/catalog'
 import { idSchema, input, pathIDSchema } from '@/lib/api/domain'
 import { fetchUnit, fetchUnitByIdentity } from '@/lib/api/holdings'
 import { fetchLocation, fetchLocationsPage } from '@/lib/api/locations'
@@ -81,13 +81,13 @@ function selected<T extends { id: string }>(rows: readonly T[], id: string): T {
   return value
 }
 
-// Retained Item/Location IDs may not be representable as paths; resolve them
-// from complete live lists. Unit query lookup preserves its exact identity.
+// Exact Item/Unit query reads preserve retained IDs that are not safe paths.
+// A Location fallback still requires its complete live list.
 async function readOwner(scope: MediaOwnerScope, signal: AbortSignal): Promise<MediaOwner> {
   const addressable = pathIDSchema.safeParse(scope.id).success
   let owner: MediaOwner
   if (scope.kind === 'item') {
-    const value = addressable ? await fetchItem(scope.id, signal) : selected(await readAllMetadata(fetchItemsPage, signal), scope.id)
+    const value = addressable ? await fetchItem(scope.id, signal) : await fetchItemByIdentity(scope.id, signal)
     owner = { kind: 'item', value }
   } else if (scope.kind === 'unit') {
     const value = addressable ? await fetchUnit(scope.id, signal) : await fetchUnitByIdentity(scope.id, signal)

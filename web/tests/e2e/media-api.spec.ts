@@ -18,7 +18,7 @@ const test = applicationTest.extend<{}, { applicationWebDirectory: string }>({
     try {
       cpSync(fileURLToPath(new URL('../../dist', import.meta.url)), web, { recursive: true })
       // The private SDK bundle is never a production test entrypoint.
-      writeFileSync(entry, `export * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/media.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/media-writes.ts', import.meta.url)))};\nexport { fetchItem } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/catalog.ts', import.meta.url)))};\nexport { createUnit, fetchUnitByIdentity, moveUnit } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/holdings.ts', import.meta.url)))};\nexport { createLocation, fetchLocation } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/locations.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/features/media/model.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/features/media/commands.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/features/media/form.ts', import.meta.url)))};\n`)
+      writeFileSync(entry, `export * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/media.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/media-writes.ts', import.meta.url)))};\nexport { fetchItem, fetchItemByIdentity } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/catalog.ts', import.meta.url)))};\nexport { createUnit, fetchUnitByIdentity, moveUnit } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/holdings.ts', import.meta.url)))};\nexport { createLocation, fetchLocation } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/locations.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/features/media/model.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/features/media/commands.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/features/media/form.ts', import.meta.url)))};\n`)
       await build({ configFile: false, logLevel: 'silent', resolve: { alias: { '@': fileURLToPath(new URL('../../src', import.meta.url)) } },
         build: { outDir: sdk, minify: false, lib: { entry, formats: ['es'], fileName: 'media-sdk' } } })
       cpSync(join(sdk, 'media-sdk.js'), join(web, 'assets', 'media-sdk.js'))
@@ -911,11 +911,12 @@ test.describe('retained Media owner identities', () => {
 
   test('resolves real path-unaddressable Item and Unit plus reserved Location owners from actual source', async ({ page, application }) => {
     await provision(page, application)
-    const requests: string[] = [], unitIDs: string[] = []
+    const requests: string[] = [], itemIDs: string[] = [], unitIDs: string[] = []
     page.on('request', (request) => {
       if (request.method() !== 'GET') return
       const url = new URL(request.url())
       requests.push(url.pathname)
+      if (url.pathname === '/api/v1/items-by-identity') itemIDs.push(...url.searchParams.getAll('id'))
       if (url.pathname === '/api/v1/units') unitIDs.push(...url.searchParams.getAll('id'))
     })
     await page.goto('/')
@@ -923,6 +924,7 @@ test.describe('retained Media owner identities', () => {
       const modulePath = '/assets/media-sdk.js', api = await import(modulePath), signal = () => new AbortController().signal
       return {
         item: await api.readOwnerMedia({ kind: 'item', id: 'legacy/item\0😀' }, signal()),
+        itemLookup: await api.fetchItemByIdentity('legacy/item\0😀', signal()),
         unit: await api.readOwnerMedia({ kind: 'unit', id: 'legacy/unit\0😀' }, signal()),
         unitLookup: await api.fetchUnitByIdentity('legacy/unit\0😀', signal()),
         location: await api.readOwnerMedia({ kind: 'location', id: 'tree' }, signal()),
@@ -930,16 +932,45 @@ test.describe('retained Media owner identities', () => {
     })
     expect(result.item.owner).toMatchObject({ kind: 'item', value: { id: 'legacy/item\0😀', revision: 1 } })
     expect(result.item.links).toMatchObject([{ id: 'legacy-item-link', owner_id: 'legacy/item\0😀' }])
+    expect(result.itemLookup).toEqual(result.item.owner.value)
     expect(result.unit.owner).toMatchObject({ kind: 'unit', value: { id: 'legacy/unit\0😀', item_id: 'legacy/item\0😀', revision: 1 } })
     expect(result.unit.links).toMatchObject([{ id: 'legacy-unit-link', owner_id: 'legacy/unit\0😀' }])
     expect(result.unitLookup).toEqual(result.unit.owner.value)
     expect(result.location.owner).toMatchObject({ kind: 'location', value: { id: 'tree', revision: 1 } })
     expect(result.location.links).toMatchObject([{ id: 'legacy-location-link', owner_id: 'tree' }])
-    expect(requests.filter((path) => path === '/api/v1/items')).toHaveLength(2)
+    expect(requests.filter((path) => path === '/api/v1/items')).toHaveLength(0)
+    expect(requests.filter((path) => path === '/api/v1/items-by-identity')).toHaveLength(3)
+    expect(itemIDs).toEqual(['legacy/item\0😀', 'legacy/item\0😀', 'legacy/item\0😀'])
     expect(requests.filter((path) => path === '/api/v1/units')).toHaveLength(3)
     expect(unitIDs).toEqual(['legacy/unit\0😀', 'legacy/unit\0😀', 'legacy/unit\0😀'])
     expect(requests.filter((path) => path === '/api/v1/locations/tree')).toHaveLength(2)
     expect(requests.filter((path) => path === '/api/v1/media/links')).toHaveLength(3)
+  })
+
+  test('withholds exact Item review when a real link changes between its source reads', async ({ page, application }) => {
+    await provision(page, application)
+    const id = 'legacy/item\0😀'
+    let changed = false, patchStatus = 0
+    await page.route((url) => url.pathname === '/api/v1/media/links' && url.searchParams.get('owner_id') === id, async (route) => {
+      const response = await route.fetch()
+      if (!changed) {
+        changed = true
+        const headers = await writeContext(page, application.url, 1)
+        patchStatus = (await page.request.patch('/api/v1/media/links/legacy-item-link', { headers, data: { description: 'Changed during exact Item review' } })).status()
+      }
+      await route.fulfill({ response })
+    })
+    await page.goto('/')
+    const result = await page.evaluate(async (id) => {
+      const modulePath = '/assets/media-sdk.js', api = await import(modulePath), signal = () => new AbortController().signal
+      let first: unknown
+      try { await api.readOwnerMedia({ kind: 'item', id }, signal()); first = 'unexpected' }
+      catch (error) { first = error instanceof Error && 'code' in error ? error.code : 'unexpected' }
+      return { first, current: await api.readOwnerMedia({ kind: 'item', id }, signal()) }
+    }, id)
+    expect(changed).toBe(true); expect(patchStatus).toBe(200); expect(result.first).toBe('INVALID_RESPONSE')
+    expect(result.current.owner).toMatchObject({ kind: 'item', value: { id, revision: 2 } })
+    expect(result.current.links).toContainEqual(expect.objectContaining({ id: 'legacy-item-link', revision: 2, description: 'Changed during exact Item review' }))
   })
 })
 

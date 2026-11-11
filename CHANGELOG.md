@@ -9,6 +9,8 @@
 
 ### Added
 
+- Add protected `GET /items-by-identity?id=...` and a stateless adapter for exact retained Item identities that cannot be path segments. Both query and path reads use the actual Item and aggregate ETag, including archived metadata, with completed-session revalidation. Media owner reviews now bracket their link pages with exact Item reads rather than scanning the full catalog. Real-source, verified-TLS and real-Go browser tests cover special IDs and concurrent link changes; ordinary Item writes and detail routes remain path-based.
+
 - Implement protected exact product-barcode discovery with actual Barcode/Item source validation, stable independent IDs, archived and shared matches, principal/epoch/value/namespace/size-scoped live cursors, and transactional lookup-index migration. Preserve leading zeros and retained historical strings without applying new-write checksum rules to reads. Add a stateless browser adapter, strict contracts/types and real-Go browser tests; scanning, selection UI and cross-format conversion remain separate.
 
 - Add an internal browser camera-stream hook with explicit gesture-triggered rear/front requests, secure-context checks, same-page and best-effort same-origin cross-window session-purge signals, and track cleanup on background, completion, unmount or late permission results. Signals contain no private data; cross-window query/offline-cache purge is not implemented. The camera interface, capture, scanner and actual-device acceptance remain unfinished.

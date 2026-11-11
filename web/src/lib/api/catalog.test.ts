@@ -27,6 +27,7 @@ describe('typed stateless catalog transport', () => {
     { name: 'complete filtered page', method: 'GET', path: '/items?from=2026-01-01&to=2026-12-31&currency=TWD&category_id=category&location_id=location&scope=direct&status=archived&merchant=Exact&q=Query&limit=2&cursor=opaque', result: { data: [{ ...item, category_id: 'category', status: 'archived' }], next_cursor: null },
       invoke: (api) => api.fetchItemsPage({ from: '2026-01-01', to: '2026-12-31', currency: 'TWD', category_id: 'category', location_id: 'location', scope: 'direct', status: 'archived', merchant: 'Exact', q: 'Query', limit: 2, cursor: 'opaque' }, signal()) },
     { name: 'current item', method: 'GET', path: '/items/item-1', result: item, invoke: (api) => api.fetchItem(item.id, signal()) },
+    { name: 'exact-identity item', method: 'GET', path: '/items-by-identity?id=item-1', result: item, invoke: (api) => api.fetchItemByIdentity(item.id, signal()) },
     { name: 'minimal creation', method: 'POST', path: '/items', body: { name: item.name }, result: item, invoke: (api) => api.createItem({ name: item.name }, write()) },
     { name: 'explicit default subset', method: 'POST', path: '/items', body: { name: item.name, unit_code: 'pcs' }, result: item, invoke: (api) => api.createItem({ name: item.name, unit_code: 'pcs' }, write()) },
     { name: 'explicit custom tuple', method: 'POST', path: '/items', body: { name: item.name, tracking_mode: 'quantity', unit_code: 'kg', base_unit: 'g', scale_factor: 1000, category_id: 'category', brand: null }, result: { ...item, tracking_mode: 'quantity', unit_code: 'kg', base_unit: 'g', scale_factor: 1000, category_id: 'category' },
@@ -124,6 +125,39 @@ describe('typed stateless catalog transport', () => {
 })
 
 describe('strict catalog resource and page responses', () => {
+  it.each(['.', '..', 'legacy/item', 'legacy\\item', '\0', 'legacy/\0😀\r\n', 'percent%2F/plus+ space?&=#', '😀'.repeat(127) + '/'])(
+    'reads exact retained Item identity %j through a single query', async (id) => {
+      const { fetchItemByIdentity } = await import('./catalog')
+      const expected = { ...item, id, revision: 7, status: 'archived' }
+      fetchMock.mockResolvedValueOnce(reply(expected))
+      expect(await fetchItemByIdentity(id, signal())).toEqual(expected)
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      const request = fetchMock.mock.calls[0]?.[0] as Request
+      const url = new URL(request.url)
+      expect(url.pathname).toBe('/api/v1/items-by-identity')
+      expect([...url.searchParams.keys()]).toEqual(['id'])
+      expect(url.searchParams.get('id')).toBe(id)
+      expect(request.method).toBe('GET'); expect(await request.text()).toBe('')
+      expect(request.headers.has('If-Match')).toBe(false)
+    },
+  )
+
+  it('rejects an altered exact Item, invalid ETag, malformed identity and failed reads without retrying', async () => {
+    const { fetchItemByIdentity } = await import('./catalog')
+    const id = 'legacy/\0😀'
+    for (const [result, etag] of [[{ ...item, id: 'other' }, '"1"'], [{ ...item, id }, 'W/"1"'], [{ ...item, id }, '"2"']] as const) {
+      fetchMock.mockResolvedValueOnce(reply(result, etag))
+      await expect(fetchItemByIdentity(id, signal())).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+    }
+    for (const invalid of ['', '\uD800', '😀'.repeat(129)]) {
+      await expect(fetchItemByIdentity(invalid, signal())).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    fetchMock.mockRejectedValueOnce(new TypeError('private network diagnostic'))
+    await expect(fetchItemByIdentity(id, signal())).rejects.toMatchObject({ code: 'NETWORK_ERROR' })
+    expect(fetchMock).toHaveBeenCalledTimes(4)
+  })
+
   it.each([
     null, {}, [], { ...item, id: '' }, { ...item, id: '😀'.repeat(129) }, { ...item, id: '\uD800' },
     { ...item, revision: 0 }, { ...item, revision: 1.1 }, { ...item, revision: Number.MAX_SAFE_INTEGER + 1 },
