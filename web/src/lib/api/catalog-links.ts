@@ -22,7 +22,7 @@ export type AttributePatchInput = components['schemas']['AttributePatch'] & (
   Readonly<{ attribute_key: string; attribute_value?: string }> | Readonly<{ attribute_key?: string; attribute_value: string }>
 )
 
-const symbologySchema = z.enum(['EAN_13', 'EAN_8', 'UPC_A', 'UPC_E', 'CODE_128', 'QR_CODE', 'OTHER'])
+export const symbologySchema = z.enum(['EAN_13', 'EAN_8', 'UPC_A', 'UPC_E', 'CODE_128', 'QR_CODE', 'OTHER'])
 const barcodeFields = { symbology: symbologySchema, raw_value: text(1, 512) }
 const aliasFields = { alias: text(1, 300) }
 const attributeFields = { attribute_key: text(1, 100), attribute_value: text(0, 10000) }

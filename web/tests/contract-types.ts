@@ -230,6 +230,32 @@ const unprovenTagSet = ownedCatalogAPI.replaceItemTags('item', clearMembership, 
 const nullTagSet = ownedCatalogAPI.replaceItemTags('item', { tag_ids: null }, owningItemProof)
 // @ts-expect-error Assigned reads accept only their documented paging fields.
 const filteredOwnedRead = ownedCatalogAPI.fetchItemTagsPage('item', { q: 'uncontracted' }, new AbortController().signal)
+
+// Product lookup keeps exact string values and returns independent shared rows,
+// not an inferred physical Unit or a resource revision.
+type BarcodeSearchQuery = operations['get_search_barcodes']['parameters']['query']
+const exactBarcodeQuery = { value: '036000291452', symbology: 'UPC_A', limit: 1, cursor: 'opaque' } satisfies BarcodeSearchQuery
+const sharedBarcodeMatch = { item_id: 'item', barcode_id: 'barcode', symbology: 'UPC_A', normalized_value: '036000291452' } satisfies components['schemas']['BarcodeMatch']
+const sharedBarcodePage = { matches: [sharedBarcodeMatch, { ...sharedBarcodeMatch, item_id: 'other', barcode_id: 'other-barcode' }], next_cursor: null } satisfies components['schemas']['BarcodeMatches']
+declare const barcodeSearchAPI: typeof import('../src/lib/api/barcode-search')
+const barcodeSearchRead: Promise<components['schemas']['BarcodeMatches']> = barcodeSearchAPI.fetchBarcodeMatches(exactBarcodeQuery, new AbortController().signal)
+// @ts-expect-error An exact product barcode is required, even when a symbology is present.
+const missingBarcodeValue: BarcodeSearchQuery = { symbology: 'UPC_A' }
+// @ts-expect-error Numeric conversion would discard significant leading zeros.
+const numericBarcodeValue: BarcodeSearchQuery = { value: 36000291452 }
+// @ts-expect-error Symbology is an explicit supported namespace, not a generic label.
+const unknownBarcodeNamespace: BarcodeSearchQuery = { value: '001', symbology: 'JAN' }
+// @ts-expect-error Every live page must explicitly continue or terminate.
+const unfinishedBarcodePage: components['schemas']['BarcodeMatches'] = { matches: [] }
+// @ts-expect-error A product match is not a unique Unit or a concurrency proof.
+const inventedBarcodeUnit: components['schemas']['BarcodeMatch'] = { ...sharedBarcodeMatch, unit_id: 'unit' }
+// @ts-expect-error Query scope cannot include an unrelated Item or location.
+const scopedBarcodeRead = barcodeSearchAPI.fetchBarcodeMatches({ value: '001', item_id: 'item' }, new AbortController().signal)
+// @ts-expect-error Each discovery request has caller-owned cancellation.
+const uncancellableBarcodeRead = barcodeSearchAPI.fetchBarcodeMatches({ value: '001' })
+void [exactBarcodeQuery, sharedBarcodeMatch, sharedBarcodePage, barcodeSearchRead, missingBarcodeValue, numericBarcodeValue,
+  unknownBarcodeNamespace, unfinishedBarcodePage, inventedBarcodeUnit, scopedBarcodeRead, uncancellableBarcodeRead]
+
 type UnitCreateHeaders = operations['post_items_id_units']['parameters']['header']
 type UnitEditHeaders = operations['patch_units_id']['parameters']['header']
 type StockMutationHeaders = operations['post_stock_receive']['parameters']['header']

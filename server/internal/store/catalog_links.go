@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+
+	"homebox/internal/barcode"
 )
 
 // Owned payloads retain independent row IDs; the enclosing resource owns the
@@ -106,14 +108,9 @@ func loadAttribute(ctx context.Context, query queryer, id string) (Attribute, er
 }
 
 func (value Barcode) validateDomainResult() error {
-	validSymbology := false
-	switch value.Symbology {
-	case "EAN_13", "EAN_8", "UPC_A", "UPC_E", "CODE_128", "QR_CODE", "OTHER":
-		validSymbology = true
-	}
 	// Validate persisted representation, not new-input checksum policy. Previously
 	// retained manual values must remain inspectable without a hidden rewrite.
-	if !validDomainID(value.ID) || !validDomainID(value.ItemID) || !validSymbology ||
+	if !validDomainID(value.ID) || !validDomainID(value.ItemID) || !barcode.ValidSymbology(value.Symbology) ||
 		!authString(value.RawValue, 1, 512) || !authString(value.NormalizedValue, 1, 512) || value.Revision < 1 || value.Revision > maxSafeInteger {
 		return ErrDomainState
 	}

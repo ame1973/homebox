@@ -1603,7 +1603,10 @@ export interface paths {
             readonly path?: never;
             readonly cookie?: never;
         };
-        /** Product barcode lookup */
+        /**
+         * Product barcode lookup
+         * @description Return one live stable-barcode-ID page of exact stored normalized values, including archived Items and every independently identified shared match. Omit symbology to search all supported namespaces; supplying it restricts the exact namespace without cross-format conversion. Current new writes validate checksum and preserve exact input, while retained reads do not apply today's checksum or alphabet policy to historical values. Never trim, fold, normalize Unicode, convert digits to numbers or treat a product match as a unique physical Unit. Validate actual Barcode and Item source/counters including lookahead; a missing or corrupt authority withholds the page. Signed 15-minute continuations bind principal, dataset epoch, exact value, optional symbology and page size; they are not frozen snapshots or authorization and do not contain the filter as a field. No body, list ETag, implicit pagination or read-side repair.
+         */
         readonly get: operations["get_search_barcodes"];
         readonly put?: never;
         readonly post?: never;
@@ -2590,14 +2593,18 @@ export interface components {
             readonly data: readonly components["schemas"]["Barcode"][];
             readonly next_cursor: string | null;
         };
+        /** @description One independent stored barcode and its actual owning Item; it never identifies a physical Unit. */
         readonly BarcodeMatch: {
             readonly barcode_id: string;
             readonly item_id: string;
             readonly normalized_value: string;
-            readonly symbology: string;
+            /** @enum {string} */
+            readonly symbology: "EAN_13" | "EAN_8" | "UPC_A" | "UPC_E" | "CODE_128" | "QR_CODE" | "OTHER";
         };
+        /** @description One bounded live page; required null terminates the current traversal, which is not a frozen snapshot. */
         readonly BarcodeMatches: {
             readonly matches: readonly components["schemas"]["BarcodeMatch"][];
+            readonly next_cursor: string | null;
         };
         /** @description Product barcode identity is independent from item identity and is not globally unique. The server preserves raw text and leading zeros, derives normalized_value, and validates UTF-8, symbology, ASCII numeric width and GTIN check digits (including expanded UPC-E validation). EAN_13 also covers JAN. Current normalization preserves the validated exact string within its symbology; never trim, case-fold, Unicode-normalize, convert to a number, silently expand, or reinterpret a product QR as a HomeBox location/unit command. QR_CODE/OTHER retain exact Unicode. Numeric check-digit arithmetic requires authoritative runtime validation beyond JSON Schema. Both fields are required for atomic pair replacement; owner/ID/normalized text are never writable. */
         readonly BarcodeWrite: {
@@ -8803,7 +8810,10 @@ export interface operations {
     readonly get_search_barcodes: {
         readonly parameters: {
             readonly query: {
-                readonly symbology?: string;
+                /** @description At most 2048 decoded UTF-8 bytes, independently of the raw query budget. */
+                readonly cursor?: string;
+                readonly limit?: number;
+                readonly symbology?: "EAN_13" | "EAN_8" | "UPC_A" | "UPC_E" | "CODE_128" | "QR_CODE" | "OTHER";
                 readonly value: string;
             };
             readonly header?: never;
@@ -8817,8 +8827,6 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
-                    readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
                 content: {

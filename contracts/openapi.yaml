@@ -7467,12 +7467,6 @@ paths:
               schema:
                 const: no-store
               description: Protected API data is never cached by the service worker.
-            ETag:
-              schema:
-                type: string
-                minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -7499,10 +7493,40 @@ paths:
         required: true
         schema:
           type: string
+          minLength: 1
+          maxLength: 512
       - name: symbology
         in: query
+        required: false
         schema:
           type: string
+          enum:
+          - EAN_13
+          - EAN_8
+          - UPC_A
+          - UPC_E
+          - CODE_128
+          - QR_CODE
+          - OTHER
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        description: At most 2048 decoded UTF-8 bytes, independently of the raw query budget.
+      x-max-body-bytes: 0
+      x-max-query-bytes: 16384
+      description: Return one live stable-barcode-ID page of exact stored normalized values, including archived Items and every independently identified shared match. Omit symbology to search all supported namespaces; supplying it restricts the exact namespace without cross-format conversion. Current new writes validate checksum and preserve exact input, while retained reads do not apply today's checksum or alphabet policy to historical values. Never trim, fold, normalize Unicode, convert digits to numbers or treat a product match as a unique physical Unit. Validate actual Barcode and Item source/counters including lookahead; a missing or corrupt authority withholds the page. Signed 15-minute continuations bind principal, dataset epoch, exact value, optional symbology and page size; they are not frozen snapshots or authorization and do not contain the filter as a field. No body, list ETag, implicit pagination or read-side repair.
   /search/images:
     post:
       operationId: post_search_images
@@ -13292,6 +13316,7 @@ components:
       description: Advisory validation only. It never authorizes or executes a mutation.
     BarcodeMatch:
       type: object
+      additionalProperties: false
       required:
       - item_id
       - barcode_id
@@ -13300,21 +13325,46 @@ components:
       properties:
         item_id:
           type: string
+          minLength: 1
+          maxLength: 128
         barcode_id:
           type: string
+          minLength: 1
+          maxLength: 128
         symbology:
           type: string
+          enum:
+          - EAN_13
+          - EAN_8
+          - UPC_A
+          - UPC_E
+          - CODE_128
+          - QR_CODE
+          - OTHER
         normalized_value:
           type: string
+          minLength: 1
+          maxLength: 512
+      description: One independent stored barcode and its actual owning Item; it never identifies a physical Unit.
     BarcodeMatches:
       type: object
+      additionalProperties: false
       required:
       - matches
+      - next_cursor
       properties:
         matches:
           type: array
+          maxItems: 100
           items:
             $ref: '#/components/schemas/BarcodeMatch'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+          minLength: 1
+          maxLength: 2048
+      description: One bounded live page; required null terminates the current traversal, which is not a frozen snapshot.
     Health:
       type: object
       required:

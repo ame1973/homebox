@@ -15,6 +15,19 @@ var validNumericCodes = []struct{ symbology, raw string }{
 	{"UPC_A", "000000000000"},
 }
 
+func TestValidSymbologyRecognizesOnlyRetainedNamespaces(t *testing.T) {
+	for _, value := range []string{"EAN_13", "EAN_8", "UPC_A", "UPC_E", "CODE_128", "QR_CODE", "OTHER"} {
+		if !ValidSymbology(value) {
+			t.Fatalf("supported namespace rejected: %q", value)
+		}
+	}
+	for _, value := range []string{"", "ean_13", "EAN_13 ", "EAN_13\x00", "JAN", string([]byte{0xff})} {
+		if ValidSymbology(value) {
+			t.Fatalf("unknown namespace accepted: %q", value)
+		}
+	}
+}
+
 func TestNormalizePreservesValidatedGTINStringsAndLeadingZeros(t *testing.T) {
 	for _, code := range validNumericCodes {
 		t.Run(code.symbology+"/"+code.raw, func(t *testing.T) {

@@ -8,6 +8,17 @@ import (
 
 var ErrInvalid = errors.New("invalid product barcode")
 
+// ValidSymbology identifies supported namespaces without applying new-write
+// checksum or alphabet rules to retained historical values.
+func ValidSymbology(value string) bool {
+	switch value {
+	case "EAN_13", "EAN_8", "UPC_A", "UPC_E", "CODE_128", "QR_CODE", "OTHER":
+		return true
+	default:
+		return false
+	}
+}
+
 // Normalize returns the exact validated string within its original symbology.
 // Leading zeros, case, whitespace and Unicode normalization are never repaired.
 // This pure operation does not identify a unique item/unit or authorize a write.
