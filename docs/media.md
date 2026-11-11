@@ -63,7 +63,7 @@ After publishing current/frozen changes, audit and session activity, the transac
 
 ## Selected reads and reserved IDs
 
-The executable target also defines `GET /media` for a global live Media metadata page, including records with no links. It requires a completed session, validates actual source and lookahead, and binds a 15-minute cursor to principal, dataset epoch and page size. It returns no image bytes or private keys, and retained unverified claims remain unverified. **This new global read is contract-only and has no handler or browser picker yet.**
+The private `MediaLibrary.Page` discovers global live Media metadata, including records with no links. It reads actual source and independent counters, validates every returned row and lookahead, and binds its separate 15-minute cursor to principal, dataset epoch and page size. Empty collections have an explicit empty array and null continuation. It exposes no image bytes, private keys or raw OCR; retained unverified claims remain unverified. **The target `GET /media` HTTP handler and browser picker are not implemented yet.**
 
 The private `MediaLibrary` store reads actual Media source and independent counters, not current-projection payloads. It pages actual link rows for one existing Item, Unit, Location or Media, validates related Media and owner authority including lookahead, and returns an explicit empty array and null continuation for a real empty collection. Failed source, authorization or cursor checks return no partial page. A joined entry retains the independently versioned Media and link values; neither a private storage key nor raw OCR is returned. The protected HTTP reads use these store methods and neither inspect nor verify image files.
 

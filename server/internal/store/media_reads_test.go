@@ -224,6 +224,10 @@ func TestMediaReadCursorsFollowFreshLoginButNotRevocationOrRestoredEpoch(t *test
 			if err != nil || membership.NextCursor == nil {
 				t.Fatal("missing membership continuation", err)
 			}
+			global, err := library.Page(t.Context(), fixture.token, "", 1)
+			if err != nil || global.NextCursor == nil {
+				t.Fatal("missing global continuation", err)
+			}
 			for _, cursor := range []string{*owner.NextCursor, *membership.NextCursor} {
 				parts := strings.Split(cursor, ".")
 				if len(parts) != 2 {
@@ -261,12 +265,13 @@ func TestMediaReadCursorsFollowFreshLoginButNotRevocationOrRestoredEpoch(t *test
 			before := domainState(t, fixture.store)
 			first, firstErr := library.PageOwnerLinks(t.Context(), token, "item", fixture.ownerID, *owner.NextCursor, 1)
 			second, secondErr := library.PageMediaLinks(t.Context(), token, "shared-a", *membership.NextCursor, 1)
+			third, thirdErr := library.Page(t.Context(), token, *global.NextCursor, 1)
 			if state == "fresh login" {
-				if firstErr != nil || secondErr != nil || len(first.Data) != 1 || len(second.Data) != 1 {
-					t.Fatal("same-principal fresh login could not continue its reviewed scope", firstErr, secondErr)
+				if firstErr != nil || secondErr != nil || thirdErr != nil || len(first.Data) != 1 || len(second.Data) != 1 || len(third.Data) != 1 || third.Data[0].ID != "shared-b" {
+					t.Fatal("same-principal fresh login could not continue its reviewed scope", firstErr, secondErr, thirdErr)
 				}
-			} else if !errors.Is(firstErr, want) || !errors.Is(secondErr, want) || first.Data != nil || second.Data != nil || first.NextCursor != nil || second.NextCursor != nil {
-				t.Fatal("invalid session or dataset exposed a page", firstErr, secondErr)
+			} else if !errors.Is(firstErr, want) || !errors.Is(secondErr, want) || !errors.Is(thirdErr, want) || first.Data != nil || second.Data != nil || third.Data != nil || first.NextCursor != nil || second.NextCursor != nil || third.NextCursor != nil {
+				t.Fatal("invalid session or dataset exposed a page", firstErr, secondErr, thirdErr)
 			}
 			if _, err = library.Get(t.Context(), token, "shared-a"); state == "epoch" || state == "fresh login" {
 				if err != nil {
@@ -416,6 +421,10 @@ func TestMediaReadPagesRejectLateSessionChangesWithoutReturningData(t *testing.T
 			requireDomainState(t, fixture.store, before)
 			if page, err := library.PageMediaLinks(t.Context(), fixture.token, "shared-a", "", 1); !errors.Is(err, failure.want) || page.Data != nil || page.NextCursor != nil {
 				t.Fatal("late authorization change exposed Media links", err)
+			}
+			requireDomainState(t, fixture.store, before)
+			if page, err := library.Page(t.Context(), fixture.token, "", 1); !errors.Is(err, failure.want) || page.Data != nil || page.NextCursor != nil {
+				t.Fatal("late authorization change exposed global Media", err)
 			}
 			requireDomainState(t, fixture.store, before)
 		})

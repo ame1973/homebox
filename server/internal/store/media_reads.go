@@ -38,6 +38,7 @@ type MediaLinkView struct {
 	Media Media `json:"media"`
 }
 
+type MediaList = metadataList[Media]
 type MediaLinkList = metadataList[MediaLinkView]
 
 // MediaLibrary owns private authoritative media reads and link attachment;
@@ -80,6 +81,34 @@ func (library *MediaLibrary) Get(ctx context.Context, token, id string) (Media, 
 			return Media{}, err
 		}
 		return publicMedia(value), nil
+	})
+}
+
+// Page discovers actual Media, including unlinked records. Its continuation is
+// a live, principal-scoped read cursor, not a membership proof or file claim.
+func (library *MediaLibrary) Page(ctx context.Context, token, cursor string, limit int) (MediaList, error) {
+	return readMetadataPage(ctx, library.auth, token, cursor, limit, "media-list-cursor-v1", func(ctx context.Context, tx *sql.Tx, afterID string, size int) (metadataPage[Media], error) {
+		rows, err := tx.QueryContext(ctx, mediaSelect+" WHERE m.id>? ORDER BY m.id LIMIT ?", afterID, size+1)
+		if err != nil {
+			return metadataPage[Media]{}, err
+		}
+		defer rows.Close()
+		page := metadataPage[Media]{Data: make([]Media, 0)}
+		for rows.Next() {
+			value, err := scanMedia(rows)
+			if err != nil {
+				return metadataPage[Media]{}, err
+			}
+			page.Data = append(page.Data, publicMedia(value))
+		}
+		if err := rows.Err(); err != nil {
+			return metadataPage[Media]{}, err
+		}
+		if len(page.Data) > size {
+			page.Data = page.Data[:size]
+			page.NextID = page.Data[size-1].ID
+		}
+		return page, nil
 	})
 }
 

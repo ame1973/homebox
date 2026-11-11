@@ -4,6 +4,8 @@
 
 ### Added
 
+- Add a private global Media source page, including unlinked records and exact retained identities. Validate actual independent counters and lookahead, bind live continuations to principal/epoch/page size, and withhold all results on late authorization or source failures. Real-SQLite race tests cover large pages, corrupted lookahead, cursor scope and completed-session changes. This does not yet expose an HTTP handler, picker or image files.
+
 - Define a protected live `GET /media` metadata index, including unlinked Media, with bounded pages and a principal/epoch/size-scoped signed cursor. Unverified historical claims do not authorize file access. Add executable contract and generated type checks; the handler, browser picker and image files are not implemented by this contract increment.
 
 - Extend the existing-Media attachment screen to preserve exact retained slash, backslash, NUL, dot-segment and Unicode identities. Review both complete live scopes and the original proofs, explicitly adopt concurrent changes, and reconcile uncertain responses only with the original key. Browser tests cover all owner types, large memberships, session loss, offline non-replay and enlarged light/dark layouts. This metadata-only flow does not upload or request image bytes.
