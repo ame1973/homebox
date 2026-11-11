@@ -4281,7 +4281,7 @@ paths:
       summary: Media details
       tags:
       - media
-      responses:
+      responses: &mediaReadResponses
         '200':
           description: Success
           content:
@@ -4466,7 +4466,7 @@ paths:
       summary: List all links to one Media
       tags:
       - media
-      responses:
+      responses: &mediaMembershipResponses
         '200':
           description: Complete live Media-owned page, without a collection ETag
           content:
@@ -4531,7 +4531,7 @@ paths:
       summary: Attach media
       tags:
       - media
-      responses:
+      responses: &mediaAttachResponses
         '200':
           description: Successful response
           content:
@@ -4596,7 +4596,8 @@ paths:
           minLength: 1
           maxLength: 32
         description: Semantic application version. Incompatible writes return 426.
-      - name: If-Match
+      - &mediaAttachProof
+        name: If-Match
         in: header
         required: true
         schema:
@@ -4606,7 +4607,7 @@ paths:
           pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
         description: Original Media membership revision; owner_revision separately binds the actual owner in the body.
       - *mediaOrigin
-      requestBody:
+      requestBody: &mediaAttachBody
         required: true
         content:
           application/json:
@@ -10774,6 +10775,60 @@ paths:
       description: Require exactly one id query and reject duplicate or unknown parameters, malformed encoding or Unicode, and raw queries over 16 KiB. Preserve slash, backslash, NUL and dot-segment identities exactly. Require the completed session, Origin, CSRF, client version, original key and independent link If-Match; reject any body or content encoding and revalidate authorization and actual source inside SQL. This is the same logical mutation and receipt as DELETE /media/links/{id}; an identical original key, proof and identity can replay the frozen acknowledgement across either URL even after source deletion, while changed intent conflicts. Unlink only the selected independent row; never remove the shared Media or its bytes, rebase or automatically replay.
       x-revision-scope: media_link
       x-max-body-bytes: 0
+      x-max-query-bytes: 16384
+  /media-by-identity:
+    get:
+      operationId: get_media_by_identity
+      summary: Read Media by exact identity
+      tags:
+      - media
+      responses: *mediaReadResponses
+      parameters:
+      - &mediaIdentityQuery
+        name: id
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+        description: Exact retained Media identity, including identities that cannot be represented as a path segment.
+      description: Read the same actual authorized Media and independent membership revision as GET /media/{id}, including retained slash, backslash, NUL and dot-segment identities. Require exactly one bounded id query and reject duplicate or unknown parameters, malformed encoding or Unicode, and raw queries over 16 KiB. Require a completed session and revalidate authorization and source inside SQL. No body or content encoding; this read does not verify or stream file bytes.
+      x-response-revision-scope: media
+      x-max-body-bytes: 0
+      x-max-query-bytes: 16384
+  /media-by-identity/links:
+    get:
+      operationId: get_media_membership_by_identity
+      summary: List Media links by exact identity
+      tags:
+      - media
+      responses: *mediaMembershipResponses
+      parameters:
+      - *mediaIdentityQuery
+      - *mediaLimit
+      - *mediaCursor
+      description: Read the same actual authorized live Media-owned link page and validate real owners, independent links and lookahead as GET /media/{id}/links. Require one bounded exact id and reject duplicate or unknown parameters, malformed encoding or Unicode, and raw queries over 16 KiB; only limit and cursor are additionally accepted. The signed cursor binds principal, dataset epoch, Media identity, page size and collection for 15 minutes and is interchangeable with the path form for the same scope. It is neither a frozen snapshot nor authorization. Complete review brackets all pages with matching actual Media reads. No body or content encoding.
+      x-max-body-bytes: 0
+      x-max-query-bytes: 16384
+    post:
+      operationId: post_media_attachment_by_identity
+      summary: Attach Media by exact identity
+      tags:
+      - media
+      responses: *mediaAttachResponses
+      parameters:
+      - *mediaIdentityQuery
+      - *mediaLinkCSRF
+      - *mediaLinkKey
+      - *mediaLinkVersion
+      - *mediaAttachProof
+      - *mediaOrigin
+      requestBody: *mediaAttachBody
+      description: Require one bounded exact id query and reject duplicate or unknown parameters, malformed encoding or Unicode, and raw queries over 16 KiB. Require the completed session, Origin, CSRF, client version, original key, original Media If-Match and body owner_revision; strictly read the same JSON as POST /media/{id}/links, then revalidate authorization, actual Media and exactly one owner inside SQL. This is the same logical mutation and receipt as the path form; an identical original key, Media/owner proofs, identity and body can replay across either URL even after source deletion, while changed intent conflicts. The returned ETag belongs to the new independent link. Never rebase, automatically replay, or treat an unverified record as verified file bytes.
+      x-revision-scope: media
+      x-response-revision-scope: media_link
+      x-max-body-bytes: 131072
       x-max-query-bytes: 16384
   /media/{id}/content:
     get:

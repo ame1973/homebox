@@ -1195,6 +1195,50 @@ export interface paths {
         readonly patch?: never;
         readonly trace?: never;
     };
+    readonly "/media-by-identity": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /**
+         * Read Media by exact identity
+         * @description Read the same actual authorized Media and independent membership revision as GET /media/{id}, including retained slash, backslash, NUL and dot-segment identities. Require exactly one bounded id query and reject duplicate or unknown parameters, malformed encoding or Unicode, and raw queries over 16 KiB. Require a completed session and revalidate authorization and source inside SQL. No body or content encoding; this read does not verify or stream file bytes.
+         */
+        readonly get: operations["get_media_by_identity"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/media-by-identity/links": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /**
+         * List Media links by exact identity
+         * @description Read the same actual authorized live Media-owned link page and validate real owners, independent links and lookahead as GET /media/{id}/links. Require one bounded exact id and reject duplicate or unknown parameters, malformed encoding or Unicode, and raw queries over 16 KiB; only limit and cursor are additionally accepted. The signed cursor binds principal, dataset epoch, Media identity, page size and collection for 15 minutes and is interchangeable with the path form for the same scope. It is neither a frozen snapshot nor authorization. Complete review brackets all pages with matching actual Media reads. No body or content encoding.
+         */
+        readonly get: operations["get_media_membership_by_identity"];
+        readonly put?: never;
+        /**
+         * Attach Media by exact identity
+         * @description Require one bounded exact id query and reject duplicate or unknown parameters, malformed encoding or Unicode, and raw queries over 16 KiB. Require the completed session, Origin, CSRF, client version, original key, original Media If-Match and body owner_revision; strictly read the same JSON as POST /media/{id}/links, then revalidate authorization, actual Media and exactly one owner inside SQL. This is the same logical mutation and receipt as the path form; an identical original key, Media/owner proofs, identity and body can replay across either URL even after source deletion, while changed intent conflicts. The returned ETag belongs to the new independent link. Never rebase, automatically replay, or treat an unverified record as verified file bytes.
+         */
+        readonly post: operations["post_media_attachment_by_identity"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
     readonly "/media/{id}": {
         readonly parameters: {
             readonly query?: never;
@@ -7512,6 +7556,131 @@ export interface operations {
                         /** @constant */
                         readonly verification: "verified";
                     };
+                };
+            };
+            readonly 400: components["responses"]["Error400"];
+            readonly 401: components["responses"]["Error401"];
+            readonly 403: components["responses"]["Error403"];
+            readonly 404: components["responses"]["Error404"];
+            readonly 409: components["responses"]["Error409"];
+            readonly 413: components["responses"]["Error413"];
+            readonly 415: components["responses"]["Error415"];
+            readonly 422: components["responses"]["Error422"];
+            readonly 426: components["responses"]["Error426"];
+            readonly 429: components["responses"]["Error429"];
+            readonly 503: components["responses"]["Error503"];
+        };
+    };
+    readonly get_media_by_identity: {
+        readonly parameters: {
+            readonly query: {
+                /** @description Exact retained Media identity, including identities that cannot be represented as a path segment. */
+                readonly id: string;
+            };
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Success */
+            readonly 200: {
+                headers: {
+                    /** @description Protected API data is never cached by the service worker. */
+                    readonly "Cache-Control"?: "no-store";
+                    /** @description Strong quoted independent revision matching the returned resource; runtime also enforces the safe-integer maximum. */
+                    readonly ETag?: string;
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["Media"];
+                };
+            };
+            readonly 400: components["responses"]["Error400"];
+            readonly 401: components["responses"]["Error401"];
+            readonly 403: components["responses"]["Error403"];
+            readonly 404: components["responses"]["Error404"];
+            readonly 409: components["responses"]["Error409"];
+            readonly 413: components["responses"]["Error413"];
+            readonly 415: components["responses"]["Error415"];
+            readonly 422: components["responses"]["Error422"];
+            readonly 429: components["responses"]["Error429"];
+            readonly 503: components["responses"]["Error503"];
+        };
+    };
+    readonly get_media_membership_by_identity: {
+        readonly parameters: {
+            readonly query: {
+                readonly cursor?: string;
+                /** @description Exact retained Media identity, including identities that cannot be represented as a path segment. */
+                readonly id: string;
+                readonly limit?: number;
+            };
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Complete live Media-owned page, without a collection ETag */
+            readonly 200: {
+                headers: {
+                    /** @description Protected API data is never cached by the service worker. */
+                    readonly "Cache-Control"?: "no-store";
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["MediaLinkList"];
+                };
+            };
+            readonly 400: components["responses"]["Error400"];
+            readonly 401: components["responses"]["Error401"];
+            readonly 403: components["responses"]["Error403"];
+            readonly 404: components["responses"]["Error404"];
+            readonly 409: components["responses"]["Error409"];
+            readonly 413: components["responses"]["Error413"];
+            readonly 415: components["responses"]["Error415"];
+            readonly 422: components["responses"]["Error422"];
+            readonly 429: components["responses"]["Error429"];
+            readonly 503: components["responses"]["Error503"];
+        };
+    };
+    readonly post_media_attachment_by_identity: {
+        readonly parameters: {
+            readonly query: {
+                /** @description Exact retained Media identity, including identities that cannot be represented as a path segment. */
+                readonly id: string;
+            };
+            readonly header: {
+                readonly "Idempotency-Key": string;
+                /** @description Original Media membership revision; owner_revision separately binds the actual owner in the body. */
+                readonly "If-Match": string;
+                /** @description Exact configured public origin; independent of the active session and CSRF proof. */
+                readonly Origin: string;
+                readonly "X-CSRF-Token": string;
+                /** @description Semantic application version. Incompatible writes return 426. */
+                readonly "X-HomeBox-Client-Version": string;
+            };
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["MediaLinkCreate"];
+            };
+        };
+        readonly responses: {
+            /** @description Successful response */
+            readonly 200: {
+                headers: {
+                    /** @description Protected API data is never cached by the service worker. */
+                    readonly "Cache-Control"?: "no-store";
+                    /** @description Strong quoted independent revision matching the returned resource; runtime also enforces the safe-integer maximum. */
+                    readonly ETag?: string;
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["MediaLink"];
                 };
             };
             readonly 400: components["responses"]["Error400"];

@@ -1006,6 +1006,9 @@ const mediaTransportCalls = [
   purchaseTransport.GET('/media/{id}/view', { params: { path: { id: 'links' } } }),
   purchaseTransport.GET('/media/{id}/links', { params: { path: { id: 'media' }, query: { limit: 50 } } }),
   purchaseTransport.GET('/media/links', { params: { query: { owner_type: 'item', owner_id: 'item' } } }),
+  purchaseTransport.GET('/media-by-identity', { params: { query: { id: 'retained/\0image' } } }),
+  purchaseTransport.GET('/media-by-identity/links', { params: { query: { id: '..', limit: 50, cursor: 'opaque' } } }),
+  purchaseTransport.POST('/media-by-identity/links', { params: { query: { id: 'retained/\0image' }, header: mediaHeaders }, body: mediaOwnerInputs[0] }),
   purchaseTransport.POST('/media/{id}/links', { params: { path: { id: 'media' }, header: mediaHeaders }, body: mediaOwnerInputs[0] }),
   purchaseTransport.POST('/media/{id}/links', { params: { path: { id: 'media' }, header: mediaHeaders }, body: mediaOwnerInputs[1] }),
   purchaseTransport.POST('/media/{id}/links', { params: { path: { id: 'media' }, header: mediaHeaders }, body: mediaOwnerInputs[2] }),
@@ -1015,6 +1018,18 @@ const mediaTransportCalls = [
   purchaseTransport.DELETE('/media/links', { params: { query: { id: 'retained\0link' }, header: mediaHeaders } }),
   purchaseTransport.DELETE('/media/{id}', { params: { path: { id: 'media' }, header: mediaHeaders } }),
 ]
+// @ts-expect-error The exact Media metadata lookup requires its identity.
+const missingExactMedia = purchaseTransport.GET('/media-by-identity', { params: { query: {} } })
+// @ts-expect-error Media membership paging cannot omit its actual Media identity.
+const missingExactMediaPage = purchaseTransport.GET('/media-by-identity/links', { params: { query: { limit: 1 } } })
+// @ts-expect-error Attachment still requires the original Media revision.
+const unprovenExactMedia = purchaseTransport.POST('/media-by-identity/links', { params: { query: { id: 'media' }, header: authHeaders }, body: mediaOwnerInputs[0] })
+// @ts-expect-error Attachment still requires the original owner's body proof.
+const unprovenExactMediaOwner = purchaseTransport.POST('/media-by-identity/links', { params: { query: { id: 'media' }, header: mediaHeaders }, body: { item_id: 'item' } })
+// @ts-expect-error Metadata lookup does not accept membership pagination.
+const mixedExactMedia: operations['get_media_by_identity']['parameters']['query'] = { id: 'media', cursor: 'opaque' }
+// @ts-expect-error Attachment cannot mix owner-list parameters into its identity query.
+const mixedExactMediaAttach: operations['post_media_attachment_by_identity']['parameters']['query'] = { id: 'media', owner_id: 'item' }
 // @ts-expect-error Exact-identity edits cannot omit the independent link identity.
 const missingMediaLinkIdentity = purchaseTransport.PATCH('/media/links', { params: { query: {}, header: mediaHeaders }, body: { description: '' } })
 // @ts-expect-error Exact-identity unlink requires the original independent row proof.
@@ -1049,7 +1064,7 @@ const partialMediaPage: components['schemas']['MediaLinkList'] = { data: [] }
 const missingMediaOwnerFilter: operations['get_media_links']['parameters']['query'] = { owner_type: 'item' }
 // @ts-expect-error A link patch cannot reassign its immutable Media.
 const reassignedMediaLink: components['schemas']['MediaLinkWrite'] = { media_id: 'other' }
-void [mediaPage, mediaOwnerInputs, mediaTransportCalls, missingMediaLinkIdentity, unprovenMediaLinkIdentity, mixedMediaLinkIdentity, bodylessMediaLinkIdentity, uploadedMedia, unverifiedUpload, unsupportedUpload, unknownMediaStatus, unprovenMediaOwner, ownerlessMediaLink, multipleMediaOwners,
+void [mediaPage, mediaOwnerInputs, mediaTransportCalls, missingExactMedia, missingExactMediaPage, unprovenExactMedia, unprovenExactMediaOwner, mixedExactMedia, mixedExactMediaAttach, missingMediaLinkIdentity, unprovenMediaLinkIdentity, mixedMediaLinkIdentity, bodylessMediaLinkIdentity, uploadedMedia, unverifiedUpload, unsupportedUpload, unknownMediaStatus, unprovenMediaOwner, ownerlessMediaLink, multipleMediaOwners,
   multipleRawMediaOwners, unprovenRawMediaOwner, unprovenMediaHeaders, embeddedMediaResource, partialMediaLink, incompleteMediaView, unsafeMediaView, partialMediaPage, missingMediaOwnerFilter, reassignedMediaLink]
 
 // Browser reads use explicit scope, return independent Media and link views and

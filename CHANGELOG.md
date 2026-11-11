@@ -4,6 +4,8 @@
 
 ### Added
 
+- Define exact-query Media metadata, membership-page and attachment aliases in a separate namespace for retained IDs that cannot be path segments. Preserve the existing Media revision, scoped live cursor, original Media/owner proofs and cross-form original-key receipt semantics; add executable contract and strict generated-client checks. These three aliases are contract-only at this stage, not implemented HTTP or browser workflows.
+
 - Generate an independently hashed JPEG thumbnail from validated, oriented JPEG/PNG pixels in the existing single-slot processor. Bound its longest edge to 512 pixels without upscaling, average downsampled pixels, composite transparency onto white and strip source metadata. Test orientation, 16-bit alpha, GPS removal, extreme dimensions, cancellation, failed writes and fuzzing. This internal utility is not connected to uploads, file storage or image streams; WebP and physical-device acceptance remain unfinished.
 
 - Enable the responsive MediaLink list, editor and unlink confirmation for exact retained slash/backslash/NUL/dot and Unicode identities. Preserve the selected actual link and its independent revision, safe encoded login return, explicit conflict adoption and original-key reconciliation after source loss; never replay on reconnect or load image bytes. Real-Go browser cases cover exact wire identities, concurrent changes, lost edit/unlink replies, offline behavior and enlarged light/dark accessibility.

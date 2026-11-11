@@ -135,7 +135,51 @@ class MediaContractTests(unittest.TestCase):
             self.assertEqual("#/components/schemas/Media", operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"])
             self.assertEqual({"Cache-Control", "ETag"}, set(operation["responses"]["200"]["headers"]))
         self.assertEqual("get_media_id_links", API["paths"]["/media/{id}/links"]["get"]["operationId"])
-        self.assertEqual(147, sum(len(methods) for methods in API["paths"].values()))
+        self.assertEqual(150, sum(len(methods) for methods in API["paths"].values()))
+
+    def test_exact_media_identity_reads_and_attachment_share_path_authority(self):
+        cases = [
+            ("/media-by-identity", "get", "/media/{id}", "get_media_by_identity", {"id"}),
+            ("/media-by-identity/links", "get", "/media/{id}/links", "get_media_membership_by_identity", {"id", "limit", "cursor"}),
+            ("/media-by-identity/links", "post", "/media/{id}/links", "post_media_attachment_by_identity", {"id"}),
+        ]
+        for path, method, old_path, operation_id, query_names in cases:
+            with self.subTest(path=path, method=method):
+                operation = API["paths"][path][method]
+                original = API["paths"][old_path][method]
+                self.assertEqual(operation_id, operation["operationId"])
+                self.assertEqual(16384, operation["x-max-query-bytes"])
+                self.assertEqual(original["x-max-body-bytes"], operation["x-max-body-bytes"])
+                self.assertEqual(original["responses"], operation["responses"])
+                self.assertEqual(original.get("requestBody"), operation.get("requestBody"))
+                queries = {entry["name"]: entry for entry in operation["parameters"] if entry["in"] == "query"}
+                self.assertEqual(query_names, set(queries))
+                self.assertTrue(queries["id"]["required"])
+                identity = Draft202012Validator(queries["id"]["schema"])
+                for value in ["links", "a/b", "a\\b", "\u0000", ".", "..", "😀" * 128]:
+                    identity.validate(value)
+                for value in ["", "😀" * 129]:
+                    with self.assertRaises(ValidationError):
+                        identity.validate(value)
+                headers = {entry["name"]: entry for entry in operation["parameters"] if entry["in"] == "header"}
+                old_headers = {entry["name"]: entry for entry in original["parameters"] if entry["in"] == "header"}
+                self.assertEqual(old_headers, headers)
+                for word in ["duplicate", "unknown", "same", "actual"]:
+                    self.assertIn(word, operation["description"])
+                if method == "get" and path.endswith("/links"):
+                    self.assertEqual(50, queries["limit"]["schema"]["default"])
+                    self.assertEqual(2048, queries["cursor"]["schema"]["maxLength"])
+                    self.assertNotIn("ETag", operation["responses"]["200"]["headers"])
+                    for word in ["cursor", "principal", "epoch", "live", "lookahead"]:
+                        self.assertIn(word, operation["description"])
+                elif method == "get":
+                    self.assertEqual("media", operation["x-response-revision-scope"])
+                    self.assertIn("ETag", operation["responses"]["200"]["headers"])
+                else:
+                    self.assertEqual("media", operation["x-revision-scope"])
+                    self.assertEqual("media_link", operation["x-response-revision-scope"])
+                    for word in ["owner_revision", "inside SQL", "receipt", "original"]:
+                        self.assertIn(word, operation["description"])
 
     def test_exact_identity_link_writes_share_path_proofs_and_receipts(self):
         for method, operation_id, body_limit in [
