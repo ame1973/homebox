@@ -1317,10 +1317,18 @@ export interface paths {
         readonly get: operations["get_media_links"];
         readonly put?: never;
         readonly post?: never;
-        readonly delete?: never;
+        /**
+         * Unlink media by exact identity
+         * @description Require exactly one id query and reject duplicate or unknown parameters, malformed encoding or Unicode, and raw queries over 16 KiB. Preserve slash, backslash, NUL and dot-segment identities exactly. Require the completed session, Origin, CSRF, client version, original key and independent link If-Match; reject any body or content encoding and revalidate authorization and actual source inside SQL. This is the same logical mutation and receipt as DELETE /media/links/{id}; an identical original key, proof and identity can replay the frozen acknowledgement across either URL even after source deletion, while changed intent conflicts. Unlink only the selected independent row; never remove the shared Media or its bytes, rebase or automatically replay.
+         */
+        readonly delete: operations["delete_media_link_by_identity"];
         readonly options?: never;
         readonly head?: never;
-        readonly patch?: never;
+        /**
+         * Update a media link by exact identity
+         * @description Require exactly one id query and reject duplicate or unknown parameters, malformed encoding or Unicode, and raw queries over 16 KiB. Preserve slash, backslash, NUL and dot-segment identities exactly. Require the completed session, Origin, CSRF, client version, original key and independent link If-Match; strictly read the partial JSON then revalidate authorization and actual source inside SQL. This is the same logical mutation and receipt as PATCH /media/links/{id}; an identical original key, proof, identity and body can replay the frozen response across either URL even after source deletion, while changed intent conflicts. Never rebase, automatically replay, or use an owner or Media revision as the link proof.
+         */
+        readonly patch: operations["patch_media_link_by_identity"];
         readonly trace?: never;
     };
     readonly "/media/links/{id}": {
@@ -7833,6 +7841,102 @@ export interface operations {
             readonly 413: components["responses"]["Error413"];
             readonly 415: components["responses"]["Error415"];
             readonly 422: components["responses"]["Error422"];
+            readonly 429: components["responses"]["Error429"];
+            readonly 503: components["responses"]["Error503"];
+        };
+    };
+    readonly delete_media_link_by_identity: {
+        readonly parameters: {
+            readonly query: {
+                /** @description Exact retained MediaLink identity, including identities that cannot be represented as a path segment. */
+                readonly id: string;
+            };
+            readonly header: {
+                readonly "Idempotency-Key": string;
+                /** @description Original independent MediaLink revision, not the Media or owner aggregate revision. */
+                readonly "If-Match": string;
+                /** @description Exact configured public origin; independent of the active session and CSRF proof. */
+                readonly Origin: string;
+                readonly "X-CSRF-Token": string;
+                /** @description Semantic application version. Incompatible writes return 426. */
+                readonly "X-HomeBox-Client-Version": string;
+            };
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Successful response */
+            readonly 200: {
+                headers: {
+                    /** @description Protected API data is never cached by the service worker. */
+                    readonly "Cache-Control"?: "no-store";
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ActionAck"];
+                };
+            };
+            readonly 400: components["responses"]["Error400"];
+            readonly 401: components["responses"]["Error401"];
+            readonly 403: components["responses"]["Error403"];
+            readonly 404: components["responses"]["Error404"];
+            readonly 409: components["responses"]["Error409"];
+            readonly 413: components["responses"]["Error413"];
+            readonly 415: components["responses"]["Error415"];
+            readonly 422: components["responses"]["Error422"];
+            readonly 426: components["responses"]["Error426"];
+            readonly 429: components["responses"]["Error429"];
+            readonly 503: components["responses"]["Error503"];
+        };
+    };
+    readonly patch_media_link_by_identity: {
+        readonly parameters: {
+            readonly query: {
+                /** @description Exact retained MediaLink identity, including identities that cannot be represented as a path segment. */
+                readonly id: string;
+            };
+            readonly header: {
+                readonly "Idempotency-Key": string;
+                /** @description Original independent MediaLink revision, not the Media or owner aggregate revision. */
+                readonly "If-Match": string;
+                /** @description Exact configured public origin; independent of the active session and CSRF proof. */
+                readonly Origin: string;
+                readonly "X-CSRF-Token": string;
+                /** @description Semantic application version. Incompatible writes return 426. */
+                readonly "X-HomeBox-Client-Version": string;
+            };
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["MediaLinkWrite"];
+            };
+        };
+        readonly responses: {
+            /** @description Success */
+            readonly 200: {
+                headers: {
+                    /** @description Protected API data is never cached by the service worker. */
+                    readonly "Cache-Control"?: "no-store";
+                    /** @description Strong quoted independent revision matching the returned resource; runtime also enforces the safe-integer maximum. */
+                    readonly ETag?: string;
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["MediaLink"];
+                };
+            };
+            readonly 400: components["responses"]["Error400"];
+            readonly 401: components["responses"]["Error401"];
+            readonly 403: components["responses"]["Error403"];
+            readonly 404: components["responses"]["Error404"];
+            readonly 409: components["responses"]["Error409"];
+            readonly 413: components["responses"]["Error413"];
+            readonly 415: components["responses"]["Error415"];
+            readonly 422: components["responses"]["Error422"];
+            readonly 426: components["responses"]["Error426"];
             readonly 429: components["responses"]["Error429"];
             readonly 503: components["responses"]["Error503"];
         };

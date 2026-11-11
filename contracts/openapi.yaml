@@ -4623,7 +4623,7 @@ paths:
       summary: Update media link
       tags:
       - media
-      responses:
+      responses: &mediaLinkPatchResponses
         '200':
           description: Success
           content:
@@ -4666,21 +4666,24 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-      - name: X-CSRF-Token
+      - &mediaLinkCSRF
+        name: X-CSRF-Token
         in: header
         required: true
         schema:
           type: string
           minLength: 16
           maxLength: 256
-      - name: Idempotency-Key
+      - &mediaLinkKey
+        name: Idempotency-Key
         in: header
         required: true
         schema:
           type: string
           minLength: 8
           maxLength: 128
-      - name: If-Match
+      - &mediaLinkProof
+        name: If-Match
         in: header
         required: true
         schema:
@@ -4689,7 +4692,8 @@ paths:
           maxLength: 18
           pattern: ^"[1-9][0-9]{0,15}"(?![\s\S])
         description: Original independent MediaLink revision, not the Media or owner aggregate revision.
-      - name: X-HomeBox-Client-Version
+      - &mediaLinkVersion
+        name: X-HomeBox-Client-Version
         in: header
         required: true
         schema:
@@ -4698,7 +4702,7 @@ paths:
           maxLength: 32
         description: Semantic application version. Incompatible writes return 426.
       - *mediaOrigin
-      requestBody:
+      requestBody: &mediaLinkPatchBody
         required: true
         content:
           application/json:
@@ -4714,7 +4718,7 @@ paths:
       summary: DELETE /media/links/{id}
       tags:
       - media
-      responses:
+      responses: &mediaLinkDeleteResponses
         '200':
           description: Successful response
           content:
@@ -10725,6 +10729,50 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
+      x-max-body-bytes: 0
+      x-max-query-bytes: 16384
+    patch:
+      operationId: patch_media_link_by_identity
+      summary: Update a media link by exact identity
+      tags:
+      - media
+      responses: *mediaLinkPatchResponses
+      parameters:
+      - &mediaLinkIdentityQuery
+        name: id
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+        description: Exact retained MediaLink identity, including identities that cannot be represented as a path segment.
+      - *mediaLinkCSRF
+      - *mediaLinkKey
+      - *mediaLinkProof
+      - *mediaLinkVersion
+      - *mediaOrigin
+      requestBody: *mediaLinkPatchBody
+      description: Require exactly one id query and reject duplicate or unknown parameters, malformed encoding or Unicode, and raw queries over 16 KiB. Preserve slash, backslash, NUL and dot-segment identities exactly. Require the completed session, Origin, CSRF, client version, original key and independent link If-Match; strictly read the partial JSON then revalidate authorization and actual source inside SQL. This is the same logical mutation and receipt as PATCH /media/links/{id}; an identical original key, proof, identity and body can replay the frozen response across either URL even after source deletion, while changed intent conflicts. Never rebase, automatically replay, or use an owner or Media revision as the link proof.
+      x-revision-scope: media_link
+      x-response-revision-scope: media_link
+      x-max-body-bytes: 131072
+      x-max-query-bytes: 16384
+    delete:
+      operationId: delete_media_link_by_identity
+      summary: Unlink media by exact identity
+      tags:
+      - media
+      responses: *mediaLinkDeleteResponses
+      parameters:
+      - *mediaLinkIdentityQuery
+      - *mediaLinkCSRF
+      - *mediaLinkKey
+      - *mediaLinkProof
+      - *mediaLinkVersion
+      - *mediaOrigin
+      description: Require exactly one id query and reject duplicate or unknown parameters, malformed encoding or Unicode, and raw queries over 16 KiB. Preserve slash, backslash, NUL and dot-segment identities exactly. Require the completed session, Origin, CSRF, client version, original key and independent link If-Match; reject any body or content encoding and revalidate authorization and actual source inside SQL. This is the same logical mutation and receipt as DELETE /media/links/{id}; an identical original key, proof and identity can replay the frozen acknowledgement across either URL even after source deletion, while changed intent conflicts. Unlink only the selected independent row; never remove the shared Media or its bytes, rebase or automatically replay.
+      x-revision-scope: media_link
       x-max-body-bytes: 0
       x-max-query-bytes: 16384
   /media/{id}/content:

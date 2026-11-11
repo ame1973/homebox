@@ -135,7 +135,41 @@ class MediaContractTests(unittest.TestCase):
             self.assertEqual("#/components/schemas/Media", operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"])
             self.assertEqual({"Cache-Control", "ETag"}, set(operation["responses"]["200"]["headers"]))
         self.assertEqual("get_media_id_links", API["paths"]["/media/{id}/links"]["get"]["operationId"])
-        self.assertEqual(145, sum(len(methods) for methods in API["paths"].values()))
+        self.assertEqual(147, sum(len(methods) for methods in API["paths"].values()))
+
+    def test_exact_identity_link_writes_share_path_proofs_and_receipts(self):
+        for method, operation_id, body_limit in [
+            ("patch", "patch_media_link_by_identity", 131072),
+            ("delete", "delete_media_link_by_identity", 0),
+        ]:
+            with self.subTest(method=method):
+                operation = API["paths"]["/media/links"][method]
+                path_operation = API["paths"]["/media/links/{id}"][method]
+                self.assertEqual(operation_id, operation["operationId"])
+                self.assertEqual("media_link", operation["x-revision-scope"])
+                self.assertEqual(body_limit, operation["x-max-body-bytes"])
+                self.assertEqual(16384, operation["x-max-query-bytes"])
+                queries = [entry for entry in operation["parameters"] if entry["in"] == "query"]
+                self.assertEqual(["id"], [entry["name"] for entry in queries])
+                self.assertTrue(queries[0]["required"])
+                check = Draft202012Validator(queries[0]["schema"])
+                for identity in ["links", "a/b", "a\\b", "\u0000", ".", "..", "😀" * 128]:
+                    check.validate(identity)
+                for identity in ["", "😀" * 129]:
+                    with self.assertRaises(ValidationError):
+                        check.validate(identity)
+                headers = {entry["name"]: entry for entry in operation["parameters"] if entry["in"] == "header"}
+                path_headers = {entry["name"]: entry for entry in path_operation["parameters"] if entry["in"] == "header"}
+                self.assertEqual(path_headers, headers)
+                self.assertEqual(path_operation["responses"], operation["responses"])
+                self.assertEqual(path_operation.get("requestBody"), operation.get("requestBody"))
+                for word in ["duplicate", "unknown", "inside SQL", "same", "receipt", "original"]:
+                    self.assertIn(word, operation["description"])
+                if method == "patch":
+                    self.assertEqual("media_link", operation["x-response-revision-scope"])
+                else:
+                    self.assertNotIn("requestBody", operation)
+                    self.assertNotIn("ETag", operation["responses"]["200"]["headers"])
 
     def test_protected_mutations_use_original_media_or_independent_link_proofs(self):
         cases = [("/media", "post", None, 33619968), ("/media/{id}", "delete", "media", 0),

@@ -1011,8 +1011,18 @@ const mediaTransportCalls = [
   purchaseTransport.POST('/media/{id}/links', { params: { path: { id: 'media' }, header: mediaHeaders }, body: mediaOwnerInputs[2] }),
   purchaseTransport.PATCH('/media/links/{id}', { params: { path: { id: 'link' }, header: mediaHeaders }, body: { description: '' } }),
   purchaseTransport.DELETE('/media/links/{id}', { params: { path: { id: 'link' }, header: mediaHeaders } }),
+  purchaseTransport.PATCH('/media/links', { params: { query: { id: 'retained/link' }, header: mediaHeaders }, body: { description: '' } }),
+  purchaseTransport.DELETE('/media/links', { params: { query: { id: 'retained\0link' }, header: mediaHeaders } }),
   purchaseTransport.DELETE('/media/{id}', { params: { path: { id: 'media' }, header: mediaHeaders } }),
 ]
+// @ts-expect-error Exact-identity edits cannot omit the independent link identity.
+const missingMediaLinkIdentity = purchaseTransport.PATCH('/media/links', { params: { query: {}, header: mediaHeaders }, body: { description: '' } })
+// @ts-expect-error Exact-identity unlink requires the original independent row proof.
+const unprovenMediaLinkIdentity = purchaseTransport.DELETE('/media/links', { params: { query: { id: 'link' }, header: authHeaders } })
+// @ts-expect-error An exact identity write is not an owner-scoped link list.
+const mixedMediaLinkIdentity: operations['patch_media_link_by_identity']['parameters']['query'] = { id: 'link', owner_id: 'item' }
+// @ts-expect-error A partial edit still requires a body on the query alias.
+const bodylessMediaLinkIdentity = purchaseTransport.PATCH('/media/links', { params: { query: { id: 'link' }, header: mediaHeaders } })
 // @ts-expect-error Attachment needs the original selected owner's independent revision.
 const unprovenMediaOwner: components['schemas']['MediaLinkCreate'] = { item_id: 'item' }
 // @ts-expect-error The owner must be explicit even when the Media is known.
@@ -1039,7 +1049,7 @@ const partialMediaPage: components['schemas']['MediaLinkList'] = { data: [] }
 const missingMediaOwnerFilter: operations['get_media_links']['parameters']['query'] = { owner_type: 'item' }
 // @ts-expect-error A link patch cannot reassign its immutable Media.
 const reassignedMediaLink: components['schemas']['MediaLinkWrite'] = { media_id: 'other' }
-void [mediaPage, mediaOwnerInputs, mediaTransportCalls, uploadedMedia, unverifiedUpload, unsupportedUpload, unknownMediaStatus, unprovenMediaOwner, ownerlessMediaLink, multipleMediaOwners,
+void [mediaPage, mediaOwnerInputs, mediaTransportCalls, missingMediaLinkIdentity, unprovenMediaLinkIdentity, mixedMediaLinkIdentity, bodylessMediaLinkIdentity, uploadedMedia, unverifiedUpload, unsupportedUpload, unknownMediaStatus, unprovenMediaOwner, ownerlessMediaLink, multipleMediaOwners,
   multipleRawMediaOwners, unprovenRawMediaOwner, unprovenMediaHeaders, embeddedMediaResource, partialMediaLink, incompleteMediaView, unsafeMediaView, partialMediaPage, missingMediaOwnerFilter, reassignedMediaLink]
 
 // Browser reads use explicit scope, return independent Media and link views and
