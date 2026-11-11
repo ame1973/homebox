@@ -7,6 +7,7 @@ import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import App from '@/App'
 import * as auth from '@/lib/api/auth'
 import { ApiError } from '@/lib/api/client'
+import * as media from '@/lib/api/media'
 import { mediaAttachRoute, mediaOwnerRoute } from '@/lib/media-navigation'
 import { messages } from '@/lib/messages'
 import { createQueryClient } from '@/lib/query'
@@ -14,6 +15,7 @@ import { sendMediaCommand } from './commands'
 import { readMediaMembership, readOwnerMedia, type MediaMembership, type OwnerMedia } from './model'
 
 vi.mock('@/lib/api/auth', async (original) => ({ ...await original<typeof import('@/lib/api/auth')>(), fetchAdmin: vi.fn(), fetchCSRF: vi.fn() }))
+vi.mock('@/lib/api/media', async (original) => ({ ...await original<typeof import('@/lib/api/media')>(), fetchMediaPage: vi.fn() }))
 vi.mock('./commands', async (original) => ({ ...await original<typeof import('./commands')>(), sendMediaCommand: vi.fn() }))
 vi.mock('./model', async (original) => ({ ...await original<typeof import('./model')>(), readOwnerMedia: vi.fn(), readMediaMembership: vi.fn() }))
 const text = messages.media
@@ -34,6 +36,7 @@ beforeEach(() => {
   vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
   vi.mocked(auth.fetchAdmin).mockReset().mockResolvedValue({ id: 'admin', username: 'owner', revision: 2, must_change_password: false })
   vi.mocked(auth.fetchCSRF).mockReset().mockResolvedValue('C'.repeat(43))
+  vi.mocked(media.fetchMediaPage).mockReset().mockResolvedValue({ data: [], next_cursor: null })
   vi.mocked(readOwnerMedia).mockReset().mockImplementation(async () => {
     if (!owner) throw new ApiError('NOT_FOUND')
     return structuredClone(owner)
@@ -68,6 +71,183 @@ async function lookup(id: string = image.id) {
   await user.click(screen.getByRole('button', { name: text.lookupMedia }))
   await screen.findByText(text.selectedMedia, { exact: true })
 }
+
+const discoveredRows = (prefix: string) => Array.from({ length: 20 }, (_, index) => ({ ...image, id: `${prefix}-${String(index).padStart(2, '0')}` }))
+const pickerTitle = text.picker, pickerChoose = text.pickerChoose, pickerNavigation = text.pickerPagination
+
+it('discovers an exact Media ID across live pages and reviews freshly read independent proofs', async () => {
+  const exact = 'legacy/\0😀\r\n', actual = { ...image, id: exact }, stale = { ...actual, revision: 1 }
+  membership = { media: actual, links: [] }
+  vi.mocked(media.fetchMediaPage).mockImplementation(async ({ cursor }) => cursor
+    ? { data: [stale], next_cursor: null } : { data: discoveredRows('first'), next_cursor: 'next-page' })
+  const work = mount(); await ready()
+  const user = userEvent.setup()
+  await user.type(screen.getByRole('textbox', { name: text.description }), 'Keep the draft')
+  await user.selectOptions(screen.getByRole('combobox', { name: text.mediaIDFormat }), 'text')
+  expect(media.fetchMediaPage).not.toHaveBeenCalled()
+  await user.click(screen.getByText(pickerTitle, { exact: true }))
+  await screen.findByRole('button', { name: `${pickerChoose}：${JSON.stringify('first-00')}` })
+  expect(media.fetchMediaPage).toHaveBeenCalledWith({ limit: 20 }, expect.any(AbortSignal))
+  await user.click(within(screen.getByRole('navigation', { name: pickerNavigation })).getByRole('button', { name: messages.catalog.nextPage }))
+  const choose = await screen.findByRole('button', { name: `${pickerChoose}：${JSON.stringify(exact)}` })
+  expect(media.fetchMediaPage).toHaveBeenLastCalledWith({ limit: 20, cursor: 'next-page' }, expect.any(AbortSignal))
+  await user.click(choose)
+  expect(screen.getByRole('combobox', { name: text.mediaIDFormat })).toHaveValue('json')
+  expect(screen.getByRole('textbox', { name: text.mediaID })).toHaveValue(JSON.stringify(exact))
+  expect(screen.getByRole('textbox', { name: text.description })).toHaveValue('Keep the draft')
+  expect(screen.getByText(pickerTitle, { exact: true })).toHaveFocus()
+  await screen.findByRole('heading', { name: text.selectedMedia })
+  expect(readMediaMembership).toHaveBeenCalledWith(exact, expect.any(AbortSignal))
+  expect(vi.mocked(readOwnerMedia).mock.calls.length).toBeGreaterThan(1)
+  await user.click(screen.getByRole('button', { name: text.reviewAttach }))
+  const dialog = screen.getByRole('alertdialog')
+  expect(dialog).toHaveTextContent(JSON.stringify(exact)); expect(sendMediaCommand).not.toHaveBeenCalled()
+  await user.click(within(dialog).getByRole('button', { name: text.confirmAttach }))
+  await waitFor(() => expect(work.router.state.location.pathname).toBe('/photos'))
+  expect(vi.mocked(sendMediaCommand).mock.calls[0]?.[0]).toMatchObject({ kind: 'attach', owner: initialOwner, membership: { media: actual, links: [] }, body: { description: 'Keep the draft' } })
+})
+
+it('withholds a cross-page duplicate and permits restarting without discarding the draft', async () => {
+  const rows = discoveredRows('first')
+  vi.mocked(media.fetchMediaPage).mockImplementation(async ({ cursor }) => cursor
+    ? { data: [rows[0]!, { ...image, id: 'second' }], next_cursor: null } : { data: rows, next_cursor: 'next-page' })
+  mount(); await ready()
+  const user = userEvent.setup()
+  await user.type(screen.getByRole('textbox', { name: text.description }), 'Retained')
+  await user.click(screen.getByText(pickerTitle, { exact: true }))
+  await screen.findByRole('button', { name: `${pickerChoose}：${JSON.stringify(rows[0]!.id)}` })
+  await user.click(within(screen.getByRole('navigation', { name: pickerNavigation })).getByRole('button', { name: messages.catalog.nextPage }))
+  expect(await screen.findByText(text.invalidRead)).toBeVisible()
+  expect(screen.queryByRole('button', { name: `${pickerChoose}：${JSON.stringify('second')}` })).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: messages.catalog.firstPage }))
+  expect(await screen.findByRole('button', { name: `${pickerChoose}：${JSON.stringify(rows[0]!.id)}` })).toBeEnabled()
+  expect(screen.getByRole('textbox', { name: text.description })).toHaveValue('Retained')
+  expect(readMediaMembership).not.toHaveBeenCalled(); expect(sendMediaCommand).not.toHaveBeenCalled()
+})
+
+it('withholds a continuation that cycles to an earlier page and allows a fresh start', async () => {
+  vi.mocked(media.fetchMediaPage).mockImplementation(async ({ cursor }) => cursor === 'page-2'
+    ? { data: discoveredRows('third'), next_cursor: 'page-1' }
+    : cursor === 'page-1' ? { data: discoveredRows('second'), next_cursor: 'page-2' }
+      : { data: discoveredRows('first'), next_cursor: 'page-1' })
+  mount(); await ready()
+  const user = userEvent.setup(); await user.click(screen.getByText(pickerTitle, { exact: true }))
+  await screen.findByRole('button', { name: `${pickerChoose}：${JSON.stringify('first-00')}` })
+  await user.click(within(screen.getByRole('navigation', { name: pickerNavigation })).getByRole('button', { name: messages.catalog.nextPage }))
+  await screen.findByRole('button', { name: `${pickerChoose}：${JSON.stringify('second-00')}` })
+  await user.click(within(screen.getByRole('navigation', { name: pickerNavigation })).getByRole('button', { name: messages.catalog.nextPage }))
+  expect(await screen.findByText(text.invalidRead)).toBeVisible()
+  expect(screen.queryByRole('button', { name: `${pickerChoose}：${JSON.stringify('third-00')}` })).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: messages.catalog.firstPage }))
+  expect(await screen.findByRole('button', { name: `${pickerChoose}：${JSON.stringify('first-00')}` })).toBeEnabled()
+})
+
+it('shows a failed discovery read and retries explicitly without treating it as an empty page', async () => {
+  vi.mocked(media.fetchMediaPage).mockRejectedValueOnce(new ApiError('NETWORK_ERROR'))
+    .mockResolvedValueOnce({ data: [], next_cursor: null })
+  mount(); await ready()
+  const user = userEvent.setup(); await user.click(screen.getByText(pickerTitle, { exact: true }))
+  expect(await screen.findByText(messages.locations.network)).toBeVisible()
+  expect(screen.queryByText(text.pickerEmpty)).not.toBeInTheDocument()
+  expect(media.fetchMediaPage).toHaveBeenCalledTimes(1)
+  await user.click(screen.getByRole('button', { name: text.pickerRefresh }))
+  expect(await screen.findByText(text.pickerEmpty)).toBeVisible()
+  expect(media.fetchMediaPage).toHaveBeenCalledTimes(2); expect(sendMediaCommand).not.toHaveBeenCalled()
+})
+
+it('navigates back through discovery pages without reusing a later page as review data', async () => {
+  vi.mocked(media.fetchMediaPage).mockImplementation(async ({ cursor }) => cursor
+    ? { data: [{ ...image, id: 'last' }], next_cursor: null } : { data: discoveredRows('first'), next_cursor: 'next-page' })
+  mount(); await ready()
+  const user = userEvent.setup(); await user.click(screen.getByText(pickerTitle, { exact: true }))
+  await screen.findByRole('button', { name: `${pickerChoose}：${JSON.stringify('first-00')}` })
+  const navigation = () => screen.getByRole('navigation', { name: pickerNavigation })
+  await user.click(within(navigation()).getByRole('button', { name: messages.catalog.nextPage }))
+  await screen.findByRole('button', { name: `${pickerChoose}：${JSON.stringify('last')}` })
+  await user.click(within(navigation()).getByRole('button', { name: messages.catalog.previousPage }))
+  expect(await screen.findByRole('button', { name: `${pickerChoose}：${JSON.stringify('first-00')}` })).toBeEnabled()
+  expect(within(navigation()).getByRole('button', { name: messages.catalog.previousPage })).toBeDisabled()
+  expect(within(navigation()).getByRole('button', { name: messages.catalog.firstPage })).toBeDisabled()
+  expect(readMediaMembership).not.toHaveBeenCalled(); expect(sendMediaCommand).not.toHaveBeenCalled()
+})
+
+it('hides a formerly successful page after a failed refresh until an explicit retry succeeds', async () => {
+  vi.mocked(media.fetchMediaPage).mockResolvedValueOnce({ data: [image], next_cursor: null })
+    .mockRejectedValueOnce(new ApiError('NETWORK_ERROR')).mockResolvedValueOnce({ data: [], next_cursor: null })
+  mount(); await ready()
+  const user = userEvent.setup(); await user.click(screen.getByText(pickerTitle, { exact: true }))
+  await screen.findByRole('button', { name: `${pickerChoose}：${JSON.stringify(image.id)}` })
+  await user.click(screen.getByRole('button', { name: text.pickerRefresh }))
+  expect(await screen.findByText(messages.locations.network)).toBeVisible()
+  expect(screen.queryByRole('button', { name: `${pickerChoose}：${JSON.stringify(image.id)}` })).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: text.pickerRefresh }))
+  expect(await screen.findByText(text.pickerEmpty)).toBeVisible()
+  expect(media.fetchMediaPage).toHaveBeenCalledTimes(3); expect(readMediaMembership).not.toHaveBeenCalled()
+})
+
+it('allows another discovered ID after a selected record disappears while retaining raw input', async () => {
+  const missing = { ...image, id: 'missing/\0' }, present = { ...image, id: 'available/\0' }
+  membership = { media: present, links: [] }
+  vi.mocked(media.fetchMediaPage).mockResolvedValue({ data: [missing, present], next_cursor: null })
+  mount(); await ready()
+  const user = userEvent.setup(); await user.type(screen.getByRole('textbox', { name: text.description }), 'Keep this draft')
+  await user.click(screen.getByText(pickerTitle, { exact: true }))
+  await user.click(await screen.findByRole('button', { name: `${pickerChoose}：${JSON.stringify(missing.id)}` }))
+  expect(await screen.findByText(text.mediaMissing, { exact: true })).toBeVisible()
+  expect(screen.getByRole('button', { name: text.reviewAttach })).toBeDisabled()
+  await user.click(screen.getByText(pickerTitle, { exact: true }))
+  await user.click(await screen.findByRole('button', { name: `${pickerChoose}：${JSON.stringify(present.id)}` }))
+  await screen.findByRole('heading', { name: text.selectedMedia })
+  expect(screen.getByRole('textbox', { name: text.description })).toHaveValue('Keep this draft')
+  expect(readMediaMembership).toHaveBeenCalledWith(present.id, expect.any(AbortSignal))
+  expect(screen.getByRole('button', { name: text.reviewAttach })).toBeEnabled(); expect(sendMediaCommand).not.toHaveBeenCalled()
+})
+
+it.each(['.', '..', 'legacy\\\\photo', '\0', '😀'.repeat(127) + '/'])('preserves the exact discovered identity %j', async (exact) => {
+  const selected = { ...image, id: exact }; membership = { media: selected, links: [] }
+  vi.mocked(media.fetchMediaPage).mockResolvedValue({ data: [selected], next_cursor: null })
+  mount(); await ready()
+  const user = userEvent.setup(); await user.click(screen.getByText(pickerTitle, { exact: true }))
+  await user.click(await screen.findByRole('button', { name: `${pickerChoose}：${JSON.stringify(exact)}` }))
+  await screen.findByRole('heading', { name: text.selectedMedia })
+  expect(screen.getByRole('textbox', { name: text.mediaID })).toHaveValue(JSON.stringify(exact))
+  expect(readMediaMembership).toHaveBeenCalledWith(exact, expect.any(AbortSignal))
+  expect(sendMediaCommand).not.toHaveBeenCalled()
+})
+
+it('purges the session if an in-flight picker read fails after the picker is closed', async () => {
+  let rejectRead: ((reason: ApiError) => void) | undefined
+  vi.mocked(media.fetchMediaPage).mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectRead = reject }))
+  const work = mount(); await ready()
+  const user = userEvent.setup(); await user.type(screen.getByRole('textbox', { name: text.description }), 'Private draft')
+  await user.click(screen.getByText(pickerTitle, { exact: true }))
+  await waitFor(() => expect(rejectRead).toBeDefined())
+  await user.click(screen.getByText(pickerTitle, { exact: true }))
+  const expired = new ApiError('AUTHENTICATION_REQUIRED', { status: 401 })
+  vi.mocked(auth.fetchAdmin).mockRejectedValue(expired)
+  await act(async () => { rejectRead?.(expired) })
+  await screen.findByRole('heading', { name: messages.auth.loginHeading })
+  expect(work.router.state.location.pathname).toBe('/login')
+  expect(work.client.getQueryData(['media', 'owner', 'item', item.id])).toBeUndefined()
+  expect(sendMediaCommand).not.toHaveBeenCalled()
+})
+
+it('purges a dirty draft and discovery cache when a picker read loses the session', async () => {
+  vi.mocked(media.fetchMediaPage).mockImplementationOnce(async () => {
+    const expired = new ApiError('AUTHENTICATION_REQUIRED', { status: 401 })
+    vi.mocked(auth.fetchAdmin).mockRejectedValue(expired)
+    throw expired
+  })
+  const work = mount(path, { catalogList: '/items?status=active', privateBody: 'never-forward' }); await ready()
+  const user = userEvent.setup(); await user.type(screen.getByRole('textbox', { name: text.description }), 'Private draft')
+  await user.click(screen.getByText(pickerTitle, { exact: true }))
+  await screen.findByRole('heading', { name: messages.auth.loginHeading })
+  expect(work.router.state.location.state).toMatchObject({ returnTo: path, catalogList: '/items?status=active' })
+  expect(work.router.state.location.state).not.toHaveProperty('privateBody')
+  expect(work.client.getQueryData(['media', 'owner', 'item', item.id])).toBeUndefined()
+  expect(work.client.getQueryData(['media', 'discovery', null])).toBeUndefined()
+  expect(sendMediaCommand).not.toHaveBeenCalled()
+})
 
 it('opens from the owner list and attaches only an explicitly reviewed existing record with both original proofs', async () => {
   const work = mount(list)
@@ -317,8 +497,16 @@ it('guards a dirty draft but permits session purge from a failed Media read', as
   await user.click(screen.getByRole('link', { name: text.backLinks }))
   expect(screen.getByRole('alertdialog')).toHaveTextContent(text.leaveTitle)
   await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: text.stay }))
-  vi.mocked(readMediaMembership).mockRejectedValueOnce(new ApiError('AUTHENTICATION_REQUIRED', { status: 401 }))
-  await user.click(screen.getByRole('button', { name: text.lookupMedia }))
+  vi.mocked(readMediaMembership).mockImplementationOnce(async () => {
+    const expired = new ApiError('AUTHENTICATION_REQUIRED', { status: 401 })
+    vi.mocked(auth.fetchAdmin).mockRejectedValue(expired)
+    throw expired
+  })
+  const lookupButton = screen.getByRole('button', { name: text.lookupMedia })
+  expect(lookupButton).toBeEnabled()
+  await user.click(lookupButton)
+  await waitFor(() => expect(readMediaMembership).toHaveBeenCalledTimes(1))
+  await waitFor(() => expect(work.router.state.location.pathname).toBe('/login'))
   await screen.findByRole('heading', { name: messages.auth.loginHeading })
   expect(work.router.state.location.state).toMatchObject({ returnTo: path, catalogList: '/items?status=active', catalogCursors: ['cursor'] })
   expect(work.router.state.location.state).not.toHaveProperty('privateBody')

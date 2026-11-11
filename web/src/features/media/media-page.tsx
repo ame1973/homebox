@@ -84,6 +84,7 @@ export default function MediaPage({ mode }: { mode: 'list' | 'edit' | 'attach' }
   const mandatory = !!auth.data?.must_change_password || credentialFailure?.code === 'PASSWORD_CHANGE_REQUIRED'
   const denied = mandatory || !auth.isFetching && auth.data === null || credentialFailure !== undefined
   const { allowNavigation } = operation
+  const pickerSessionLost = useCallback((mandatory: boolean) => { allowNavigation(); sessionLost(mandatory) }, [allowNavigation, sessionLost])
   useEffect(() => {
     if (!online || transitioning || !denied) return
     allowNavigation(); clearSessionQueries(client)
@@ -136,7 +137,7 @@ export default function MediaPage({ mode }: { mode: 'list' | 'edit' | 'attach' }
             {missingLink && <Alert role="alert" className="p-4"><AlertTitle>{text.linkMissing}</AlertTitle><AlertDescription className="text-base">{text.linkMissingHelp}</AlertDescription></Alert>}
             <section className="min-w-0 space-y-2"><p className="text-sm font-medium text-muted-foreground">{text.owner}：{text.ownerKinds[source.owner.kind]}</p><h2 className="whitespace-pre-wrap text-xl font-semibold [overflow-wrap:anywhere]">{ownerName(source)}</h2><p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">{JSON.stringify(source.owner.value.id)}；{text.version}：{source.owner.value.revision}</p></section>
             {mode === 'edit' ? initialEdit && editing && <MediaLinkEditor initial={initialEdit} current={current} linkID={editing.linkID} operation={operation} online={online} canWrite={canWrite && !missingLink} />
-              : mode === 'attach' ? <MediaAttachEditor current={current} membership={currentMembership} selectedID={selectedMediaID} onLookup={lookupMedia} operation={operation} online={online} canLookup={canLookup} canWrite={canWrite} loading={membership.isFetching} />
+              : mode === 'attach' ? <MediaAttachEditor current={current} membership={currentMembership} selectedID={selectedMediaID} onLookup={lookupMedia} onSessionLost={pickerSessionLost} operation={operation} online={online} canLookup={canLookup} canWrite={canWrite} loading={membership.isFetching} />
               : <div className="grid min-w-0 items-start gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(15rem,1fr)]">
               <section className="min-w-0 space-y-4" aria-labelledby="media-list-title"><div className="flex flex-wrap items-baseline justify-between gap-2"><h2 id="media-list-title" className="text-xl font-semibold">{text.list}</h2><p className="text-sm text-muted-foreground">{text.total}{links.length}</p></div>
                 {scope && canWrite && operation.phase !== 'pending' && operation.phase !== 'uncertain' ? <Button asChild variant="outline" className={control}><Link to={mediaAttachRoute(scope)} state={navigationState}>{text.attach}</Link></Button> : <Button type="button" variant="outline" disabled className={control}>{text.attach}</Button>}

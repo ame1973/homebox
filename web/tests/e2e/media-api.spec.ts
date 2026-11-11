@@ -249,6 +249,261 @@ test.describe('global Media discovery SDK', () => {
   })
 })
 
+test.describe('global Media attachment picker', () => {
+  const firstID = '\0Media\r\n', exactID = 'zz/legacy\0😀\r\n', longID = '😀'.repeat(128)
+  const ids = [firstID, exactID, longID, ...Array.from({ length: 61 }, (_, index) => `global-${String(index).padStart(3, '0')}`)]
+  test.use({ applicationDatabaseFixture: { prepare(database) { prepareMediaFixture(database, 2, true, false, [], { ids }) } } })
+  const exactMembership = (id: string) => `/api/v1/media-by-identity/links?${new URLSearchParams({ id })}`
+  const choose = (id: string) => `${messages.media.pickerChoose}：${JSON.stringify(id)}`
+
+  async function openPicker(page: Page) {
+    await page.getByText(messages.media.picker, { exact: true }).click()
+    await expect(page.getByRole('button', { name: choose(firstID) })).toBeVisible()
+  }
+  async function nextPage(page: Page) {
+    const next = page.getByRole('navigation', { name: messages.media.pickerPagination }).getByRole('button', { name: messages.catalog.nextPage })
+    const rows = page.getByRole('list', { name: messages.media.pickerList }).locator('li')
+    const before = await rows.first().textContent()
+    await expect(next).toBeEnabled(); await next.click()
+    await expect.poll(async () => await page.getByText(messages.media.invalidRead, { exact: true }).isVisible() ||
+      await rows.count() > 0 && await rows.first().textContent() !== before).toBe(true)
+  }
+
+  test('pages to an unlinked exact ID and re-reads both scopes after the listing changes', async ({ page, application }) => {
+    await provision(page, application)
+    const writes = watchDomainWrites(page, ['/api/v1/media']), reads: { path: string; id: string | null }[] = [], streams: string[] = []
+    page.on('request', (request) => {
+      const url = new URL(request.url())
+      if (request.method() === 'GET' && url.pathname.startsWith('/api/v1/media')) reads.push({ path: url.pathname, id: url.searchParams.get('id') })
+      if (request.method() === 'GET' && /\/(?:content|thumbnail)$/.test(url.pathname)) streams.push(request.url())
+    })
+    await page.goto(`/photos/attach?owner_type=item&owner_id=${empty}`)
+    await page.getByRole('textbox', { name: messages.media.description }).fill('Keep this draft')
+    expect((await (await page.request.get(exactMembership(exactID))).json()).data).toEqual([])
+    await openPicker(page)
+    for (let index = 0; index < 3; index++) {
+      await nextPage(page)
+      await expect(page.getByRole('navigation', { name: messages.media.pickerPagination })).toBeVisible()
+    }
+    const target = page.getByRole('button', { name: choose(exactID) })
+    await expect(target).toBeVisible()
+    const concurrent = await page.request.post(exactMembership(exactID), { headers: await writeContext(page, application.url, 1), data: { item_id: owner, owner_revision: 1 } })
+    expect(concurrent.status()).toBe(200)
+    await target.click()
+    await expect(page.getByRole('textbox', { name: messages.media.mediaID })).toHaveValue(JSON.stringify(exactID))
+    await expect(page.getByRole('heading', { name: messages.media.selectedMedia })).toBeVisible()
+    await expect(page.getByText(`${messages.media.membershipCount}1`, { exact: true })).toBeVisible()
+    await expect(page.getByRole('textbox', { name: messages.media.description })).toHaveValue('Keep this draft')
+    expect(reads.filter((read) => read.path === '/api/v1/media-by-identity' && read.id === exactID)).toHaveLength(2)
+    expect(reads.filter((read) => read.path === '/api/v1/media-by-identity/links' && read.id === exactID)).toHaveLength(1)
+    await page.getByRole('button', { name: messages.media.reviewAttach }).click()
+    const dialog = page.getByRole('alertdialog')
+    await expect(dialog).toContainText(JSON.stringify(exactID)); expect(writes).toHaveLength(0)
+    await dialog.getByRole('button', { name: messages.media.confirmAttach }).click()
+    await expect(page.getByText(messages.mutations.done, { exact: true })).toBeVisible()
+    expect(writes).toHaveLength(1); expect(writes[0]).toMatchObject({ path: '/api/v1/media-by-identity/links', method: 'POST', proof: '"2"' })
+    expect(JSON.parse(writes[0]!.body!)).toEqual({ item_id: empty, owner_revision: 1, is_cover: false, sort_order: 0, description: 'Keep this draft' })
+    expect(streams).toEqual([])
+  })
+
+  test('selects an exact discovered ID for actual Item, Unit and Location owners', async ({ page, application }) => {
+    await provision(page, application)
+    const writes = watchDomainWrites(page, ['/api/v1/media'])
+    const scopes = [['item', empty], ['unit', 'legacy/unit\0😀'], ['location', 'tree']] as const
+    for (const [kind, id] of scopes) {
+      await page.goto(`/photos/attach?${new URLSearchParams({ owner_type: kind, owner_id: id })}`)
+      await openPicker(page)
+      await page.getByRole('button', { name: choose(firstID) }).click()
+      await expect(page.getByRole('heading', { name: messages.media.selectedMedia })).toBeVisible()
+      await page.getByRole('button', { name: messages.media.reviewAttach }).click()
+      await page.getByRole('alertdialog').getByRole('button', { name: messages.media.confirmAttach }).click()
+      await expect(page.getByText(messages.mutations.done, { exact: true })).toBeVisible()
+    }
+    expect(writes).toHaveLength(3)
+    expect(writes.map((write) => write.proof)).toEqual(['"1"', '"2"', '"3"'])
+    expect(writes.map((write) => JSON.parse(write.body!))).toEqual([
+      { item_id: empty, owner_revision: 1, is_cover: false, sort_order: 0, description: '' },
+      { item_unit_id: 'legacy/unit\0😀', owner_revision: 1, is_cover: false, sort_order: 0, description: '' },
+      { location_id: 'tree', owner_revision: 1, is_cover: false, sort_order: 0, description: '' },
+    ])
+    const links = await (await page.request.get(exactMembership(firstID))).json()
+    expect(links.data).toHaveLength(3)
+    expect(links.data.map((link: { owner_type: string }) => link.owner_type).sort()).toEqual(['item', 'location', 'unit'])
+  })
+
+  test('withholds duplicate and cyclic live pages, then restarts without losing the draft', async ({ page, application }) => {
+    await provision(page, application)
+    let mode: 'duplicate' | 'cycle' | 'none' = 'duplicate', firstCursor: string | null = null, firstPageID = ''
+    await page.route((url) => url.pathname === '/api/v1/media', async (route) => {
+      const response = await route.fetch(), body = await response.json(), cursor = new URL(route.request().url()).searchParams.get('cursor')
+      if (cursor === null) { firstCursor = body.next_cursor; firstPageID = body.data[0].id }
+      else if (mode === 'duplicate') { body.data[0].id = firstPageID; mode = 'none' }
+      else if (mode === 'cycle' && cursor !== firstCursor) { body.next_cursor = firstCursor; mode = 'none' }
+      await route.fulfill({ response, body: JSON.stringify(body) })
+    })
+    const writes = watchDomainWrites(page, ['/api/v1/media'])
+    await page.goto(`/photos/attach?owner_type=item&owner_id=${empty}`)
+    await page.getByRole('textbox', { name: messages.media.description }).fill('Retained draft')
+    await openPicker(page); await nextPage(page)
+    await expect(page.getByText(messages.media.invalidRead, { exact: true })).toBeVisible()
+    await expect(page.getByRole('list', { name: messages.media.pickerList })).toHaveCount(0)
+    mode = 'cycle'
+    await page.getByRole('button', { name: messages.catalog.firstPage }).click()
+    await expect(page.getByRole('button', { name: choose(firstID) })).toBeVisible()
+    await nextPage(page)
+    await expect(page.getByRole('button', { name: choose('global-019') })).toBeVisible()
+    await nextPage(page)
+    await expect(page.getByText(messages.media.invalidRead, { exact: true })).toBeVisible()
+    await expect(page.getByRole('list', { name: messages.media.pickerList })).toHaveCount(0)
+    await page.getByRole('button', { name: messages.catalog.firstPage }).click()
+    await expect(page.getByRole('button', { name: choose(firstID) })).toBeVisible()
+    await expect(page.getByRole('textbox', { name: messages.media.description })).toHaveValue('Retained draft')
+    expect(writes).toEqual([])
+  })
+
+  test('recovers from a failed read and does not replay a write after reconnecting', async ({ page, application, context }) => {
+    await provision(page, application)
+    let reads = 0
+    await page.route((url) => url.pathname === '/api/v1/media', async (route) => { reads++; if (reads === 1) await route.abort('failed'); else await route.continue() })
+    const writes = watchDomainWrites(page, ['/api/v1/media'])
+    await page.goto(`/photos/attach?owner_type=item&owner_id=${empty}`)
+    const description = page.getByRole('textbox', { name: messages.media.description })
+    await description.fill('Offline draft')
+    await page.getByText(messages.media.picker, { exact: true }).click()
+    await expect(page.getByText(messages.locations.network, { exact: true })).toBeVisible()
+    await expect(page.getByText(messages.media.pickerEmpty, { exact: true })).toHaveCount(0)
+    await page.getByRole('button', { name: messages.media.pickerRefresh }).click()
+    await expect(page.getByRole('button', { name: choose(firstID) })).toBeVisible()
+    expect(reads).toBe(2)
+    try {
+      await context.setOffline(true)
+      await expect(page.getByText(messages.media.pickerUnavailable, { exact: true })).toBeVisible()
+      await expect(description).toHaveValue('Offline draft')
+      await context.setOffline(false)
+      await expect(page.getByRole('button', { name: choose(firstID) })).toBeEnabled()
+      await expect(description).toHaveValue('Offline draft')
+      expect(writes).toEqual([])
+    } finally { await context.setOffline(false) }
+  })
+
+  test('purges a dirty draft when the picker receives a real expired-session response', async ({ page, application }) => {
+    const password = await provision(page, application)
+    await page.goto(`/photos/attach?owner_type=item&owner_id=${empty}`)
+    await page.getByRole('textbox', { name: messages.media.description }).fill('Private picker draft')
+    await openPicker(page)
+    await page.context().clearCookies()
+    await page.getByRole('button', { name: messages.media.pickerRefresh }).click()
+    await expect(page.getByRole('heading', { name: messages.auth.loginHeading })).toBeVisible()
+    await page.getByLabel(new RegExp(`^${messages.auth.username}`)).fill('owner')
+    await page.getByLabel(new RegExp(`^${messages.auth.password}`)).fill(password)
+    await page.getByRole('button', { name: messages.auth.login, exact: true }).click()
+    await expect(page).toHaveURL(new RegExp(`/photos/attach\\?owner_type=item&owner_id=${empty}$`))
+    await expect(page.getByRole('textbox', { name: messages.media.description })).toHaveValue('')
+    await expect(page.getByRole('textbox', { name: messages.media.mediaID })).toHaveValue('')
+  })
+
+  test('purges the session when a delayed 401 arrives after the picker closes', async ({ page, application }) => {
+    await provision(page, application)
+    let report!: (status: number) => void, release!: () => void
+    const responseReady = new Promise<number>((resolve) => { report = resolve })
+    const released = new Promise<void>((resolve) => { release = resolve })
+    await page.route((url) => url.pathname === '/api/v1/media', async (route) => {
+      const response = await route.fetch(); report(response.status()); await released; await route.fulfill({ response })
+    })
+    await page.goto(`/photos/attach?owner_type=item&owner_id=${empty}`)
+    await page.getByRole('textbox', { name: messages.media.description }).fill('Private delayed draft')
+    await page.context().clearCookies()
+    const summary = page.getByText(messages.media.picker, { exact: true })
+    try {
+      await summary.click()
+      expect(await responseReady).toBe(401)
+      await summary.click(); release()
+      await expect(page.getByRole('heading', { name: messages.auth.loginHeading })).toBeVisible()
+      expect(new URL(page.url()).pathname).toBe('/login')
+    } finally { release() }
+  })
+
+  test('reconciles a lost selected attachment only with its original key after source removal', async ({ page, application }) => {
+    const password = await provision(page, application)
+    let attempts = 0, committedStatus = 0
+    const writes: { key: string | undefined; proof: string | undefined; body: unknown }[] = []
+    await page.route((url) => url.pathname === '/api/v1/media-by-identity/links' && url.searchParams.get('id') === firstID, async (route) => {
+      if (route.request().method() !== 'POST') { await route.continue(); return }
+      attempts++; writes.push({ key: route.request().headers()['idempotency-key'], proof: route.request().headers()['if-match'], body: route.request().postDataJSON() })
+      if (attempts !== 1) { await route.continue(); return }
+      committedStatus = (await route.fetch()).status(); await route.abort('failed')
+    })
+    await page.goto(`/photos/attach?owner_type=item&owner_id=${empty}`)
+    await openPicker(page); await page.getByRole('button', { name: choose(firstID) }).click()
+    await expect(page.getByRole('heading', { name: messages.media.selectedMedia })).toBeVisible()
+    await page.getByRole('button', { name: messages.media.reviewAttach }).click()
+    await page.getByRole('alertdialog').getByRole('button', { name: messages.media.confirmAttach }).click()
+    await expect(page.getByRole('heading', { name: messages.mutations.uncertain })).toBeVisible()
+    expect(committedStatus).toBe(200); expect(attempts).toBe(1)
+    expect((await page.request.delete(`/api/v1/items/${empty}`, { headers: await writeContext(page, application.url, 2) })).status()).toBe(200)
+    expect((await page.request.post('/api/v1/auth/login', { headers: { Origin: application.url }, data: { username: 'owner', password } })).status()).toBe(200)
+    await page.getByRole('alertdialog').getByRole('button', { name: messages.mutations.readCurrent }).click()
+    await page.getByRole('alertdialog').getByRole('button', { name: messages.mutations.cancel }).click()
+    await expect(page.getByText(messages.media.missing, { exact: true })).toBeVisible()
+    await page.evaluate(() => window.dispatchEvent(new Event('online')))
+    expect(attempts).toBe(1)
+    await page.getByRole('button', { name: messages.mutations.openOriginal }).click()
+    await page.getByRole('alertdialog').getByRole('button', { name: messages.mutations.retryOriginal }).click()
+    await expect(page.getByText(messages.mutations.done, { exact: true })).toBeVisible()
+    expect(attempts).toBe(2); expect(writes[0]?.key).toBeTruthy(); expect(writes[1]?.key).toBe(writes[0]?.key)
+    expect(writes.map(({ proof, body }) => ({ proof, body }))).toEqual(Array(2).fill({ proof: '"1"', body: { item_id: empty, owner_revision: 1, is_cover: false, sort_order: 0, description: '' } }))
+  })
+
+  test('supports keyboard selection and accessible enlarged light/dark pages without image requests', async ({ page, application }, info) => {
+    await provision(page, application)
+    const streams: string[] = []
+    page.on('request', (request) => { if (request.method() === 'GET' && /\/(?:content|thumbnail)$/.test(new URL(request.url()).pathname)) streams.push(request.url()) })
+    await page.goto(`/photos/attach?owner_type=item&owner_id=${empty}`)
+    if (info.project.name === 'small-phone') await page.addStyleTag({ content: 'html { font-size: 200% }' })
+    const summary = page.getByText(messages.media.picker, { exact: true })
+    await summary.focus(); await expect(summary).toBeFocused(); await page.keyboard.press('Enter')
+    await expect(page.getByRole('button', { name: choose(firstID) })).toBeVisible()
+    for (let index = 0; index < 3; index++) { await nextPage(page); await expect(page.getByRole('navigation', { name: messages.media.pickerPagination })).toBeVisible() }
+    const target = page.getByRole('button', { name: choose(longID) })
+    await expect(target).toBeVisible()
+    for (const colorScheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme }); await expect(page.locator('html')).toHaveAttribute('data-theme', colorScheme)
+      await target.scrollIntoViewIfNeeded(); await expect(target).toBeInViewport()
+      expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze()).violations).toEqual([])
+      await noOverflow(page)
+      if (info.project.name === 'small-phone') expect(await page.evaluate(() => document.documentElement.scrollWidth <= 320)).toBe(true)
+      expect(await target.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
+      if (info.project.name === 'small-phone' || info.project.name === 'desktop') await page.screenshot({ path: info.outputPath(`media-picker-${colorScheme}.png`), fullPage: true })
+    }
+    await target.focus(); await page.keyboard.press('Enter')
+    await expect(summary).toBeFocused()
+    await expect(page.getByRole('heading', { name: messages.media.selectedMedia })).toBeVisible()
+    await expect(page.getByRole('textbox', { name: messages.media.mediaID })).toHaveValue(JSON.stringify(longID))
+    expect(streams).toEqual([]); expect(await page.locator('img').count()).toBe(0)
+  })
+})
+
+test.describe('large selected Media picker review', () => {
+  const id = 'legacy/\0😀\r\n'
+  test.use({ applicationDatabaseFixture: { prepare(database) { prepareMediaFixture(database, 205, false, false, [], { ids: [id], countedID: id }) } } })
+  test('completes 205 owner links and 206 Media links after discovery', async ({ page, application }) => {
+    await provision(page, application)
+    const writes = watchDomainWrites(page, ['/api/v1/media'])
+    await page.goto(`/photos/attach?owner_type=item&owner_id=${owner}`)
+    await page.getByText(messages.media.picker, { exact: true }).click()
+    await page.getByRole('button', { name: `${messages.media.pickerChoose}：${JSON.stringify(id)}` }).click()
+    await expect(page.getByRole('heading', { name: messages.media.selectedMedia })).toBeVisible()
+    await expect(page.getByText(`${messages.media.ownerLinkCount}205`, { exact: true })).toBeVisible()
+    await expect(page.getByText(`${messages.media.membershipCount}206`, { exact: true })).toBeVisible()
+    await expect(page.getByText(messages.media.alreadyLinked, { exact: true })).toBeVisible()
+    await page.getByRole('button', { name: messages.media.reviewAttach }).click()
+    await expect(page.getByRole('alertdialog')).toContainText(JSON.stringify(id)); expect(writes).toHaveLength(0)
+    await page.getByRole('alertdialog').getByRole('button', { name: messages.media.confirmAttach }).click()
+    await expect(page.getByText(messages.mutations.done, { exact: true })).toBeVisible()
+    expect(writes).toHaveLength(1); expect(writes[0]).toMatchObject({ path: '/api/v1/media-by-identity/links', proof: '"1"' })
+  })
+})
+
 test('attaches the reserved Media through same-origin browser requests and reconciles the original key', async ({ page, application }) => {
   await provision(page, application)
   await page.goto('/')

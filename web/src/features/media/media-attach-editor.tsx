@@ -15,6 +15,7 @@ import { MetadataError } from '@/features/catalog/editor'
 import { mediaScopesConsistent } from './commands'
 import { mediaLinkCreateBody, mediaLinkDefaults, type MediaLinkValues } from './form'
 import { MediaError } from './media-error'
+import { MediaPicker } from './media-picker'
 import { sameMediaMembership, sameOwnerMedia, type MediaMembership, type OwnerMedia } from './model'
 import type { useMediaMutation } from './use-media-mutation'
 
@@ -37,9 +38,9 @@ function mediaID(value: string, format: 'json' | 'text'): string | undefined {
   } catch { return undefined }
 }
 
-export function MediaAttachEditor({ current, membership, selectedID, onLookup, operation, online, canLookup, canWrite, loading }: {
+export function MediaAttachEditor({ current, membership, selectedID, onLookup, onSessionLost, operation, online, canLookup, canWrite, loading }: {
   current: OwnerMedia | null | undefined; membership: MediaMembership | null | undefined; selectedID: string | undefined
-  onLookup: (id: string) => void; operation: ReturnType<typeof useMediaMutation>; online: boolean; canLookup: boolean; canWrite: boolean; loading: boolean
+  onLookup: (id: string) => void; onSessionLost: (mandatory: boolean) => void; operation: ReturnType<typeof useMediaMutation>; online: boolean; canLookup: boolean; canWrite: boolean; loading: boolean
 }) {
   const prefix = useId(), [input, setInput] = useState(''), [format, setFormat] = useState<'json' | 'text'>('json'), [invalidID, setInvalidID] = useState(false), [base, setBase] = useState<Sources>(), [error, setError] = useState<unknown>()
   const form = useForm<MediaLinkValues>({ resolver, defaultValues: mediaLinkDefaults(), mode: 'onBlur', reValidateMode: 'onBlur' })
@@ -56,6 +57,10 @@ export function MediaAttachEditor({ current, membership, selectedID, onLookup, o
     if (id === undefined) { setInvalidID(true); return }
     setInvalidID(false); setError(undefined); onLookup(id)
   }
+  function select(id: string) {
+    if (!online || !canLookup || locked || loading && id === selectedID) return
+    setFormat('json'); setInput(JSON.stringify(id)); setInvalidID(false); setError(undefined); onLookup(id)
+  }
   function adopt() {
     if (!canWrite || locked || !sameTarget || !consistent || !current || !membership) return
     setBase({ owner: current, membership }); operation.dismiss(); setError(undefined)
@@ -71,6 +76,7 @@ export function MediaAttachEditor({ current, membership, selectedID, onLookup, o
   return <>
     <form noValidate aria-busy={operation.phase === 'pending'} onSubmit={form.handleSubmit(submit)} className="min-w-0 max-w-3xl space-y-6">
       <FieldSet disabled={locked} className="min-w-0"><FieldLegend className="text-xl">{text.attach}</FieldLegend><FieldGroup className="min-w-0">
+        <MediaPicker enabled={canLookup} locked={locked} selectedID={selectedID} loading={loading} onSelect={select} onSessionLost={onSessionLost} />
         <Field><FieldLabel htmlFor={`${prefix}-format`} className="text-base">{text.mediaIDFormat}</FieldLabel><NativeSelect id={`${prefix}-format`} value={format} aria-describedby={`${prefix}-media-help`} onChange={(event) => { setFormat(event.target.value === 'text' ? 'text' : 'json'); setInvalidID(false) }} className="w-full [&_select]:h-auto [&_select]:min-h-12 [&_select]:py-3 [&_select]:text-base">
           <NativeSelectOption value="json">{text.mediaIDJSON}</NativeSelectOption><NativeSelectOption value="text">{text.mediaIDText}</NativeSelectOption></NativeSelect></Field>
         <Field data-invalid={invalidID}><FieldLabel htmlFor={`${prefix}-media`} className="text-base">{text.mediaID}</FieldLabel>
