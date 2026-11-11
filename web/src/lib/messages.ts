@@ -123,7 +123,7 @@ export const messages = {
     attach: '關聯既有照片', attachTitle: '關聯既有照片', attachIntro: '選擇已有的照片紀錄，檢查所屬資料與照片目前的關聯，再確認新增一筆連結。',
     lookupMedia: '讀取照片紀錄', mediaIDFormat: '識別碼輸入方式', mediaIDJSON: '清單格式', mediaIDText: '原始文字',
     mediaLookupHelp: '從其他照片關聯複製包含雙引號的識別碼，跳脫字元能保留換行等特殊文字。若選擇原始文字，瀏覽器可能改變換行。這不是檔名，目前尚無全域照片清單或上傳功能。',
-    mediaIDError: '請檢查輸入方式與識別碼：須為 1–128 個有效字元，不能使用斜線、反斜線、NUL，或單獨使用一點、兩點。', selectedMedia: '已讀取的照片紀錄', mediaLoading: '正在讀取照片與完整關聯…',
+    mediaIDError: '請檢查輸入方式與識別碼：須為 1–128 個有效字元；可使用清單格式保留特殊字元。', selectedMedia: '已讀取的照片紀錄', mediaLoading: '正在讀取照片與完整關聯…',
     mediaMissing: '找不到這筆照片紀錄', mediaMissingHelp: '請核對完整識別碼；找不到紀錄不代表照片沒有其他關聯。', membershipCount: '照片現有的關聯數：',
     membershipList: '查看照片現有的關聯', ownerLinkCount: '所屬資料現有的關聯數：', mediaClaims: '紀錄中的格式、尺寸與大小',
     alreadyLinked: '這筆資料已關聯此照片。確認後會新增另一筆獨立關聯，不會取代既有連結。',

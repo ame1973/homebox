@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { DraftLeaveGuard } from '@/components/draft-leave-guard'
 import { mutationControl as control } from '@/components/mutation-review'
 import { validText } from '@/lib/api/client'
-import { parseSafeCount, pathIDSchema } from '@/lib/api/domain'
+import { idSchema, parseSafeCount } from '@/lib/api/domain'
 import { messages } from '@/lib/messages'
 import { MetadataError } from '@/features/catalog/editor'
 import { mediaScopesConsistent } from './commands'
@@ -32,7 +32,7 @@ type Sources = Readonly<{ owner: OwnerMedia; membership: MediaMembership }>
 // copying; plain text is a separate explicit mode, never an inferred fallback.
 function mediaID(value: string, format: 'json' | 'text'): string | undefined {
   try {
-    const result = pathIDSchema.safeParse(format === 'json' ? JSON.parse(value) : value)
+    const result = idSchema.safeParse(format === 'json' ? JSON.parse(value) : value)
     return result.success ? result.data : undefined
   } catch { return undefined }
 }

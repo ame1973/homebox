@@ -128,27 +128,29 @@ it('rechecks a previously selected Media instead of reusing its cached membershi
   expect(await screen.findByText(text.selectedMedia, { exact: true })).toBeVisible()
 })
 
-it('preserves exact Media ID text and refuses unsafe path identities before any read', async () => {
-  mount(); await ready()
-  const id = screen.getByRole('textbox', { name: text.mediaID }), user = userEvent.setup()
-  fireEvent.change(id, { target: { value: JSON.stringify('unsafe/id') } })
-  await user.click(screen.getByRole('button', { name: text.lookupMedia }))
-  expect(screen.getByText(text.mediaIDError, { exact: true })).toBeVisible()
-  expect(readMediaMembership).not.toHaveBeenCalled()
-  const exact = ' photo\r\n😀 '
-  const selected = { ...image, id: exact }
-  membership = { media: selected, links: [] }
-  fireEvent.change(id, { target: { value: JSON.stringify(exact) } })
-  await user.click(screen.getByRole('button', { name: text.lookupMedia }))
-  await screen.findByText(text.selectedMedia, { exact: true })
-  expect(id).toHaveValue(JSON.stringify(exact))
-  expect(readMediaMembership).toHaveBeenCalledWith(exact, expect.any(AbortSignal))
-})
+it.each(['.', '..', 'unsafe/id', 'unsafe\\id', '\0', ' photo/\0😀\r\n ', 'percent%2F/plus+?&=#', '😀'.repeat(127) + '/'])(
+  'preserves and explicitly reviews the exact retained Media ID %j', async (exact) => {
+    const selected = { ...image, id: exact }
+    membership = { media: selected, links: [] }
+    const work = mount(); await ready()
+    const id = screen.getByRole('textbox', { name: text.mediaID }), user = userEvent.setup()
+    fireEvent.change(id, { target: { value: JSON.stringify(exact) } })
+    await user.click(screen.getByRole('button', { name: text.lookupMedia }))
+    await screen.findByRole('heading', { name: text.selectedMedia })
+    expect(id).toHaveValue(JSON.stringify(exact)); expect(readMediaMembership).toHaveBeenCalledWith(exact, expect.any(AbortSignal))
+    await user.click(screen.getByRole('button', { name: text.reviewAttach }))
+    const dialog = screen.getByRole('alertdialog')
+    expect(dialog).toHaveTextContent(JSON.stringify(exact)); expect(sendMediaCommand).not.toHaveBeenCalled()
+    await user.click(within(dialog).getByRole('button', { name: text.confirmAttach }))
+    await waitFor(() => expect(work.router.state.location.pathname).toBe('/photos'))
+    expect(vi.mocked(sendMediaCommand).mock.calls[0]?.[0]).toMatchObject({ kind: 'attach', owner: initialOwner, membership: { media: selected, links: [] } })
+  },
+)
 
-it('rejects malformed JSON, non-strings and unaddressable decoded IDs without reading', async () => {
+it('rejects malformed JSON, non-strings and invalid decoded IDs without reading', async () => {
   mount(); await ready()
   const user = userEvent.setup(), id = screen.getByRole('textbox', { name: text.mediaID })
-  for (const value of ['links', 'null', '42', '"\\ud800"', '"bad\\u0000id"', '".."', '"bad\\/id"']) {
+  for (const value of ['links', 'null', '42', '"\\ud800"', '""', JSON.stringify('😀'.repeat(129)), '{"id":"links"}', '"\\uXYZ"']) {
     fireEvent.change(id, { target: { value } })
     await user.click(screen.getByRole('button', { name: text.lookupMedia }))
     expect(screen.getByText(text.mediaIDError, { exact: true })).toBeVisible()
@@ -177,13 +179,15 @@ it('requires a new lookup when the Media ID input changes', async () => {
   expect(sendMediaCommand).not.toHaveBeenCalled()
 })
 
-it('retains invalid raw fields until explicit adoption of both changed source scopes', async () => {
-  const work = mount(); await ready(); await lookup()
+it('retains invalid raw fields until explicit adoption of both changed exact Media scopes', async () => {
+  const exact = 'legacy/\0😀\r\n', selected = { ...image, id: exact }
+  membership = { media: selected, links: [{ ...sibling, media_id: exact, media: selected }] }
+  const work = mount(); await ready(); await lookup(exact)
   const user = userEvent.setup(), order = screen.getByRole('textbox', { name: text.order }), description = screen.getByRole('textbox', { name: text.description })
   await user.clear(order); await user.type(order, '01'); await user.type(description, 'Draft é')
   owner = { owner: { kind: 'item', value: { ...item, revision: 5, name: 'Changed owner' } }, links: [] }
-  const changed = { ...image, revision: 8 }
-  membership = { media: changed, links: [{ ...sibling, media: changed }] }
+  const changed = { ...selected, revision: 8 }
+  membership = { media: changed, links: [{ ...sibling, media_id: exact, media: changed }] }
   await act(async () => { await work.client.invalidateQueries({ queryKey: ['media'] }) })
   expect(await screen.findByText(text.attachChanged, { exact: true })).toBeVisible()
   expect(screen.getByRole('button', { name: text.reviewAttach })).toBeDisabled()
@@ -263,7 +267,7 @@ it('allows selecting a different Media after a failed lookup without discarding 
   vi.mocked(readMediaMembership).mockRejectedValueOnce(new ApiError('NETWORK_ERROR'))
   await act(async () => { await work.client.invalidateQueries({ queryKey: ['media'] }) })
   await screen.findByText(messages.locations.network)
-  const other = { ...image, id: 'other', revision: 2 }
+  const other = { ...image, id: 'other/\0😀\r\n', revision: 2 }
   membership = { media: other, links: [] }
   const id = screen.getByRole('textbox', { name: text.mediaID })
   await user.clear(id); await user.paste(JSON.stringify(other.id))
@@ -287,10 +291,12 @@ it('disables an open review if either actual scope changes', async () => {
   expect(sendMediaCommand).not.toHaveBeenCalled()
 })
 
-it('retains an uncertain original request after the owner and Media disappear and retries only explicitly', async () => {
-  const work = mount(); await ready(); await lookup()
+it('retains an uncertain exact Media request after the owner and Media disappear and retries only explicitly', async () => {
+  const exact = 'legacy/\0😀\r\n', selected = { ...image, id: exact }
+  membership = { media: selected, links: [] }
+  const work = mount(); await ready(); await lookup(exact)
   vi.mocked(sendMediaCommand).mockImplementationOnce(async () => { owner = null; membership = null; throw new ApiError('NETWORK_ERROR') })
-    .mockResolvedValueOnce({ id: 'created', revision: 1, media_id: image.id, owner_type: 'item', owner_id: item.id, is_cover: false, sort_order: 0, description: '' })
+    .mockResolvedValueOnce({ id: 'created', revision: 1, media_id: exact, owner_type: 'item', owner_id: item.id, is_cover: false, sort_order: 0, description: '' })
   const user = userEvent.setup(); await user.click(screen.getByRole('button', { name: text.reviewAttach }))
   await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: text.confirmAttach }))
   await screen.findByRole('heading', { name: messages.mutations.uncertain })
@@ -319,8 +325,10 @@ it('guards a dirty draft but permits session purge from a failed Media read', as
   expect(work.client.getQueryData(['media', 'owner', 'item', item.id])).toBeUndefined()
 })
 
-it('retains an offline draft without sending or replaying a write', async () => {
-  mount(); await ready(); await lookup()
+it('retains an offline exact Media draft without sending or replaying a write', async () => {
+  const exact = 'legacy/\0😀', selected = { ...image, id: exact }
+  membership = { media: selected, links: [] }
+  mount(); await ready(); await lookup(exact)
   const user = userEvent.setup(), description = screen.getByRole('textbox', { name: text.description })
   await user.type(description, 'Offline draft')
   Object.defineProperty(navigator, 'onLine', { configurable: true, value: false })
