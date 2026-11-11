@@ -32,6 +32,23 @@ export function sameMediaLink(first: MediaLinkView, second: MediaLinkView): bool
   return sameMediaSource(firstLink, secondLink) && sameMediaSource(firstMedia, secondMedia)
 }
 
+function sameLinks(first: readonly MediaLinkView[], second: readonly MediaLinkView[]): boolean {
+  if (first.length !== second.length || new Set(first.map((link) => link.id)).size !== first.length) return false
+  const values = new Map(second.map((link) => [link.id, link]))
+  return values.size === second.length && first.every((link) => {
+    const other = values.get(link.id)
+    return other !== undefined && sameMediaLink(link, other)
+  })
+}
+
+export function sameOwnerMedia(first: OwnerMedia, second: OwnerMedia): boolean {
+  return first.owner.kind === second.owner.kind && sameMediaSource(first.owner.value, second.owner.value) && sameLinks(first.links, second.links)
+}
+
+export function sameMediaMembership(first: MediaMembership, second: MediaMembership): boolean {
+  return sameMediaSource(first.media, second.media) && sameLinks(first.links, second.links)
+}
+
 // Revalidate whole selected scopes before freezing or delivering a command.
 // An owner bracket does not establish independent Media freshness.
 export function reviewedOwnerMedia(value: unknown): OwnerMedia {

@@ -13,14 +13,16 @@ import { catalogNavigationState, catalogRoute } from '@/lib/catalog-navigation'
 import { assetNavigationState } from '@/lib/asset-navigation'
 import { unitRoute } from '@/lib/holding-navigation'
 import { locationReturnPath, locationRoute } from '@/lib/location-navigation'
-import { mediaEditRoute, mediaEditScope, mediaOwnerRoute, mediaOwnerScope, mediaReturnPath, type MediaRouteScope } from '@/lib/media-navigation'
+import { mediaAttachRoute, mediaEditRoute, mediaEditScope, mediaOwnerRoute, mediaOwnerScope, mediaReturnPath, type MediaRouteScope } from '@/lib/media-navigation'
 import { messages } from '@/lib/messages'
 import { useOnline } from '@/lib/use-online'
 import { clearSessionQueries } from '@/features/auth/use-auth-action'
+import { mediaScopesConsistent } from './commands'
+import { MediaAttachEditor } from './media-attach-editor'
 import { MediaError } from './media-error'
 import { MediaLinkEditor } from './media-link-editor'
 import { MediaReviewDialog } from './media-review-dialog'
-import { readOwnerMedia, sameMediaLink, sameMediaSource, type OwnerMedia } from './model'
+import { readMediaMembership, readOwnerMedia, sameMediaLink, sameMediaMembership, sameMediaSource, sameOwnerMedia, type MediaMembership, type OwnerMedia } from './model'
 import { useMediaMutation } from './use-media-mutation'
 
 const text = messages.media
@@ -38,7 +40,7 @@ function ownerName(source: OwnerMedia) {
   return source.owner.kind === 'unit' ? source.owner.value.asset_code : source.owner.value.name
 }
 
-export default function MediaPage({ mode }: { mode: 'list' | 'edit' }) {
+export default function MediaPage({ mode }: { mode: 'list' | 'edit' | 'attach' }) {
   const route = useLocation(), navigate = useNavigate(), client = useQueryClient(), online = useOnline()
   const editing = mode === 'edit' ? mediaEditScope(route.search) : undefined
   const scope = mode === 'edit' ? editing && { kind: editing.kind, id: editing.id } : mediaOwnerScope(route.search)
@@ -46,7 +48,7 @@ export default function MediaPage({ mode }: { mode: 'list' | 'edit' }) {
   const catalogList = route.state?.catalogList, catalogCursors = route.state?.catalogCursors, assetList = route.state?.assetList, assetCursors = route.state?.assetCursors
   const navigationState = useMemo(() => ({ ...catalogNavigationState(catalogList, catalogCursors),
     ...(assetList !== undefined ? assetNavigationState(assetList, assetCursors) : {}) }), [catalogList, catalogCursors, assetList, assetCursors])
-  const [transitioning, setTransitioning] = useState(false), [remembered, setRemembered] = useState<OwnerMedia>(), [initialEdit, setInitialEdit] = useState<OwnerMedia>(), [localError, setLocalError] = useState<unknown>()
+  const [transitioning, setTransitioning] = useState(false), [remembered, setRemembered] = useState<OwnerMedia>(), [initialEdit, setInitialEdit] = useState<OwnerMedia>(), [localError, setLocalError] = useState<unknown>(), [selectedMediaID, setSelectedMediaID] = useState<string>()
   const auth = useQuery({ queryKey: ['auth', 'me'], enabled: online && !transitioning, staleTime: 0, refetchOnMount: 'always', queryFn: async ({ signal }) => {
     try { return await fetchAdmin(signal) } catch (error) { if (error instanceof ApiError && error.status === 401) return null; throw error }
   } })
@@ -55,7 +57,13 @@ export default function MediaPage({ mode }: { mode: 'list' | 'edit' }) {
     try { return await readOwnerMedia(scope!, signal) }
     catch (error) { if (error instanceof ApiError && error.code === 'NOT_FOUND' && (error.status === undefined || error.status === 404)) return null; throw error }
   } })
+  const membership = useQuery<MediaMembership | null>({ queryKey: ['media', 'membership', selectedMediaID], enabled: enabled && mode === 'attach' && !!selectedMediaID,
+    staleTime: 0, refetchOnMount: 'always', queryFn: async ({ signal }) => {
+      try { return await readMediaMembership(selectedMediaID!, signal) }
+      catch (error) { if (error instanceof ApiError && error.code === 'NOT_FOUND' && error.status === 404) return null; throw error }
+    } })
   const current = data.isFetchedAfterMount && !data.isError ? data.data : undefined
+  const currentMembership = membership.isFetchedAfterMount && !membership.isError ? membership.data : undefined
   if (current && current !== remembered) setRemembered(current)
   if (!initialEdit && current && editing && current.links.some((link) => link.id === editing.linkID)) setInitialEdit(current)
   const source = current ?? remembered, missing = current === null
@@ -67,9 +75,12 @@ export default function MediaPage({ mode }: { mode: 'list' | 'edit' }) {
   }, [client, navigate, returnTo, navigationState])
   const operation = useMediaMutation((command) => {
     setLocalError(undefined)
-    if (command.kind === 'patch-link') navigate(mediaOwnerRoute({ kind: command.source.owner.kind, id: command.source.owner.value.id }), { replace: true, state: { ...navigationState, mediaNotice: 'confirmed' } })
+    if (command.kind === 'patch-link' || command.kind === 'attach') {
+      const owner = command.kind === 'attach' ? command.owner.owner : command.source.owner
+      navigate(mediaOwnerRoute({ kind: owner.kind, id: owner.value.id }), { replace: true, state: { ...navigationState, mediaNotice: 'confirmed' } })
+    }
   }, sessionLost)
-  const errors = [auth.error, data.error], credentialFailure = errors.find((error) => error instanceof ApiError && (error.status === 401 || error.code === 'PASSWORD_CHANGE_REQUIRED')) as ApiError | undefined
+  const errors = [auth.error, data.error, membership.error], credentialFailure = errors.find((error) => error instanceof ApiError && (error.status === 401 || error.code === 'PASSWORD_CHANGE_REQUIRED')) as ApiError | undefined
   const mandatory = !!auth.data?.must_change_password || credentialFailure?.code === 'PASSWORD_CHANGE_REQUIRED'
   const denied = mandatory || !auth.isFetching && auth.data === null || credentialFailure !== undefined
   const { allowNavigation } = operation
@@ -79,12 +90,19 @@ export default function MediaPage({ mode }: { mode: 'list' | 'edit' }) {
     if (!mandatory) client.setQueryData(['auth', 'me'], null)
     navigate(mandatory ? '/settings/account' : '/login', { replace: true, state: { ...(mandatory ? {} : { notice: 'expired' }), returnTo: returnTo ?? '/items', ...navigationState } })
   }, [online, transitioning, denied, mandatory, allowNavigation, client, navigate, returnTo, navigationState])
-  async function readCurrent() { return Promise.all([auth.refetch(), ...(authorized && validPath ? [data.refetch()] : [])]) }
-  const reading = auth.isFetching || data.isFetching, readError = auth.error ?? data.error
+  async function readCurrent() {
+    return Promise.all([auth.refetch(), ...(authorized && validPath ? [data.refetch(), ...(mode === 'attach' && selectedMediaID ? [membership.refetch()] : [])] : [])])
+  }
+  function lookupMedia(id: string) {
+    if (id === selectedMediaID) void readCurrent()
+    else { setSelectedMediaID(id); void data.refetch() }
+  }
+  const reading = auth.isFetching || data.isFetching || membership.isFetching, readError = auth.error ?? data.error ?? membership.error
   const initializing = online && authorized && validPath && !data.isFetchedAfterMount && !source
   const pending = online && (auth.isPending || !authorized && !auth.isError || enabled && data.isPending)
   const fatal = auth.isError && !auth.data ? auth.error : data.isError && !source ? data.error : undefined
   const permitted = online && authorized && !transitioning && !denied && !auth.isError
+  const canLookup = permitted && validPath && !auth.isFetching && !data.isFetching && !data.isError && !!current
   const canWrite = permitted && validPath && !reading && !readError && !!current
   const command = operation.command
   const reviewCommand = command && command.kind !== 'attach' ? command : undefined
@@ -92,6 +110,9 @@ export default function MediaPage({ mode }: { mode: 'list' | 'edit' }) {
   const selected = current?.links.find((link) => link.id === reviewCommand?.linkID)
   const currentReview = !!(canWrite && current && reviewCommand && reviewed && selected && current.owner.kind === reviewCommand.source.owner.kind &&
     sameMediaSource(current.owner.value, reviewCommand.source.owner.value) && sameMediaLink(reviewed, selected))
+  const attach = command?.kind === 'attach' ? command : undefined
+  const currentAttach = !!(canWrite && current && currentMembership && attach && selectedMediaID === attach.membership.media.id &&
+    sameOwnerMedia(current, attach.owner) && sameMediaMembership(currentMembership, attach.membership) && mediaScopesConsistent(current, currentMembership))
   function unlink(id: string) {
     if (!canWrite || !current || !pathIDSchema.safeParse(id).success) return
     try { setLocalError(undefined); operation.review({ kind: 'unlink', source: current, linkID: id }) } catch (error) { setLocalError(error) }
@@ -99,8 +120,8 @@ export default function MediaPage({ mode }: { mode: 'list' | 'edit' }) {
   const destination = back(scope)
   const links = source ? [...source.links].sort((first, second) => first.sort_order - second.sort_order || (first.id < second.id ? -1 : first.id > second.id ? 1 : 0)) : []
   return <div className="min-w-0 space-y-7 py-8 md:py-10">
-    <header className="flex min-w-0 flex-wrap items-start justify-between gap-4"><div className="min-w-0 space-y-3"><h1 className="text-3xl leading-snug font-semibold [overflow-wrap:anywhere] md:text-4xl">{mode === 'edit' ? text.editTitle : text.title}</h1><p className="max-w-prose text-base leading-relaxed text-muted-foreground">{mode === 'edit' ? text.editIntro : text.intro}</p></div>
-      <div className="flex max-w-full flex-wrap gap-2"><Button asChild variant="outline" className={control}><Link to={mode === 'edit' && scope ? mediaOwnerRoute(scope) : destination.path === '/items' ? navigationState.catalogList : destination.path} state={navigationState}>{mode === 'edit' && scope ? text.backLinks : destination.label}</Link></Button>
+    <header className="flex min-w-0 flex-wrap items-start justify-between gap-4"><div className="min-w-0 space-y-3"><h1 className="text-3xl leading-snug font-semibold [overflow-wrap:anywhere] md:text-4xl">{mode === 'edit' ? text.editTitle : mode === 'attach' ? text.attachTitle : text.title}</h1><p className="max-w-prose text-base leading-relaxed text-muted-foreground">{mode === 'edit' ? text.editIntro : mode === 'attach' ? text.attachIntro : text.intro}</p></div>
+      <div className="flex max-w-full flex-wrap gap-2"><Button asChild variant="outline" className={control}><Link to={mode !== 'list' && scope ? mediaOwnerRoute(scope) : destination.path === '/items' ? navigationState.catalogList : destination.path} state={navigationState}>{mode !== 'list' && scope ? text.backLinks : destination.label}</Link></Button>
         <Button type="button" variant="outline" disabled={!online || reading || transitioning || !validPath} className={`${control} gap-2`} onClick={() => { void readCurrent() }}><RefreshCw aria-hidden="true" className={`size-4 ${reading ? 'animate-spin motion-reduce:animate-none' : ''}`} />{text.refresh}</Button></div>
     </header>
     {!online && <Alert role="status" className="p-4"><WifiOff aria-hidden="true" /><AlertTitle>{text.offline}</AlertTitle><AlertDescription className="text-base">{text.offlineHelp}</AlertDescription></Alert>}
@@ -115,8 +136,10 @@ export default function MediaPage({ mode }: { mode: 'list' | 'edit' }) {
             {missingLink && <Alert role="alert" className="p-4"><AlertTitle>{text.linkMissing}</AlertTitle><AlertDescription className="text-base">{text.linkMissingHelp}</AlertDescription></Alert>}
             <section className="min-w-0 space-y-2"><p className="text-sm font-medium text-muted-foreground">{text.owner}：{text.ownerKinds[source.owner.kind]}</p><h2 className="whitespace-pre-wrap text-xl font-semibold [overflow-wrap:anywhere]">{ownerName(source)}</h2><p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">{JSON.stringify(source.owner.value.id)}；{text.version}：{source.owner.value.revision}</p></section>
             {mode === 'edit' ? initialEdit && editing && <MediaLinkEditor initial={initialEdit} current={current} linkID={editing.linkID} operation={operation} online={online} canWrite={canWrite && !missingLink} />
+              : mode === 'attach' ? <MediaAttachEditor current={current} membership={currentMembership} selectedID={selectedMediaID} onLookup={lookupMedia} operation={operation} online={online} canLookup={canLookup} canWrite={canWrite} loading={membership.isFetching} />
               : <div className="grid min-w-0 items-start gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(15rem,1fr)]">
               <section className="min-w-0 space-y-4" aria-labelledby="media-list-title"><div className="flex flex-wrap items-baseline justify-between gap-2"><h2 id="media-list-title" className="text-xl font-semibold">{text.list}</h2><p className="text-sm text-muted-foreground">{text.total}{links.length}</p></div>
+                {scope && canWrite && operation.phase !== 'pending' && operation.phase !== 'uncertain' ? <Button asChild variant="outline" className={control}><Link to={mediaAttachRoute(scope)} state={navigationState}>{text.attach}</Link></Button> : <Button type="button" variant="outline" disabled className={control}>{text.attach}</Button>}
                 {links.length === 0 ? <div className="space-y-2 border-y py-6"><h3 className="text-lg font-semibold">{text.empty}</h3><p className="text-base text-muted-foreground">{text.emptyHelp}</p></div>
                   : <ul aria-label={text.list} className="divide-y border-y">{links.map((link) => {
                     const addressable = pathIDSchema.safeParse(link.id).success
@@ -134,6 +157,6 @@ export default function MediaPage({ mode }: { mode: 'list' | 'edit' }) {
             {data.dataUpdatedAt > 0 && <p className="text-sm text-muted-foreground">{text.readAt}：{new Intl.DateTimeFormat('zh-TW', { dateStyle: 'short', timeStyle: 'short' }).format(data.dataUpdatedAt)}</p>}
           </>}
     {mode === 'list' && <DraftLeaveGuard labels={text} when={!!operation.command} canLeave={operation.canLeave} onLeave={operation.allowNavigation} onBlocked={operation.suspend} onStay={operation.reopen} />}
-    <MediaReviewDialog operation={operation} online={permitted} current={currentReview} onReadCurrent={readCurrent} />
+    <MediaReviewDialog operation={operation} online={permitted} current={attach ? currentAttach : currentReview} onReadCurrent={readCurrent} />
   </div>
 }

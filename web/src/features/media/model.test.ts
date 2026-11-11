@@ -4,7 +4,7 @@ import * as catalog from '@/lib/api/catalog'
 import * as holdings from '@/lib/api/holdings'
 import * as locations from '@/lib/api/locations'
 import * as mediaAPI from '@/lib/api/media'
-import { readMediaMembership, readOwnerMedia } from './model'
+import { readMediaMembership, readOwnerMedia, sameMediaMembership, sameOwnerMedia } from './model'
 
 vi.mock('@/lib/api/catalog', async (original) => ({ ...await original<typeof import('@/lib/api/catalog')>(), fetchItem: vi.fn(), fetchItemsPage: vi.fn() }))
 vi.mock('@/lib/api/holdings', async (original) => ({ ...await original<typeof import('@/lib/api/holdings')>(), fetchUnit: vi.fn(), fetchUnitByIdentity: vi.fn(), fetchItemUnitsPage: vi.fn() }))
@@ -85,6 +85,23 @@ it.each([{ ...image, revision: 8 }, { ...image, width: 99 }])('rejects inconsist
   vi.mocked(mediaAPI.fetchOwnerMediaLinksPage).mockResolvedValueOnce({ data: [link], next_cursor: 'next' })
     .mockResolvedValueOnce({ data: [{ ...link, id: 'second', media: changed }], next_cursor: null })
   await expect(readOwnerMedia({ kind: 'item', id: item.id }, signal())).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+})
+
+it('compares complete owner and Media scopes semantically without depending on link or field order', () => {
+  const second = { ...link, id: 'second', description: 'Another' }
+  const source = { owner: { kind: 'item' as const, value: item }, links: [link, second] }
+  const membership = { media: image, links: [link, second] }
+  const reorderedItem = Object.fromEntries(Object.entries(item).reverse()) as typeof item
+  const reorderedImage = Object.fromEntries(Object.entries(image).reverse()) as typeof image
+  const reorderedLink = { ...Object.fromEntries(Object.entries(link).reverse()), media: reorderedImage } as typeof link
+  expect(sameOwnerMedia(source, { owner: { kind: 'item', value: reorderedItem }, links: [second, reorderedLink] })).toBe(true)
+  expect(sameMediaMembership(membership, { media: reorderedImage, links: [second, reorderedLink] })).toBe(true)
+  expect(sameOwnerMedia(source, { ...source, owner: { kind: 'item', value: { ...item, revision: 5 } } })).toBe(false)
+  expect(sameOwnerMedia(source, { ...source, links: [link] })).toBe(false)
+  expect(sameOwnerMedia(source, { ...source, links: [link, { ...second, description: 'Changed' }] })).toBe(false)
+  expect(sameMediaMembership(membership, { ...membership, media: { ...image, revision: 8 } })).toBe(false)
+  expect(sameMediaMembership(membership, { ...membership, links: [link, { ...second, media: { ...image, width: 11 } }] })).toBe(false)
+  expect(sameMediaMembership(membership, { ...membership, links: [link, link] })).toBe(false)
 })
 
 it('does not treat an owner bracket as a proof that every embedded Media is globally current', async () => {

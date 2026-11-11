@@ -21,19 +21,20 @@ const envelope = z.discriminatedUnion('kind', [
 
 // The two complete live scopes were read independently. Their overlap must
 // agree, but this comparison does not turn either list into a server proof.
-function requireConsistentScopes(owner: OwnerMedia, membership: MediaMembership) {
+export function mediaScopesConsistent(owner: OwnerMedia, membership: MediaMembership): boolean {
   const owners = new Map(owner.links.map((link) => [link.id, link]))
   const members = new Map(membership.links.map((link) => [link.id, link]))
   for (const link of owner.links) {
     const member = members.get(link.id)
-    if ((member || link.media_id === membership.media.id) && (!member || !sameMediaLink(link, member))) throw new ApiError('VALIDATION_ERROR')
+    if ((member || link.media_id === membership.media.id) && (!member || !sameMediaLink(link, member))) return false
   }
   for (const member of membership.links) {
     if (member.owner_type === owner.owner.kind && member.owner_id === owner.owner.value.id) {
       const link = owners.get(member.id)
-      if (!link || !sameMediaLink(link, member)) throw new ApiError('VALIDATION_ERROR')
+      if (!link || !sameMediaLink(link, member)) return false
     }
   }
+  return true
 }
 
 function selectedLink(source: OwnerMedia, id: string): MediaLinkView {
@@ -48,7 +49,7 @@ function checkedProposal(value: unknown): MediaCommandInput {
     const owner = reviewedOwnerMedia(proposal.owner), membership = reviewedMediaMembership(proposal.membership)
     const body = input(api.mediaLinkMetadataSchema, proposal.body)
     input(pathIDSchema, membership.media.id)
-    requireConsistentScopes(owner, membership)
+    if (!mediaScopesConsistent(owner, membership)) throw new ApiError('VALIDATION_ERROR')
     if (body.is_cover && owner.links.some((link) => link.is_cover)) throw new ApiError('MEDIA_COVER_CONFLICT')
     return { kind: proposal.kind, owner, membership, body }
   }

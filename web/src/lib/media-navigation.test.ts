@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest'
 import { applicationReturnPath } from './settings-navigation'
-import { mediaEditRoute, mediaEditScope, mediaOwnerRoute, mediaOwnerScope, mediaReturnPath } from './media-navigation'
+import { mediaAttachRoute, mediaEditRoute, mediaEditScope, mediaOwnerRoute, mediaOwnerScope, mediaReturnPath } from './media-navigation'
 
 const examples = [
   { kind: 'item', id: 'new' }, { kind: 'unit', id: 'unit/\0😀' }, { kind: 'location', id: 'tree' },
@@ -35,6 +35,27 @@ it.each([
 ])('rejects unsafe, incomplete or unimplemented Media return %j', (path) => {
   expect(mediaReturnPath(path)).toBeUndefined()
   expect(applicationReturnPath(path)).toBeUndefined()
+})
+
+it.each(examples)('round-trips the exact $kind owner through the attachment route and login return', (scope) => {
+  const path = mediaAttachRoute(scope)
+  expect(path.startsWith('/photos/attach?')).toBe(true)
+  expect(mediaOwnerScope(path.slice('/photos/attach'.length))).toEqual(scope)
+  expect(mediaReturnPath(path)).toBe(path)
+  expect(applicationReturnPath(path)).toBe(path)
+})
+
+it('normalizes attachment return identities without retaining a selected Media or draft', () => {
+  const path = '/photos/attach?owner_id=room%2Fzero%00%F0%9F%98%80&owner_type=location'
+  const expected = mediaAttachRoute({ kind: 'location', id: 'room/zero\0😀' })
+  expect(mediaReturnPath(path)).toBe(expected)
+  expect(applicationReturnPath(path)).toBe(expected)
+  for (const invalid of ['/photos/attach', '/photos/attach?owner_type=item', '/photos/attach?owner_type=item&owner_id=x&media_id=photo',
+    '/photos/attach?owner_type=item&owner_id=x&description=private', '/photos/attach?owner_type=item&owner_id=x&owner_id=y',
+    '/photos/attach?owner_type=item&owner_id=%FF', '/photos/attach?owner_type=item&owner_id=x#fragment']) {
+    expect(mediaReturnPath(invalid)).toBeUndefined()
+    expect(applicationReturnPath(invalid)).toBeUndefined()
+  }
 })
 
 it.each(examples)('round-trips an exact $kind owner and addressable link through the edit route and login return', (scope) => {
