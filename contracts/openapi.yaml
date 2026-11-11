@@ -4169,6 +4169,58 @@ paths:
       x-revision-scope: item
       x-max-body-bytes: 16384
   /media:
+    get:
+      operationId: get_media
+      summary: List media metadata
+      tags:
+      - media
+      responses:
+        '200':
+          description: One live page of actual Media metadata, including unlinked records
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaList'
+          headers:
+            Cache-Control:
+              schema:
+                const: no-store
+              description: Protected API data is never cached by the service worker.
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '413':
+          $ref: '#/components/responses/Error413'
+        '415':
+          $ref: '#/components/responses/Error415'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+      parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+      - name: cursor
+        in: query
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+      description: Require a completed administrator session and read actual Media source and independent counters, including records without links. Return one live stable-ID page and validate its lookahead before returning any prefix. The signed cursor binds principal, dataset epoch, page size and this collection for 15 minutes; it is neither authorization nor a frozen snapshot. Retained unverified metadata contains historical claims only, not file verification; no image bytes or private storage keys are returned. Reject duplicate, unknown, malformed and oversized queries, request bodies and content encoding. Revalidate the session inside SQL.
+      x-max-body-bytes: 0
+      x-max-query-bytes: 16384
     post:
       operationId: post_media
       summary: Upload media
@@ -14200,6 +14252,25 @@ components:
         - media
       unevaluatedProperties: false
       description: A link row joined with actual separately versioned Media metadata for a live list page. The embedded Media must match media_id, verified by the runtime. The joined view is not an independently ETagged resource or a Media write proof; its metadata can change independently of the owner-scoped link collection.
+    MediaList:
+      type: object
+      required:
+      - data
+      - next_cursor
+      additionalProperties: false
+      properties:
+        data:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/Media'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+          minLength: 1
+          maxLength: 2048
+      description: One live stable-ID page of actual Media metadata, including unlinked records. The required null continuation ends the page sequence; a page is not a frozen snapshot or a collection revision/ETag.
     MediaLinkList:
       type: object
       required:

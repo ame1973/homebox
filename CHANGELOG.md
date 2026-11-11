@@ -4,6 +4,8 @@
 
 ### Added
 
+- Define a protected live `GET /media` metadata index, including unlinked Media, with bounded pages and a principal/epoch/size-scoped signed cursor. Unverified historical claims do not authorize file access. Add executable contract and generated type checks; the handler, browser picker and image files are not implemented by this contract increment.
+
 - Extend the existing-Media attachment screen to preserve exact retained slash, backslash, NUL, dot-segment and Unicode identities. Review both complete live scopes and the original proofs, explicitly adopt concurrent changes, and reconcile uncertain responses only with the original key. Browser tests cover all owner types, large memberships, session loss, offline non-replay and enlarged light/dark layouts. This metadata-only flow does not upload or request image bytes.
 
 - Allow bracketed Media review sources and frozen attachment commands to preserve exact retained Media IDs, including slash, backslash, NUL and dot segments. Continue checking the complete independently read owner and Media scopes, the original proofs and explicit same-key retries. Real-Go browser tests exercise 205 owner links, 206 Media links and an intervening link change; rendered attachment support was a separate step.

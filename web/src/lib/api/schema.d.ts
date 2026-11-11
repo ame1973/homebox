@@ -1182,7 +1182,11 @@ export interface paths {
             readonly path?: never;
             readonly cookie?: never;
         };
-        readonly get?: never;
+        /**
+         * List media metadata
+         * @description Require a completed administrator session and read actual Media source and independent counters, including records without links. Return one live stable-ID page and validate its lookahead before returning any prefix. The signed cursor binds principal, dataset epoch, page size and this collection for 15 minutes; it is neither authorization nor a frozen snapshot. Retained unverified metadata contains historical claims only, not file verification; no image bytes or private storage keys are returned. Reject duplicate, unknown, malformed and oversized queries, request bodies and content encoding. Revalidate the session inside SQL.
+         */
+        readonly get: operations["get_media"];
         readonly put?: never;
         /**
          * Upload media
@@ -3182,6 +3186,11 @@ export interface components {
             readonly description?: string;
             readonly is_cover?: boolean;
             readonly sort_order?: number;
+        };
+        /** @description One live stable-ID page of actual Media metadata, including unlinked records. The required null continuation ends the page sequence; a page is not a frozen snapshot or a collection revision/ETag. */
+        readonly MediaList: {
+            readonly data: readonly components["schemas"]["Media"][];
+            readonly next_cursor: string | null;
         };
         /** @description Exactly one multipart image file, with no caller-owned storage path, digest, dimensions or owner. The server validates actual bytes, declared MIME, size, pixel count and privacy before creating or deduplicating Media; a later separately reviewed command attaches it. */
         readonly MediaUploadInput: {
@@ -7512,6 +7521,40 @@ export interface operations {
             readonly 401: components["responses"]["Error401"];
             readonly 403: components["responses"]["Error403"];
             readonly 404: components["responses"]["Error404"];
+            readonly 409: components["responses"]["Error409"];
+            readonly 413: components["responses"]["Error413"];
+            readonly 415: components["responses"]["Error415"];
+            readonly 422: components["responses"]["Error422"];
+            readonly 429: components["responses"]["Error429"];
+            readonly 503: components["responses"]["Error503"];
+        };
+    };
+    readonly get_media: {
+        readonly parameters: {
+            readonly query?: {
+                readonly cursor?: string;
+                readonly limit?: number;
+            };
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description One live page of actual Media metadata, including unlinked records */
+            readonly 200: {
+                headers: {
+                    /** @description Protected API data is never cached by the service worker. */
+                    readonly "Cache-Control"?: "no-store";
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["MediaList"];
+                };
+            };
+            readonly 400: components["responses"]["Error400"];
+            readonly 401: components["responses"]["Error401"];
+            readonly 403: components["responses"]["Error403"];
             readonly 409: components["responses"]["Error409"];
             readonly 413: components["responses"]["Error413"];
             readonly 415: components["responses"]["Error415"];

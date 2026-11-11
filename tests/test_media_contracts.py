@@ -125,6 +125,30 @@ class MediaContractTests(unittest.TestCase):
         self.assertTrue(owner["owner_type"]["required"] and owner["owner_id"]["required"])
         self.assertEqual({"item", "unit", "location"}, set(owner["owner_type"]["schema"]["enum"]))
 
+    def test_global_media_discovery_is_a_protected_live_page_of_actual_metadata(self):
+        validator("MediaList").validate({"data": [], "next_cursor": None})
+        unverified = {**MEDIA, "id": "retained/\u0000😀", "verification": "unverified", "mime_type": "image/heic",
+                      "thumb_url": None, "thumb_sha256": None}
+        validator("MediaList").validate({"data": [unverified] * 100, "next_cursor": "x" * 2048})
+        for page in [{"data": []}, {"data": [], "next_cursor": ""}, {"data": [], "next_cursor": "x" * 2049},
+                     {"data": [MEDIA] * 101, "next_cursor": None}, {"data": [LINK_VIEW], "next_cursor": None},
+                     {"data": [], "next_cursor": None, "revision": 1}]:
+            self.reject("MediaList", page)
+        operation = API["paths"]["/media"]["get"]
+        self.assertEqual("get_media", operation["operationId"])
+        self.assertEqual(0, operation["x-max-body-bytes"])
+        self.assertEqual(16384, operation["x-max-query-bytes"])
+        parameters = {entry["name"]: entry for entry in operation["parameters"]}
+        self.assertEqual({"limit", "cursor"}, set(parameters))
+        self.assertEqual(50, parameters["limit"]["schema"]["default"])
+        self.assertEqual(100, parameters["limit"]["schema"]["maximum"])
+        self.assertEqual(2048, parameters["cursor"]["schema"]["maxLength"])
+        self.assertEqual("#/components/schemas/MediaList", operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"])
+        self.assertNotIn("ETag", operation["responses"]["200"]["headers"])
+        for word in ["principal", "epoch", "lookahead", "live", "15 minutes", "unverified", "no image bytes"]:
+            self.assertIn(word, operation["description"])
+        self.assertEqual("post_media", API["paths"]["/media"]["post"]["operationId"])
+
     def test_legacy_links_id_has_an_explicit_metadata_escape_and_original_paths_remain(self):
         for path, operation_id in [("/media/{id}", "get_media_id"), ("/media/{id}/view", "get_media_id_view")]:
             operation = API["paths"][path]["get"]
@@ -135,7 +159,7 @@ class MediaContractTests(unittest.TestCase):
             self.assertEqual("#/components/schemas/Media", operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"])
             self.assertEqual({"Cache-Control", "ETag"}, set(operation["responses"]["200"]["headers"]))
         self.assertEqual("get_media_id_links", API["paths"]["/media/{id}/links"]["get"]["operationId"])
-        self.assertEqual(150, sum(len(methods) for methods in API["paths"].values()))
+        self.assertEqual(151, sum(len(methods) for methods in API["paths"].values()))
 
     def test_exact_media_identity_reads_and_attachment_share_path_authority(self):
         cases = [

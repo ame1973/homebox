@@ -996,6 +996,13 @@ const mediaLink = { id: 'link', revision: 1, media_id: 'media', owner_type: 'ite
   sort_order: -1, description: '' } satisfies components['schemas']['MediaLink']
 const mediaLinkView = { ...mediaLink, media: mediaMetadata } satisfies components['schemas']['MediaLinkView']
 const mediaPage = { data: [mediaLinkView], next_cursor: null } satisfies components['schemas']['MediaLinkList']
+const globalMediaPage = { data: [mediaMetadata, unverifiedMediaMetadata], next_cursor: null } satisfies components['schemas']['MediaList']
+// @ts-expect-error A live Media page must explicitly terminate or continue.
+const incompleteGlobalMediaPage: components['schemas']['MediaList'] = { data: [] }
+// @ts-expect-error The global index contains Media, not owner-link views.
+const linkInGlobalMediaPage: components['schemas']['MediaList'] = { data: [mediaLinkView], next_cursor: null }
+// @ts-expect-error The global Media index has no owner or search filter.
+const filteredGlobalMediaPage: NonNullable<operations['get_media']['parameters']['query']> = { owner_id: 'item' }
 const mediaOwnerInputs = [
   { item_id: 'item', owner_revision: 3 },
   { item_unit_id: 'unit', owner_revision: 4, is_cover: true },
@@ -1003,6 +1010,8 @@ const mediaOwnerInputs = [
 ] as const satisfies readonly components['schemas']['MediaLinkCreate'][]
 const mediaHeaders = { ...authHeaders, 'If-Match': '"4"' } satisfies operations['post_media_id_links']['parameters']['header']
 const mediaTransportCalls = [
+  purchaseTransport.GET('/media'),
+  purchaseTransport.GET('/media', { params: { query: { limit: 50, cursor: 'opaque' } } }),
   purchaseTransport.GET('/media/{id}/view', { params: { path: { id: 'links' } } }),
   purchaseTransport.GET('/media/{id}/links', { params: { path: { id: 'media' }, query: { limit: 50 } } }),
   purchaseTransport.GET('/media/links', { params: { query: { owner_type: 'item', owner_id: 'item' } } }),
@@ -1064,7 +1073,7 @@ const partialMediaPage: components['schemas']['MediaLinkList'] = { data: [] }
 const missingMediaOwnerFilter: operations['get_media_links']['parameters']['query'] = { owner_type: 'item' }
 // @ts-expect-error A link patch cannot reassign its immutable Media.
 const reassignedMediaLink: components['schemas']['MediaLinkWrite'] = { media_id: 'other' }
-void [mediaPage, mediaOwnerInputs, mediaTransportCalls, missingExactMedia, missingExactMediaPage, unprovenExactMedia, unprovenExactMediaOwner, mixedExactMedia, mixedExactMediaAttach, missingMediaLinkIdentity, unprovenMediaLinkIdentity, mixedMediaLinkIdentity, bodylessMediaLinkIdentity, uploadedMedia, unverifiedUpload, unsupportedUpload, unknownMediaStatus, unprovenMediaOwner, ownerlessMediaLink, multipleMediaOwners,
+void [mediaPage, globalMediaPage, incompleteGlobalMediaPage, linkInGlobalMediaPage, filteredGlobalMediaPage, mediaOwnerInputs, mediaTransportCalls, missingExactMedia, missingExactMediaPage, unprovenExactMedia, unprovenExactMediaOwner, mixedExactMedia, mixedExactMediaAttach, missingMediaLinkIdentity, unprovenMediaLinkIdentity, mixedMediaLinkIdentity, bodylessMediaLinkIdentity, uploadedMedia, unverifiedUpload, unsupportedUpload, unknownMediaStatus, unprovenMediaOwner, ownerlessMediaLink, multipleMediaOwners,
   multipleRawMediaOwners, unprovenRawMediaOwner, unprovenMediaHeaders, embeddedMediaResource, partialMediaLink, incompleteMediaView, unsafeMediaView, partialMediaPage, missingMediaOwnerFilter, reassignedMediaLink]
 
 // Browser reads use explicit scope, return independent Media and link views and
