@@ -13,6 +13,8 @@ import (
 
 func mediaReadRoute(path string) (route, id string) {
 	switch path {
+	case "/api/v1/media":
+		return "global", ""
 	case "/api/v1/media-by-identity":
 		return "identity-resource", ""
 	case "/api/v1/media-by-identity/links":
@@ -56,6 +58,10 @@ func mediaLinkRoute(path string) (string, bool) {
 // unlinking change reviewed metadata only; uploads and file storage remain separate.
 func (a *authAPI) serveMediaReads(w http.ResponseWriter, r *http.Request, requestID string) bool {
 	route, id := mediaReadRoute(r.URL.Path)
+	// POST /media is the separately contracted upload, which is not implemented.
+	if route == "global" && r.Method == http.MethodPost {
+		return false
+	}
 	linkID, linkRoute := mediaLinkRoute(r.URL.Path)
 	if route == "" && (!linkRoute || r.Method == http.MethodGet) {
 		return false
@@ -146,6 +152,17 @@ func (a *authAPI) serveMediaReads(w http.ResponseWriter, r *http.Request, reques
 		return true
 	}
 	switch route {
+	case "global":
+		cursor, limit, ok := boundedMetadataQuery(w, r, requestID, 50, 16<<10)
+		if !ok {
+			return true
+		}
+		page, err := a.media.Page(r.Context(), token, cursor, limit)
+		if err != nil {
+			writeMediaError(w, err, requestID)
+		} else {
+			writeJSON(w, page)
+		}
 	case "resource", "identity-resource":
 		image, err := a.media.Get(r.Context(), token, id)
 		if err != nil {

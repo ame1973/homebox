@@ -176,6 +176,24 @@ func TestMediaHTTPThroughVerifiedTLSAndCookieJar(t *testing.T) {
 	if response.StatusCode != 200 || readErr != nil || closeErr != nil || len(client.Jar.Cookies(login.URL)) == 0 {
 		t.Fatal("verified-TLS login failed", response.StatusCode, readErr, closeErr)
 	}
+	globalRequest, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL+"/api/v1/media?limit=2", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	globalRequest.Header.Set("Origin", origin)
+	response, err = client.Do(globalRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	globalBody, readErr := io.ReadAll(response.Body)
+	closeErr = response.Body.Close()
+	var global store.MediaList
+	if response.StatusCode != 200 || readErr != nil || closeErr != nil || json.Unmarshal(globalBody, &global) != nil ||
+		len(global.Data) != 2 || global.Data[0].ID != "empty-media" || global.Data[1].ID != "links" || global.NextCursor == nil ||
+		response.Header.Get("ETag") != "" || response.Header.Get("Cache-Control") != "no-store" || response.Header.Get("X-Content-Type-Options") != "nosniff" ||
+		response.Header.Get("Strict-Transport-Security") == "" || response.Header.Get("Set-Cookie") != "" || strings.Contains(string(globalBody), "private-storage") {
+		t.Fatal("verified-TLS global Media discovery failed", response.StatusCode, readErr, closeErr)
+	}
 	for _, check := range []struct {
 		path, etag, id string
 		count          int

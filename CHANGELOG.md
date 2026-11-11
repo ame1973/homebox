@@ -4,6 +4,8 @@
 
 ### Added
 
+- Expose the global linked and unlinked Media metadata page through protected `GET /media`, with bounded live cursors, no collection ETag and completed-session revalidation after reading the request. Test real source and lookahead changes, reserved paths, strict query/body limits, fresh login and verified TLS. The separate upload and browser discovery picker remain unimplemented; no image bytes are read.
+
 - Add a private global Media source page, including unlinked records and exact retained identities. Validate actual independent counters and lookahead, bind live continuations to principal/epoch/page size, and withhold all results on late authorization or source failures. Real-SQLite race tests cover large pages, corrupted lookahead, cursor scope and completed-session changes. This does not yet expose an HTTP handler, picker or image files.
 
 - Define a protected live `GET /media` metadata index, including unlinked Media, with bounded pages and a principal/epoch/size-scoped signed cursor. Unverified historical claims do not authorize file access. Add executable contract and generated type checks; the handler, browser picker and image files are not implemented by this contract increment.

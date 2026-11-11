@@ -28,6 +28,7 @@ type mediaHTTPFixture struct {
 	unit                  store.Unit
 	location              store.Location
 	legacyOwner           string
+	databasePath          string
 }
 
 // Seed retained image and legacy link source offline because upload is not yet
@@ -73,9 +74,10 @@ func newMediaHTTPFixtureWithMedia(t *testing.T, specialMediaIDs []string, specia
 		return item
 	}
 	fixture := mediaHTTPFixture{
-		owner:   createItem("media-http-owner", "Media owner"),
-		sibling: createItem("media-http-sibling", "Other owner"),
-		empty:   createItem("media-http-empty", "Empty owner"),
+		owner:        createItem("media-http-owner", "Media owner"),
+		sibling:      createItem("media-http-sibling", "Other owner"),
+		empty:        createItem("media-http-empty", "Empty owner"),
+		databasePath: path,
 	}
 	inventory, err := store.NewInventory(auth)
 	if err != nil {
