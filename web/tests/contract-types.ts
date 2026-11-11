@@ -1080,6 +1080,7 @@ void [mediaPage, globalMediaPage, incompleteGlobalMediaPage, linkInGlobalMediaPa
 // never invent a client-side owner or allow upload/write arguments.
 declare const mediaAPI: typeof import('../src/lib/api/media')
 const mediaRead: Promise<components['schemas']['Media']> = mediaAPI.fetchMedia('links', new AbortController().signal)
+const globalMediaRead: Promise<components['schemas']['MediaList']> = mediaAPI.fetchMediaPage({ limit: 50, cursor: 'opaque' }, new AbortController().signal)
 const mediaLinksRead: Promise<components['schemas']['MediaLinkList']> = mediaAPI.fetchMediaLinksPage('media', { limit: 50 }, new AbortController().signal)
 const ownerLinksRead: Promise<components['schemas']['MediaLinkList']> = mediaAPI.fetchOwnerMediaLinksPage('unit', 'unit-id', {}, new AbortController().signal)
 // @ts-expect-error Purchase is not a supported MediaLink owner kind.
@@ -1088,9 +1089,13 @@ const unsupportedMediaOwner = mediaAPI.fetchOwnerMediaLinksPage('purchase', 'pur
 const overriddenMediaOwner = mediaAPI.fetchOwnerMediaLinksPage('item', 'item-id', { owner_id: 'other' }, new AbortController().signal)
 // @ts-expect-error Reads need an explicit caller-owned cancellation signal.
 const uncancellableMediaRead = mediaAPI.fetchMedia('media')
+// @ts-expect-error Global discovery has no owner or Media membership filter.
+const filteredMediaDiscovery = mediaAPI.fetchMediaPage({ owner_id: 'other' }, new AbortController().signal)
+// @ts-expect-error Discovery reads need an explicit caller-owned cancellation signal.
+const uncancellableMediaDiscovery = mediaAPI.fetchMediaPage({})
 // @ts-expect-error A link row has no embedded Media covered by its ETag.
 const embeddedMediaRow = mediaLink.media
-void [mediaRead, mediaLinksRead, ownerLinksRead, unsupportedMediaOwner, overriddenMediaOwner, uncancellableMediaRead, embeddedMediaRow]
+void [mediaRead, globalMediaRead, mediaLinksRead, ownerLinksRead, unsupportedMediaOwner, overriddenMediaOwner, uncancellableMediaRead, filteredMediaDiscovery, uncancellableMediaDiscovery, embeddedMediaRow]
 
 // Media writes retain complete reviewed source; callers cannot replace those
 // proofs with unrelated loose counters or change a link's immutable owner.

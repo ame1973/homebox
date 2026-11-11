@@ -147,6 +147,108 @@ test('reads genuine scoped Media pages and observes owner deletion without inven
   expect(after.links.data).toMatchObject([{ id: 'sibling', revision: 5, owner_id: sibling, media: { id: 'photo', revision: 8 } }])
 })
 
+test.describe('global Media discovery SDK', () => {
+  const ids = ['\0Media\r\n', '.', '..', 'legacy/photo', 'legacy\\photo', '☕😀', '😀'.repeat(128),
+    ...Array.from({ length: 205 }, (_, index) => `global-${String(index).padStart(3, '0')}`)]
+  test.use({ applicationDatabaseFixture: { prepare(database) { prepareMediaFixture(database, 2, false, false, [], { ids }) } } })
+
+  test('discovers linked and unlinked actual Media with scoped live pages and a fresh session', async ({ page, application }) => {
+    const password = await provision(page, application)
+    const mediaRequests: { method: string; path: string }[] = []
+    page.on('request', (request) => {
+      const path = new URL(request.url()).pathname
+      if (path.startsWith('/api/v1/media')) mediaRequests.push({ method: request.method(), path })
+    })
+    await page.goto('/')
+    const result = await page.evaluate(async () => {
+      const modulePath = '/assets/media-sdk.js', api = await import(modulePath), signal = () => new AbortController().signal
+      const first = await api.fetchMediaPage({ limit: 100 }, signal())
+      const second = await api.fetchMediaPage({ limit: 100, cursor: first.next_cursor }, signal())
+      const third = await api.fetchMediaPage({ limit: 100, cursor: second.next_cursor }, signal())
+      const small = await api.fetchMediaPage({ limit: 1 }, signal())
+      const membership = await api.fetchMediaLinksPage('photo', { limit: 1 }, signal())
+      const failure = async (work: () => Promise<unknown>) => {
+        try { await work(); return null } catch (error) { return error instanceof Error && 'code' in error ? error.code : 'unexpected' }
+      }
+      return { first, second, third, small, wrongSize: await failure(() => api.fetchMediaPage({ limit: 2, cursor: small.next_cursor }, signal())),
+        foreignCursor: await failure(() => api.fetchMediaPage({ limit: 1, cursor: membership.next_cursor }, signal())),
+        reverseCursor: await failure(() => api.fetchMediaLinksPage('photo', { limit: 1, cursor: small.next_cursor }, signal())) }
+    })
+    expect(result.first.data).toHaveLength(100); expect(result.second.data).toHaveLength(100)
+    expect(result.third.data).toHaveLength(ids.length + 2 - 200); expect(result.third.next_cursor).toBeNull()
+    const discovered = [...result.first.data, ...result.second.data, ...result.third.data]
+    expect(new Set(discovered.map((value: { id: string }) => value.id)).size).toBe(ids.length + 2)
+    expect(discovered.map((value: { id: string }) => value.id)).toEqual(expect.arrayContaining([...ids, 'photo', 'links']))
+    expect(discovered.find((value: { id: string }) => value.id === 'photo')).toMatchObject({ revision: 7, mime_type: 'image/heic', verification: 'unverified', thumb_url: null, thumb_sha256: null })
+    expect(discovered.find((value: { id: string }) => value.id === ids[0])).toMatchObject({ revision: 1, verification: 'unverified' })
+    expect(result.small.data[0].id).toBe(ids[0])
+    expect(result.wrongSize).toBe('INVALID_CURSOR'); expect(result.foreignCursor).toBe('INVALID_CURSOR'); expect(result.reverseCursor).toBe('INVALID_CURSOR')
+    expect(JSON.stringify(discovered)).not.toContain('private-')
+
+    const headers = await writeContext(page, application.url)
+    expect((await page.request.post('/api/v1/auth/logout', { headers })).status()).toBe(200)
+    expect((await page.request.post('/api/v1/auth/login', { headers: { Origin: application.url }, data: { username: 'owner', password } })).status()).toBe(200)
+    const afterLogin = await page.evaluate(async (cursor) => {
+      const modulePath = '/assets/media-sdk.js', api = await import(modulePath)
+      return api.fetchMediaPage({ limit: 1, cursor }, new AbortController().signal)
+    }, result.small.next_cursor)
+    expect(afterLogin.data[0].id).toBe('.')
+    expect(mediaRequests.every(({ method, path }) => method === 'GET' && !path.endsWith('/content') && !path.endsWith('/thumbnail'))).toBe(true)
+  })
+
+  test('returns an offline failure without scheduling a reconnect read', async ({ page, application, context }) => {
+    await provision(page, application); await page.goto('/')
+    await page.evaluate(async () => { const modulePath = '/assets/media-sdk.js'; await import(modulePath) })
+    const requests: string[] = []
+    page.on('request', (request) => {
+      if (new URL(request.url()).pathname === '/api/v1/media') requests.push(request.method())
+    })
+    await context.setOffline(true)
+    const code = await page.evaluate(async () => {
+      const modulePath = '/assets/media-sdk.js', api = await import(modulePath)
+      try { await api.fetchMediaPage({}, new AbortController().signal); return 'unexpected' }
+      catch (error) { return error instanceof Error && 'code' in error ? error.code : 'unexpected' }
+    })
+    expect(code).toBe('NETWORK_ERROR'); expect(requests).toEqual(['GET'])
+    await context.setOffline(false)
+    await page.evaluate(() => window.dispatchEvent(new Event('online')))
+    expect(requests).toEqual(['GET'])
+    const current = await page.evaluate(async () => {
+      const modulePath = '/assets/media-sdk.js', api = await import(modulePath)
+      return api.fetchMediaPage({}, new AbortController().signal)
+    })
+    expect(current.data).toHaveLength(50); expect(requests).toEqual(['GET', 'GET'])
+  })
+
+  test('withholds a corrupted real page and never retries a read automatically', async ({ page, application }) => {
+    await provision(page, application)
+    let reads = 0, tamper = true
+    await page.route((url) => url.pathname === '/api/v1/media', async (route) => {
+      reads++
+      const response = await route.fetch()
+      if (!tamper) { await route.fulfill({ response }); return }
+      tamper = false
+      const body = await response.json()
+      body.data[1].id = body.data[0].id
+      await route.fulfill({ response, body: JSON.stringify(body) })
+    })
+    await page.goto('/')
+    const code = await page.evaluate(async () => {
+      const modulePath = '/assets/media-sdk.js', api = await import(modulePath)
+      try { await api.fetchMediaPage({ limit: 2 }, new AbortController().signal); return 'unexpected' }
+      catch (error) { return error instanceof Error && 'code' in error ? error.code : 'unexpected' }
+    })
+    expect(code).toBe('INVALID_RESPONSE'); expect(reads).toBe(1)
+    await page.evaluate(() => window.dispatchEvent(new Event('online')))
+    expect(reads).toBe(1)
+    const current = await page.evaluate(async () => {
+      const modulePath = '/assets/media-sdk.js', api = await import(modulePath)
+      return api.fetchMediaPage({ limit: 2 }, new AbortController().signal)
+    })
+    expect(current.data).toHaveLength(2); expect(current.next_cursor).toBeTruthy(); expect(reads).toBe(2)
+  })
+})
+
 test('attaches the reserved Media through same-origin browser requests and reconciles the original key', async ({ page, application }) => {
   await provision(page, application)
   await page.goto('/')

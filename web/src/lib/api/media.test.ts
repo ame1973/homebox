@@ -20,6 +20,7 @@ describe('protected stateless Media reads', () => {
     { name: 'metadata', path: '/media/photo', value: image, etag: '"7"', invoke: (api) => api.fetchMedia('photo', signal()) },
     { name: 'reserved metadata', path: '/media/links/view', value: { ...image, id: 'links' }, etag: '"7"', invoke: (api) => api.fetchMedia('links', signal()) },
     { name: 'exact metadata', path: '/media-by-identity?id=legacy%2Fphoto', value: { ...image, id: 'legacy/photo' }, etag: '"7"', invoke: (api) => api.fetchMedia('legacy/photo', signal()) },
+    { name: 'global discovery', path: '/media', value: { data: [image], next_cursor: null }, invoke: (api) => api.fetchMediaPage({}, signal()) },
     { name: 'Media membership', path: '/media/photo/links', value: page, invoke: (api) => api.fetchMediaLinksPage('photo', {}, signal()) },
     { name: 'exact Media membership', path: '/media-by-identity/links?id=legacy%2Fphoto', value: { data: [], next_cursor: null }, invoke: (api) => api.fetchMediaLinksPage('legacy/photo', {}, signal()) },
     { name: 'owner membership', path: '/media/links?owner_type=item&owner_id=item-1', value: page, invoke: (api) => api.fetchOwnerMediaLinksPage('item', 'item-1', {}, signal()) },
@@ -118,6 +119,7 @@ describe('protected stateless Media reads', () => {
     const api = await import('./media')
     for (const read of [
       (abort: AbortSignal) => api.fetchMedia('photo', abort),
+      (abort: AbortSignal) => api.fetchMediaPage({}, abort),
       (abort: AbortSignal) => api.fetchMediaLinksPage('photo', {}, abort),
       (abort: AbortSignal) => api.fetchOwnerMediaLinksPage('item', 'item-1', {}, abort),
     ]) {
@@ -132,7 +134,7 @@ describe('protected stateless Media reads', () => {
       later.abort()
       await pending
     }
-    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(fetchMock).toHaveBeenCalledTimes(4)
   })
 
   it('retains no credential, replica, cache or draft storage', async () => {
@@ -141,8 +143,9 @@ describe('protected stateless Media reads', () => {
     const database = vi.fn(), cache = vi.fn()
     vi.stubGlobal('indexedDB', { open: database }); vi.stubGlobal('caches', { open: cache })
     const api = await import('./media')
-    fetchMock.mockResolvedValue(reply(image, '"7"'))
+    fetchMock.mockResolvedValueOnce(reply(image, '"7"')).mockResolvedValueOnce(reply({ data: [image], next_cursor: null }))
     await api.fetchMedia('photo', signal())
+    await api.fetchMediaPage({}, signal())
     for (const spy of [...spies, database, cache]) expect(spy).not.toHaveBeenCalled()
   })
 })
@@ -231,6 +234,52 @@ describe('Media response and owner isolation', () => {
     expect(await api.fetchMediaLinksPage('photo', { limit: 1 }, signal())).toEqual({ data: [link], next_cursor: 'next' })
   })
 
+  it('keeps a global page query exact and returns bounded retained identities', async () => {
+    const api = await import('./media')
+    const cursor = '😀'.repeat(512), records = [image, { ...image, id: 'legacy/\\\0😀\r\n' }, { ...image, id: '..' }]
+    fetchMock.mockResolvedValueOnce(reply({ data: records, next_cursor: null }))
+    expect(await api.fetchMediaPage({ limit: 3, cursor }, signal())).toEqual({ data: records, next_cursor: null })
+    const url = new URL(request().url)
+    expect(url.pathname).toBe('/api/v1/media')
+    expect(url.searchParams.getAll('limit')).toEqual(['3'])
+    expect(url.searchParams.getAll('cursor')).toEqual([cursor])
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects malformed global queries before sending a request', async () => {
+    const api = await import('./media')
+    for (const query of [{ limit: 0 }, { limit: 101 }, { limit: 1.5 }, { cursor: '' }, { cursor: '😀'.repeat(512) + 'x' }, { cursor: '\uD800' }, { owner_id: 'other' }]) {
+      await expect(api.fetchMediaPage(query as never, signal())).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
+    }
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('withholds invalid global pages and never treats metadata as a file proof', async () => {
+    const api = await import('./media')
+    const invalid = [
+      {}, { data: [] }, { data: [image], next_cursor: '' }, { data: [image], next_cursor: '😀'.repeat(512) + 'x' },
+      { data: [image], next_cursor: 'nonterminal' }, { data: [image, image], next_cursor: null },
+      { data: [image, { ...image, revision: 8 }], next_cursor: null }, { data: [{ ...image, storage_key: 'private' }], next_cursor: null },
+      { data: [{ ...image, raw_ocr: 'unreviewed' }], next_cursor: null }, { data: [{ ...image, sha256: 'not-a-digest' }], next_cursor: null },
+      { data: [{ ...image, thumb_url: '/api/v1/media/photo/thumbnail', thumb_sha256: digest }], next_cursor: null },
+      { data: Array.from({ length: 101 }, (_, id) => ({ ...image, id: String(id) })), next_cursor: null },
+    ]
+    for (const value of invalid) {
+      fetchMock.mockResolvedValueOnce(reply(value))
+      await expect(api.fetchMediaPage({}, signal())).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+    }
+    fetchMock.mockResolvedValueOnce(reply({ data: [image], next_cursor: null }, '"7"'))
+    await expect(api.fetchMediaPage({}, signal())).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+    fetchMock.mockResolvedValueOnce(reply({ data: [image, { ...image, id: 'other' }], next_cursor: null }))
+    await expect(api.fetchMediaPage({ limit: 1 }, signal())).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+    fetchMock.mockResolvedValueOnce(reply({ data: [image], next_cursor: 'same' }))
+    await expect(api.fetchMediaPage({ limit: 1, cursor: 'same' }, signal())).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+    fetchMock.mockResolvedValueOnce(reply({ data: [image], next_cursor: 'next' }))
+    expect(await api.fetchMediaPage({ limit: 1 }, signal())).toEqual({ data: [image], next_cursor: 'next' })
+    fetchMock.mockResolvedValueOnce(reply({ data: [], next_cursor: null }))
+    expect(await api.fetchMediaPage({}, signal())).toEqual({ data: [], next_cursor: null })
+  })
+
   it('preserves only allowlisted safe Media errors', async () => {
     const api = await import('./media')
     for (const code of ['INVALID_MEDIA_URL', 'INVALID_CURSOR', 'NOT_FOUND', 'AUTHENTICATION_REQUIRED']) {
@@ -239,6 +288,11 @@ describe('Media response and owner isolation', () => {
       expect(error).toMatchObject({ code, status: 400, requestId: 'safe-id' })
       expect(JSON.stringify(error)).not.toContain('secret')
       expect(JSON.stringify(error)).not.toContain('private storage path')
+      fetchMock.mockResolvedValueOnce(reply({ error: { code, message: 'private storage path', details: { token: 'secret' }, request_id: 'safe-id' } }, undefined, 400))
+      const discoveryError = await api.fetchMediaPage({}, signal()).catch((failure: unknown) => failure)
+      expect(discoveryError).toMatchObject({ code, status: 400, requestId: 'safe-id' })
+      expect(JSON.stringify(discoveryError)).not.toContain('secret')
+      expect(JSON.stringify(discoveryError)).not.toContain('private storage path')
     }
   })
 })

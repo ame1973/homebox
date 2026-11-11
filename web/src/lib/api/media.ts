@@ -6,11 +6,12 @@ import { ownedQuerySchema, validLivePage } from './purchases'
 import type { components, operations } from './schema'
 
 export type Media = components['schemas']['Media']
+export type MediaPage = components['schemas']['MediaList']
 export type MediaLink = components['schemas']['MediaLink']
 export type MediaLinkView = components['schemas']['MediaLinkView']
 export type MediaLinkPage = components['schemas']['MediaLinkList']
 export type MediaOwnerType = MediaLink['owner_type']
-export type MediaPageQuery = NonNullable<operations['get_media_id_links']['parameters']['query']>
+export type MediaPageQuery = NonNullable<operations['get_media']['parameters']['query']>
 type OwnerQuery = NonNullable<operations['get_media_links']['parameters']['query']>
 type MediaIdentityPageQuery = operations['get_media_membership_by_identity']['parameters']['query']
 
@@ -34,6 +35,9 @@ export const mediaSchema: z.ZodType<Media> = z.strictObject({
   if (!['image/jpeg', 'image/png', 'image/webp'].includes(media.mime_type)) return false
   return media.thumb_url === null ? media.thumb_sha256 === null : media.thumb_sha256 !== null && matchesThumbnail(media.id, media.thumb_url)
 })
+
+const globalPageSchema: z.ZodType<MediaPage> = z.strictObject({ data: z.array(mediaSchema).max(100), next_cursor: cursorSchema().nullable() })
+  .refine((page) => new Set(page.data.map((media) => media.id)).size === page.data.length)
 
 const ownerTypeSchema = z.enum(['item', 'unit', 'location'])
 const linkFields = { id: idSchema, revision: revisionSchema, media_id: idSchema, owner_type: ownerTypeSchema, owner_id: idSchema,
@@ -67,6 +71,13 @@ export async function fetchMedia(id: string, signal: AbortSignal): Promise<Media
     : resourceID === 'links'
       ? apiClient.GET('/media/{id}/view', { signal, params: { path: { id: resourceID } } })
       : apiClient.GET('/media/{id}', { signal, params: { path: { id: resourceID } } }), { id: resourceID }, 8_000)
+}
+
+// Discovery is a single live metadata page, not a membership or file proof.
+export async function fetchMediaPage(query: MediaPageQuery, signal: AbortSignal): Promise<MediaPage> {
+  const values = input(ownedQuerySchema, query)
+  return requestData(signal, (signal) => apiClient.GET('/media', { signal, params: { query: values } }), globalPageSchema, 8_000,
+    (page, response) => validLivePage(page, response, values))
 }
 
 export async function fetchMediaLinksPage(mediaID: string, query: MediaPageQuery, signal: AbortSignal): Promise<MediaLinkPage> {

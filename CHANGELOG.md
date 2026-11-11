@@ -4,6 +4,8 @@
 
 ### Added
 
+- Add a stateless browser adapter for one global linked or unlinked Media metadata page. Validate exact identities, duplicate rows, nullable cursors, page bounds and absent collection ETags without hidden pagination, storage or retry. Actual-Go browser tests cover signed pages, fresh login, offline recovery and altered replies. The picker and image files remain separate work; discovery is not membership or file-integrity proof.
+
 - Expose the global linked and unlinked Media metadata page through protected `GET /media`, with bounded live cursors, no collection ETag and completed-session revalidation after reading the request. Test real source and lookahead changes, reserved paths, strict query/body limits, fresh login and verified TLS. The separate upload and browser discovery picker remain unimplemented; no image bytes are read.
 
 - Add a private global Media source page, including unlinked records and exact retained identities. Validate actual independent counters and lookahead, bind live continuations to principal/epoch/page size, and withhold all results on late authorization or source failures. Real-SQLite race tests cover large pages, corrupted lookahead, cursor scope and completed-session changes. This does not yet expose an HTTP handler, picker or image files.
