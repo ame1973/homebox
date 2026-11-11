@@ -55,6 +55,25 @@ var decodeSlot = make(chan struct{}, 1)
 // entire output if an error occurs. A successful result alone does not publish
 // or prove the later integrity of a stored file.
 func Sanitize(ctx context.Context, raw []byte, declaredMIME string, dst io.Writer, limits Limits) (Result, error) {
+	return sanitizeImage(ctx, raw, declaredMIME, dst, limits, nil, nil)
+}
+
+// SanitizeWithThumbnail also writes a bounded JPEG derived from the same fully
+// validated and oriented pixels. Transparent pixels are composited onto white.
+// The destinations must be distinct; discard both outputs if any error occurs.
+func SanitizeWithThumbnail(ctx context.Context, raw []byte, declaredMIME string, dst, thumbnail io.Writer, limits Limits) (Result, Result, error) {
+	if thumbnail == nil {
+		return Result{}, Result{}, ErrInvalid
+	}
+	var preview Result
+	original, err := sanitizeImage(ctx, raw, declaredMIME, dst, limits, thumbnail, &preview)
+	if err != nil {
+		return Result{}, Result{}, err
+	}
+	return original, preview, nil
+}
+
+func sanitizeImage(ctx context.Context, raw []byte, declaredMIME string, dst io.Writer, limits Limits, thumbnail io.Writer, preview *Result) (Result, error) {
 	if ctx == nil || dst == nil {
 		return Result{}, ErrInvalid
 	}
@@ -157,6 +176,12 @@ func Sanitize(ctx context.Context, raw []byte, declaredMIME string, dst io.Write
 	}
 	result := Result{MIMEType: kind, Width: decoded.Bounds().Dx(), Height: decoded.Bounds().Dy(), Bytes: out.count}
 	copy(result.SHA256[:], hash.Sum(nil))
+	if thumbnail != nil {
+		*preview, err = writeThumbnail(ctx, decoded, thumbnail)
+		if err != nil {
+			return Result{}, err
+		}
+	}
 	return result, nil
 }
 
