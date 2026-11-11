@@ -480,6 +480,20 @@ test.describe('retained Media owner identities', () => {
     await expect(page.getByText(`${messages.media.total}1`)).toBeVisible()
   })
 
+  test('edits an addressable link of a path-unaddressable Unit using its independent proof', async ({ page, application }) => {
+    await provision(page, application)
+    const unitID = 'legacy/unit\0😀', writes = watchDomainWrites(page, ['/api/v1/media'])
+    await page.goto(`/photos?owner_type=unit&owner_id=${encodeURIComponent(unitID)}`)
+    await page.getByRole('link', { name: `${messages.media.edit} ${JSON.stringify('legacy-unit-link')}` }).click()
+    await expect(page.getByRole('heading', { name: 'LEGACY-ASSET' })).toBeVisible()
+    await page.getByRole('textbox', { name: messages.media.description }).fill('Retained unit caption')
+    await page.getByRole('button', { name: messages.media.reviewEdit }).click()
+    await page.getByRole('alertdialog').getByRole('button', { name: messages.media.confirmEdit }).click()
+    await expect(page.getByText(messages.mutations.done, { exact: true })).toBeVisible()
+    expect(writes).toHaveLength(1); expect(writes[0]).toMatchObject({ method: 'PATCH', path: '/api/v1/media/links/legacy-unit-link', proof: '"1"', body: JSON.stringify({ description: 'Retained unit caption' }) })
+    await expect(page.getByText('"Retained unit caption"', { exact: true })).toBeVisible()
+  })
+
   test('resolves real path-unaddressable Item and Unit plus reserved Location owners from actual source', async ({ page, application }) => {
     await provision(page, application)
     const requests: string[] = [], unitIDs: string[] = []
@@ -602,6 +616,126 @@ test('shows actual Item links and unlinks one shared image through foreground re
   expect(streams).toEqual([])
 })
 
+test('edits only selected link metadata after foreground review and retains legacy order', async ({ page, application }, info) => {
+  await provision(page, application)
+  const writes = watchDomainWrites(page, ['/api/v1/media']), streams: string[] = []
+  page.on('request', (request) => { if (request.method() === 'GET' && /\/api\/v1\/media\/[^/]+\/(?:content|thumbnail)$/.test(new URL(request.url()).pathname)) streams.push(request.url()) })
+  await page.goto(`/photos?owner_type=item&owner_id=${sibling}`)
+  await page.getByRole('link', { name: `${messages.media.edit} ${JSON.stringify('sibling')}` }).click()
+  await expect(page).toHaveURL(new RegExp(`/photos/edit\\?owner_type=item&owner_id=${sibling}&link_id=sibling$`))
+  await expect(page.getByRole('heading', { name: messages.media.editTitle })).toBeVisible()
+  await expect(page.getByRole('textbox', { name: messages.media.order })).toHaveValue('-3')
+  await expect(page.getByRole('checkbox', { name: messages.media.cover })).toBeChecked()
+  if (info.project.name === 'small-phone') await page.addStyleTag({ content: 'html { font-size: 200% }' })
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme })
+    await expect(page.locator('html')).toHaveAttribute('data-theme', colorScheme)
+    expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze()).violations).toEqual([])
+    await noOverflow(page)
+    if (info.project.name === 'small-phone') {
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= 320)).toBe(true)
+      expect(await page.getByText(messages.media.orderHelp, { exact: true }).evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
+    }
+    expect(await page.getByRole('button', { name: messages.media.reviewEdit }).evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
+    if (info.project.name === 'small-phone' || info.project.name === 'desktop') await page.screenshot({ path: info.outputPath(`media-edit-${colorScheme}.png`), fullPage: true })
+  }
+  await page.getByRole('textbox', { name: messages.media.description }).clear()
+  await page.getByRole('button', { name: messages.media.reviewEdit }).click()
+  const dialog = page.getByRole('alertdialog')
+  await expect(dialog.getByRole('heading', { name: messages.media.editReviewTitle })).toBeFocused()
+  await expect(dialog).toContainText(messages.media.previous); await expect(dialog).toContainText(messages.media.proposed)
+  expect(writes).toHaveLength(0)
+  expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze()).violations).toEqual([])
+  await noOverflow(page)
+  if (info.project.name === 'small-phone') expect(await page.evaluate(() => document.documentElement.scrollWidth <= 320)).toBe(true)
+  expect(await dialog.getByRole('button', { name: messages.media.confirmEdit }).evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
+  await dialog.getByRole('button', { name: messages.media.confirmEdit }).click()
+  await expect(page).toHaveURL(new RegExp(`/photos\\?owner_type=item&owner_id=${sibling}$`))
+  await expect(page.getByText(messages.mutations.done, { exact: true })).toBeVisible()
+  expect(writes).toHaveLength(1); expect(writes[0]).toMatchObject({ method: 'PATCH', path: '/api/v1/media/links/sibling', proof: '"5"', body: JSON.stringify({ description: '' }) })
+  const links = await (await page.request.get(`/api/v1/media/links?owner_type=item&owner_id=${sibling}`)).json()
+  expect(links.data).toContainEqual(expect.objectContaining({ id: 'sibling', revision: 6, is_cover: true, sort_order: -3, description: '' }))
+  expect(links.data).toContainEqual(expect.objectContaining({ id: 'reserved', is_cover: true }))
+  expect(streams).toEqual([])
+})
+
+test('does not rewrite untouched retained control characters when changing only order', async ({ page, application }) => {
+  await provision(page, application)
+  const writes = watchDomainWrites(page, ['/api/v1/media'])
+  await page.goto(`/photos/edit?owner_type=item&owner_id=${sibling}&link_id=sibling`)
+  await expect(page.getByRole('textbox', { name: messages.media.description })).toHaveValue('\0Exact é\n')
+  await page.getByRole('textbox', { name: messages.media.order }).fill('0')
+  await page.getByRole('button', { name: messages.media.reviewEdit }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: messages.media.confirmEdit }).click()
+  await expect(page.getByText(messages.mutations.done, { exact: true })).toBeVisible()
+  expect(writes).toHaveLength(1); expect(writes[0]).toMatchObject({ proof: '"5"', body: JSON.stringify({ sort_order: 0 }) })
+  const links = await (await page.request.get(`/api/v1/media/links?owner_type=item&owner_id=${sibling}`)).json()
+  expect(links.data).toContainEqual(expect.objectContaining({ id: 'sibling', sort_order: 0, description: '\0Exact é\n' }))
+})
+
+test('requires explicit adoption after a real concurrent edit and preserves invalid raw text', async ({ page, application }) => {
+  await provision(page, application)
+  const writes = watchDomainWrites(page, ['/api/v1/media'])
+  await page.goto(`/photos/edit?owner_type=item&owner_id=${sibling}&link_id=sibling`)
+  const order = page.getByRole('textbox', { name: messages.media.order }), description = page.getByRole('textbox', { name: messages.media.description })
+  await order.fill('0'); await description.fill('Local é\n')
+  await page.getByRole('button', { name: messages.media.reviewEdit }).click()
+  const changed = await page.request.patch('/api/v1/media/links/sibling', { headers: await writeContext(page, application.url, 5), data: { is_cover: false, sort_order: 6, description: 'Concurrent' } })
+  expect(changed.status()).toBe(200)
+  const dialog = page.getByRole('alertdialog')
+  await dialog.getByRole('button', { name: messages.media.confirmEdit }).click()
+  await expect(dialog.getByText(messages.locations.conflict)).toBeVisible()
+  await expect(dialog.getByText(messages.media.reviewStale)).toBeVisible()
+  await expect(dialog.getByRole('button', { name: messages.media.confirmEdit })).toBeDisabled()
+  await dialog.getByRole('button', { name: messages.mutations.cancel }).click()
+  await expect(page.getByText(messages.media.changed, { exact: true })).toBeVisible()
+  await order.fill('01')
+  await page.getByRole('button', { name: messages.media.keepEdits }).click()
+  await expect(order).toHaveValue('01'); await expect(description).toHaveValue('Local é\n')
+  await expect(page.getByRole('checkbox', { name: messages.media.cover })).not.toBeChecked()
+  await page.getByRole('button', { name: messages.media.reviewEdit }).click()
+  await expect(page.getByText(messages.media.orderError, { exact: true })).toBeVisible()
+  await order.fill('0')
+  await page.getByRole('button', { name: messages.media.reviewEdit }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: messages.media.confirmEdit }).click()
+  await expect(page.getByText(messages.mutations.done, { exact: true })).toBeVisible()
+  expect(writes.map((write) => ({ proof: write.proof, body: JSON.parse(write.body!) }))).toEqual([
+    { proof: '"5"', body: { sort_order: 0, description: 'Local é\n' } },
+    { proof: '"6"', body: { sort_order: 0, description: 'Local é\n' } },
+  ])
+  expect(writes[0]?.key).not.toBe(writes[1]?.key)
+})
+
+test('reconciles a committed edit with the original key after the actual owner disappears', async ({ page, application }) => {
+  await provision(page, application)
+  let patches = 0, committedStatus = 0
+  const keys: (string | undefined)[] = [], proofs: (string | undefined)[] = [], bodies: unknown[] = []
+  await page.route((url) => url.pathname === '/api/v1/media/links/sibling', async (route) => {
+    if (route.request().method() !== 'PATCH') { await route.continue(); return }
+    patches++; keys.push(route.request().headers()['idempotency-key']); proofs.push(route.request().headers()['if-match']); bodies.push(route.request().postDataJSON())
+    if (patches !== 1) { await route.continue(); return }
+    committedStatus = (await route.fetch()).status(); await route.abort('failed')
+  })
+  await page.goto(`/photos/edit?owner_type=item&owner_id=${sibling}&link_id=sibling`)
+  await page.getByRole('textbox', { name: messages.media.description }).clear()
+  await page.getByRole('button', { name: messages.media.reviewEdit }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: messages.media.confirmEdit }).click()
+  await expect(page.getByRole('heading', { name: messages.mutations.uncertain })).toBeVisible()
+  expect(committedStatus).toBe(200); expect(patches).toBe(1)
+  const deletion = await page.request.delete(`/api/v1/items/${sibling}`, { headers: await writeContext(page, application.url, 2) })
+  expect(deletion.status()).toBe(200)
+  await page.getByRole('alertdialog').getByRole('button', { name: messages.mutations.readCurrent }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: messages.mutations.cancel }).click()
+  await expect(page.getByText(messages.media.missing, { exact: true })).toBeVisible()
+  await expect(page.getByRole('textbox', { name: messages.media.description })).toBeDisabled()
+  await page.evaluate(() => window.dispatchEvent(new Event('online')))
+  expect(patches).toBe(1)
+  await page.getByRole('button', { name: messages.mutations.openOriginal }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: messages.mutations.retryOriginal }).click()
+  await expect(page.getByText(messages.mutations.done, { exact: true })).toBeVisible()
+  expect(patches).toBe(2); expect(keys[0]).toBeTruthy(); expect(keys[1]).toBe(keys[0]); expect(proofs).toEqual(['"5"', '"5"']); expect(bodies).toEqual([{ description: '' }, { description: '' }])
+})
+
 test('keeps an uncertain unlink after the actual owner disappears and explicitly retries the original key', async ({ page, application }) => {
   await provision(page, application)
   let deletes = 0, committedStatus = 0
@@ -719,6 +853,42 @@ test('returns through login with only the exact Media owner scope and safe catal
   await page.getByRole('link', { name: messages.media.backItem }).click()
   await page.getByRole('link', { name: messages.catalog.back, exact: true }).click()
   await expect(page).toHaveURL(/\/items\?status=active$/)
+})
+
+test('returns through login to the exact selected Media link without carrying a draft', async ({ page, application }) => {
+  const password = await provision(page, application)
+  await page.goto('/items?status=active')
+  await page.getByRole('link', { name: new RegExp(sibling) }).click()
+  await page.getByRole('link', { name: messages.media.nav, exact: true }).click()
+  await page.getByRole('link', { name: `${messages.media.edit} ${JSON.stringify('sibling')}` }).click()
+  await expect(page.getByRole('textbox', { name: messages.media.order })).toHaveValue('-3')
+  await page.context().clearCookies(); await page.reload()
+  await expect(page.getByRole('heading', { name: messages.auth.loginHeading })).toBeVisible()
+  await page.getByLabel(new RegExp(`^${messages.auth.username}`)).fill('owner')
+  await page.getByLabel(new RegExp(`^${messages.auth.password}`)).fill(password)
+  await page.getByRole('button', { name: messages.auth.login, exact: true }).click()
+  await expect(page).toHaveURL(new RegExp(`/photos/edit\\?owner_type=item&owner_id=${sibling}&link_id=sibling$`))
+  await expect(page.getByRole('textbox', { name: messages.media.order })).toHaveValue('-3')
+  await page.getByRole('link', { name: messages.media.backLinks }).click()
+  await page.getByRole('link', { name: messages.media.backItem }).click()
+  await page.getByRole('link', { name: messages.catalog.back, exact: true }).click()
+  await expect(page).toHaveURL(/\/items\?status=active$/)
+})
+
+test('preserves an offline Media edit without submitting it on reconnect', async ({ page, application }) => {
+  await provision(page, application)
+  const writes = watchDomainWrites(page, ['/api/v1/media'])
+  await page.goto(`/photos/edit?owner_type=item&owner_id=${sibling}&link_id=sibling`)
+  const description = page.getByRole('textbox', { name: messages.media.description }), review = page.getByRole('button', { name: messages.media.reviewEdit })
+  await description.fill('Offline draft')
+  try {
+    await page.context().setOffline(true)
+    await expect(page.getByText(messages.media.offline, { exact: true })).toBeVisible()
+    await expect(description).toHaveValue('Offline draft'); await expect(review).toBeDisabled()
+    await page.context().setOffline(false)
+    await expect(review).toBeEnabled()
+    expect(writes).toHaveLength(0)
+  } finally { await page.context().setOffline(false) }
 })
 
 test('preserves legacy order and raw edits during explicit adoption against real Media source', async ({ page, application }) => {

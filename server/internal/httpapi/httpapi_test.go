@@ -57,7 +57,7 @@ func TestLivenessIsMinimalPublicAndNetworkOnly(t *testing.T) {
 
 func TestSPADeepLinksNeverBecomeDirectoryListings(t *testing.T) {
 	handler := fixture(t)
-	for _, target := range []string{"/", "/settings/system", "/settings/system/", "/settings/backup", "/l/location-id", "/u/unit-id", "/items/item-id", "/assets", "/assets/", "/photos?owner_type=item&owner_id=example"} {
+	for _, target := range []string{"/", "/settings/system", "/settings/system/", "/settings/backup", "/l/location-id", "/u/unit-id", "/items/item-id", "/assets", "/assets/", "/photos?owner_type=item&owner_id=example", "/photos/edit?owner_type=item&owner_id=example&link_id=photo"} {
 		t.Run(target, func(t *testing.T) {
 			response := request(t, handler, http.MethodGet, target)
 			if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "App shell") || response.Header().Get("Cache-Control") != "no-store" {

@@ -85,7 +85,8 @@ export default function App() {
               <Route path="/units/:id/move" element={<HoldingPage key={location.key} mode="move-unit" />} />
               <Route path="/units/:id/status" element={<HoldingPage key={location.key} mode="status-unit" />} />
               {(['receive', 'consume', 'transfer', 'adjust'] as const).map((action) => <Route key={action} path={`/items/:id/stock/${action}`} element={<HoldingPage key={location.key} mode="stock" action={action} />} />)}
-              <Route path="/photos" element={<MediaPage key={location.key} />} />
+              <Route path="/photos" element={<MediaPage key={location.key} mode="list" />} />
+              <Route path="/photos/edit" element={<MediaPage key={location.key} mode="edit" />} />
               <Route path="/purchases" element={<PurchasePage key={location.key} mode="list" />} />
               <Route path="/purchases/new" element={<PurchasePage key={location.key} mode="create" />} />
               <Route path="/purchases/:id/view" element={<PurchasePage key={location.key} mode="detail" />} />

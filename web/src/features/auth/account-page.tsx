@@ -27,10 +27,10 @@ export default function AccountPage({ mode }: { mode: 'login' | 'setup' | 'accou
   const navigate = useNavigate()
   const location = useLocation()
   const returnTo = applicationReturnPath(location.state?.returnTo)
-  const catalogState = returnTo && /^\/(?:items(?:\/|\?|$)|units\/|u\/|purchases(?:\/|\?|$)|assets(?:\/|\?|$)|photos(?:\?|$))/.test(returnTo) && location.state?.catalogList !== undefined
+  const catalogState = returnTo && /^\/(?:items(?:\/|\?|$)|units\/|u\/|purchases(?:\/|\?|$)|assets(?:\/|\?|$)|photos(?:\/|\?|$))/.test(returnTo) && location.state?.catalogList !== undefined
     ? catalogNavigationState(location.state.catalogList, location.state.catalogCursors) : undefined
   const purchaseState = returnTo && purchaseReturnPath(returnTo) ? { ...purchaseNavigationState(location.state?.purchaseList, location.state?.purchaseCursors, location.state?.purchaseItem), ...(/\/allocate(?:\?|$)/.test(returnTo) ? { selectionCursors: purchaseCursorTrail(location.state?.selectionCursors) } : {}) } : undefined
-  const assetState = returnTo && /^\/(?:assets(?:\/|\?|$)|units\/|u\/|photos(?:\?|$))/.test(returnTo) && location.state?.assetList !== undefined ? assetNavigationState(location.state.assetList, location.state.assetCursors) : undefined
+  const assetState = returnTo && /^\/(?:assets(?:\/|\?|$)|units\/|u\/|photos(?:\/|\?|$))/.test(returnTo) && location.state?.assetList !== undefined ? assetNavigationState(location.state.assetList, location.state.assetCursors) : undefined
   const returnState = returnTo ? { returnTo, ...catalogState, ...purchaseState, ...assetState } : undefined
   const online = useOnline()
   const [logoutOpen, setLogoutOpen] = useState(false)
