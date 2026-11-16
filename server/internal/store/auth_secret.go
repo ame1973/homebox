@@ -2,7 +2,10 @@ package store
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
 	"database/sql"
 	"errors"
 	"time"
@@ -23,7 +26,8 @@ func (s *Store) loadAuthServerSecret(ctx context.Context) ([]byte, error) {
 		if err = tx.QueryRowContext(ctx, `SELECT
  (SELECT COUNT(*) FROM sessions WHERE revoked_at IS NULL) +
  (SELECT COUNT(*) FROM auth_reauth_grants) +
- (SELECT COUNT(*) FROM api_idempotency WHERE operation IN ('post_auth_logout','post_auth_password','post_auth_reauth'))`).Scan(&outstanding); err != nil {
+ (SELECT COUNT(*) FROM api_idempotency WHERE operation IN ('post_auth_logout','post_auth_password','post_auth_reauth')) +
+ (SELECT COUNT(*) FROM auth_keyed_receipt_secret)`).Scan(&outstanding); err != nil {
 			return nil, err
 		}
 		if outstanding != 0 {
@@ -43,11 +47,50 @@ func (s *Store) loadAuthServerSecret(ctx context.Context) ([]byte, error) {
 	} else if err != nil {
 		return nil, err
 	}
-	if len(secret) != 32 {
+	if len(secret) != sha256.Size {
 		return nil, ErrAuthState
+	}
+	if _, err = verifyKeyedReceiptSecret(ctx, tx, secret); err != nil {
+		return nil, err
 	}
 	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
 	return secret, nil
+}
+
+func keyedReceiptSecretProof(secret []byte) []byte {
+	mac := hmac.New(sha256.New, secret)
+	_, _ = mac.Write([]byte("homebox-keyed-receipt-secret-v1"))
+	return mac.Sum(nil)
+}
+
+// verifyKeyedReceiptSecret checks the actual database key and, when present,
+// its immutable receipt dependency inside the caller's current transaction.
+func verifyKeyedReceiptSecret(ctx context.Context, tx *sql.Tx, expected []byte) (bool, error) {
+	if len(expected) != sha256.Size {
+		return false, ErrAuthState
+	}
+	var actual []byte
+	if err := tx.QueryRowContext(ctx, "SELECT key_bytes FROM auth_server_secret WHERE singleton=1").Scan(&actual); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, ErrAuthState
+		}
+		return false, err
+	}
+	if subtle.ConstantTimeCompare(actual, expected) != 1 {
+		return false, ErrAuthState
+	}
+	var proof []byte
+	err := tx.QueryRowContext(ctx, "SELECT key_proof FROM auth_keyed_receipt_secret WHERE singleton=1").Scan(&proof)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if subtle.ConstantTimeCompare(proof, keyedReceiptSecretProof(expected)) != 1 {
+		return false, ErrAuthState
+	}
+	return true, nil
 }

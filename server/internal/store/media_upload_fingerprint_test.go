@@ -182,21 +182,21 @@ func TestMediaUploadFingerprintCanBindARealDomainReceiptAcrossSessions(t *testin
 	if err != nil || restored != fingerprint {
 		t.Fatal("a fresh authentication service did not retain the database secret", err)
 	}
-	type request struct {
-		Fingerprint string `json:"raw_file_mac"`
-	}
 	applied := 0
 	apply := func(m *mutationTx) (ActionAck, error) {
 		applied++
 		return ActionAck{OK: true, OperationID: m.eventID, Revision: 1}, nil
 	}
 	// This exercises the real receipt boundary, not a Media producer or upload.
-	first, err := runDomainMutation(t.Context(), a, token, key, "post_media", request{fingerprint}, apply)
+	first, err := runDomainMutation(t.Context(), a, token, key, "post_media", mediaUploadReceiptRequest{RawFileMAC: fingerprint}, apply)
 	if err != nil || !first.OK || applied != 1 {
 		t.Fatal("could not bind the first receipt", err)
 	}
+	if scalar[int](t, s.db, "SELECT COUNT(*) FROM auth_keyed_receipt_secret") != 1 {
+		t.Fatal("keyed receipt did not pin its server secret")
+	}
 	_, nextToken := login(t, a)
-	replayed, err := runDomainMutation(t.Context(), a, nextToken, key, "post_media", request{fingerprint}, apply)
+	replayed, err := runDomainMutation(t.Context(), a, nextToken, key, "post_media", mediaUploadReceiptRequest{RawFileMAC: fingerprint}, apply)
 	if err != nil || replayed != first || applied != 1 {
 		t.Fatal("same original upload intent did not replay across sessions", err)
 	}
@@ -204,7 +204,7 @@ func TestMediaUploadFingerprintCanBindARealDomainReceiptAcrossSessions(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if value, err := runDomainMutation(t.Context(), a, nextToken, key, "post_media", request{changed}, apply); !errors.Is(err, ErrIdempotencyConflict) || value != (ActionAck{}) || applied != 1 {
+	if value, err := runDomainMutation(t.Context(), a, nextToken, key, "post_media", mediaUploadReceiptRequest{RawFileMAC: changed}, apply); !errors.Is(err, ErrIdempotencyConflict) || value != (ActionAck{}) || applied != 1 {
 		t.Fatal("changed original raw bytes were accepted under the same key", err)
 	}
 	for _, query := range []string{
@@ -235,7 +235,7 @@ func TestMediaUploadFingerprintCanBindARealDomainReceiptAcrossSessions(t *testin
 		t.Fatal("a real store restart changed the original fingerprint", err)
 	}
 	_, restartToken := login(t, restarted)
-	replayed, err = runDomainMutation(t.Context(), restarted, restartToken, key, "post_media", request{afterRestart}, apply)
+	replayed, err = runDomainMutation(t.Context(), restarted, restartToken, key, "post_media", mediaUploadReceiptRequest{RawFileMAC: afterRestart}, apply)
 	if err != nil || replayed != first || applied != 1 {
 		t.Fatal("receipt could not be reconciled after restart and fresh login", err)
 	}

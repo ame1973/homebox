@@ -10,6 +10,12 @@ import (
 	"homebox/internal/mediaimage"
 )
 
+// mediaUploadReceiptRequest is the only accepted domain request for post_media.
+// Raw file bytes and caller metadata never enter the durable receipt.
+type mediaUploadReceiptRequest struct {
+	RawFileMAC string `json:"raw_file_mac"`
+}
+
 // mediaUploadFingerprint binds the caller's original key, canonical declared
 // MIME and exact raw bytes to the independent server secret. It does not grant
 // authorization, validate image bytes, or create a receipt. The caller owns raw

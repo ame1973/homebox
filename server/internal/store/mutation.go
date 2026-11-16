@@ -64,6 +64,10 @@ func runDomainMutation[T domainResult](ctx context.Context, a *Auth, token, key,
 	if !authString(key, 8, 128) {
 		return zero, ErrDomainInput
 	}
+	mediaRequest, keyed := request.(mediaUploadReceiptRequest)
+	if (operation == "post_media") != keyed || (keyed && !validMediaDigest(mediaRequest.RawFileMAC)) {
+		return zero, ErrDomainInput
+	}
 	requestJSON, err := json.Marshal(request)
 	if err != nil {
 		return zero, err
@@ -87,6 +91,13 @@ func runDomainMutation[T domainResult](ctx context.Context, a *Auth, token, key,
 		return zero, err
 	}
 	scopedKey := domainReplyKey(session.Admin.ID, epoch, key)
+	var secretPinned bool
+	if keyed {
+		secretPinned, err = verifyKeyedReceiptSecret(ctx, tx, a.serverSecret)
+		if err != nil {
+			return zero, err
+		}
+	}
 	reply, err := readDomainReply(ctx, tx, scopedKey, operation, fingerprint, now)
 	if err != nil {
 		return zero, err
@@ -94,6 +105,9 @@ func runDomainMutation[T domainResult](ctx context.Context, a *Auth, token, key,
 	var result T
 	var finalChecks []func() error
 	if reply.body != "" {
+		if keyed && !secretPinned {
+			return zero, ErrDomainState
+		}
 		if reply.eventAdmin != session.Admin.ID || reply.eventEpoch != epoch || reply.eventOperation != operation {
 			return zero, ErrDomainState
 		}
@@ -117,6 +131,12 @@ func runDomainMutation[T domainResult](ctx context.Context, a *Auth, token, key,
 		}
 		if err = result.validateDomainResult(); err != nil {
 			return zero, err
+		}
+		if keyed && !secretPinned {
+			err = requireDomainRow(tx.ExecContext(ctx, "INSERT INTO auth_keyed_receipt_secret(singleton,key_proof) VALUES(1,?)", keyedReceiptSecretProof(a.serverSecret)))
+			if err != nil {
+				return zero, err
+			}
 		}
 		encoded, err := json.Marshal(result)
 		if err != nil {
@@ -155,6 +175,16 @@ func runDomainMutation[T domainResult](ctx context.Context, a *Auth, token, key,
 	if len(finalChecks) > 0 {
 		if _, err = checkDomainSession(ctx, a, tx, token, session, a.now().UTC()); err != nil {
 			return zero, err
+		}
+	}
+	if keyed {
+		var pinned bool
+		pinned, err = verifyKeyedReceiptSecret(ctx, tx, a.serverSecret)
+		if err != nil {
+			return zero, err
+		}
+		if !pinned {
+			return zero, ErrDomainState
 		}
 	}
 	// Session or audit triggers must not turn a committed write or replay into a

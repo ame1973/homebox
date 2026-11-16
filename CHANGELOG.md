@@ -15,6 +15,8 @@
 
 ### Added
 
+- Pin the database server secret atomically with keyed Media domain receipts, verify it after audit and session writes on new requests and replays, and fail closed if the pinned key is lost or changed. Preserve legacy receipts without assuming they used keyed fingerprints. This transaction protection does not implement the upload endpoint.
+
 - Add bounded, lossless photo crop/quarter-turn geometry that maps displayed selections back to the original oriented pixels without resampling. Exhaustive small pixel grids and private Chromium canvas checks cover rotations and repeated crops; this is not a photo editor or upload screen.
 
 - Add an internal server-keyed raw Media upload fingerprint binding the original key, canonical MIME and exact bounded bytes. Test private-metadata differences that sanitize to identical pixels, cancellation and real generic receipt replay after a store restart and fresh login; no upload producer or authorization is implied.
