@@ -15,6 +15,8 @@
 
 ### Added
 
+- Add an internal Linux Media storage owner with a private database-instance marker, cooperative exclusive lock, anchored directory revalidation and guarded staged uploads. Reconcile original-key receipts before checking current files, and reject late ownership changes before publication. Copied markers and shared mounts do not establish safe deletion authority; recovery, HTTP admission and the upload route remain unimplemented.
+
 - Journal each sealed Media stage's sanitized digest, exact inode, directory identities and dataset epoch before promotion. Consume matching rows atomically with publication, preserve stages after failures or uncertain commits, and reject substituted object directories. Pending rows do not prove ownership of existing objects; automatic recovery and the HTTP upload remain unimplemented.
 
 - Connect real JPEG/PNG sanitization, private stages, verified content-addressed objects and atomic Media/thumbnail SQLite publication in an internal upload transaction. Preserve exact original-key reconciliation, reject legacy storage collisions and recheck actual source, membership and files after audit/session writes. HTTP admission, crash recovery, streams and WebP remain unimplemented.

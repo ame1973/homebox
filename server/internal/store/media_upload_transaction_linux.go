@@ -32,7 +32,11 @@ func (value Media) validateDomainResult() error {
 // uploadStagedMedia is a private transaction, not an HTTP route or a complete
 // storage service. The caller must hold bounded admission, own raw unchanged,
 // and arrange reference-aware recovery for stages and promoted objects.
-func (library *MediaLibrary) uploadStagedMedia(ctx context.Context, token, key, mime string, raw []byte, stagingDir, objectDir string) (result Media, finalErr error) {
+func (library *MediaLibrary) uploadStagedMedia(ctx context.Context, token, key, mime string, raw []byte, stagingDir, objectDir string) (Media, error) {
+	return library.uploadStagedMediaGuarded(ctx, token, key, mime, raw, stagingDir, objectDir, nil)
+}
+
+func (library *MediaLibrary) uploadStagedMediaGuarded(ctx context.Context, token, key, mime string, raw []byte, stagingDir, objectDir string, guard func(queryer) error) (result Media, finalErr error) {
 	if library == nil || library.auth == nil || library.auth.store == nil {
 		return Media{}, ErrDomainInput
 	}
@@ -50,6 +54,11 @@ func (library *MediaLibrary) uploadStagedMedia(ctx context.Context, token, key, 
 	}
 	if !errors.Is(err, errPrepareMediaUpload) {
 		return Media{}, err
+	}
+	if guard != nil {
+		if err = guard(library.auth.store.db); err != nil {
+			return Media{}, err
+		}
 	}
 
 	preserveStages := false
@@ -147,6 +156,9 @@ func (library *MediaLibrary) uploadStagedMedia(ctx context.Context, token, key, 
 		value, err := m.publishStagedMedia(image, preview, promotedOriginal, promotedThumbnail, objects, objectDir)
 		if err != nil {
 			return Media{}, err
+		}
+		if guard != nil {
+			m.finalChecks = append(m.finalChecks, func() error { return guard(m.tx) })
 		}
 		if err = m.consumeMediaPending(pending); err != nil {
 			return Media{}, err
