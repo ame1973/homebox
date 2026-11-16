@@ -6,7 +6,7 @@
 
 - Clear volatile scan and barcode-handoff screens before browser page suspension, without broadcasting logout to other tabs. On back-forward-cache restoration, require a fresh completed-session check and warn that an already-sent request may have committed; canceling the browser leave prompt retains the draft.
 
-- On a delivered session-clear signal, lock the owned-data screen, abort its active request, discard its reviewed command and clear this window's in-memory query cache. Warn that an already-sent request may have committed and requires checking current server data; no request is automatically retried.
+- On a delivered session-clear signal, lock barcode-handoff Item creation and owned-data screens, abort active requests, discard reviewed commands and clear this window's in-memory query cache. Warn that an already-sent request may have committed and requires checking current server data; no request is automatically retried.
 
 - Escape Unicode default-ignorable code points, including combining grapheme joiners and variation selectors, in exact-text reviews and scanned-barcode JSON entry. Preserve the underlying values without claiming to detect every visually confusable character.
 
@@ -14,6 +14,8 @@
 - Reuse transaction-scoped SQLite statement plans while rebuilding purchase search evidence. Each lookup still re-reads and validates actual source and correction history; no financial or search results are cached.
 
 ### Added
+
+- Recheck a scanned barcode against exact-text matches in all supported formats before reviewed Item creation. Show bounded, explicitly paged live candidates; withhold inconsistent pages, require an explicit decision after failed checks, recheck manually after offline, and preserve original-key reconciliation for a possibly committed Item.
 
 - Carry an unmatched exact barcode through reviewed Item creation into a separately reviewed barcode editor without storing the code in URLs or history state. Preserve an explicit format or require one after an all-format search, retain NUL/CR/LF and visibly escape invisible format marks through a labeled JSON-string input, warn when the volatile handoff is lost, retain it visibly through missing/failed Item reads and offline editing, and never automatically attach a barcode or create stock.
 

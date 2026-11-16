@@ -134,6 +134,308 @@ test('accepts a fully escaped 512-code-point JSON lookup without browser truncat
   expect(values).toEqual(['😀'.repeat(512)])
 })
 
+test('rechecks live same-text candidates across formats before creating an Item', async ({ page, application }) => {
+  await provision(page, application)
+  const scanned = '012345678905', writes = watchDomainWrites(page, ['/api/v1/items', '/api/v1/barcodes'])
+  const searches: URL[] = []
+  page.on('request', (request) => { const url = new URL(request.url()); if (url.pathname === '/api/v1/search/barcodes') searches.push(url) })
+  await openScan(page)
+  await page.getByRole('combobox', { name: text.symbology }).selectOption('UPC_A')
+  await search(page, scanned)
+  await expect(page.getByRole('heading', { name: text.empty })).toBeVisible()
+  await page.getByRole('button', { name: text.create }).click()
+  for (const [owner, symbology] of [['owner-1', 'UPC_A'], ['owner-2', 'OTHER']] as const) {
+    const response = await page.request.post(`/api/v1/items/${owner}/barcodes`, { headers: await writeContext(page, application.url, 7), data: { symbology, raw_value: scanned } })
+    expect(response.status()).toBe(200)
+  }
+  await page.getByRole('textbox', { name: new RegExp(`^${catalog.fields.name}`) }).fill('New despite shared barcode')
+  await page.getByRole('button', { name: catalog.review }).click()
+  const dialog = page.getByRole('alertdialog'), candidates = dialog.getByRole('list', { name: text.reviewCandidates })
+  await expect(candidates.getByRole('listitem')).toHaveCount(2)
+  await expect(candidates).toContainText('Shared first')
+  await expect(candidates).toContainText('Second page owner')
+  await expect(candidates).toContainText(messages.owned.symbologies.OTHER)
+  expect(searches).toHaveLength(2)
+  expect(searches[0]?.searchParams.get('symbology')).toBe('UPC_A')
+  expect(searches[1]?.searchParams.has('symbology')).toBe(false)
+  expect(searches[1]?.searchParams.get('value')).toBe(scanned)
+  expect(writes).toEqual([])
+  await candidates.getByRole('link', { name: /Shared first/ }).click()
+  const leave = page.getByRole('alertdialog')
+  await expect(leave.getByRole('heading', { name: catalog.leaveTitle })).toBeVisible()
+  await leave.getByRole('button', { name: catalog.stay }).click()
+  await expect(dialog.getByRole('list', { name: text.reviewCandidates }).getByRole('listitem')).toHaveCount(2)
+  expect(searches).toHaveLength(2)
+  await dialog.getByRole('button', { name: catalog.confirmCreate }).click()
+  await expect(page).toHaveURL(/\/items\/[^/]+\/barcodes\/new$/)
+  expect(writes.filter((request) => request.method === 'POST')).toHaveLength(1)
+  expect(writes[0]?.path).toBe('/api/v1/items')
+})
+
+test('pages shared barcode review candidates without inventing safe legacy Item links', async ({ page, application }) => {
+  await provision(page, application)
+  const writes = watchDomainWrites(page, ['/api/v1/items', '/api/v1/barcodes'])
+  await openScan(page)
+  await page.getByRole('combobox', { name: text.symbology }).selectOption('EAN_8')
+  await search(page, value)
+  await expect(page.getByRole('heading', { name: text.empty })).toBeVisible()
+  await page.getByRole('button', { name: text.create }).click()
+  await page.getByRole('textbox', { name: new RegExp(`^${catalog.fields.name}`) }).fill('Review shared candidates')
+  await page.getByRole('button', { name: catalog.review }).click()
+  const dialog = page.getByRole('alertdialog'), candidates = dialog.getByRole('list', { name: text.reviewCandidates })
+  await expect(candidates.getByRole('listitem')).toHaveCount(5)
+  await expect(candidates).toContainText(catalog.archived)
+  await expect(candidates.getByText(text.unavailableItem)).toHaveCount(2)
+  await expect(candidates.getByRole('link', { name: /Reserved new item/ })).toHaveAttribute('href', '/items/new/view')
+  await expect(dialog.getByText(text.reviewCandidatesMore)).toBeVisible()
+  await dialog.getByRole('button', { name: catalog.nextPage }).click()
+  await expect(candidates.getByRole('listitem')).toHaveCount(2)
+  await expect(candidates).toContainText('Second page owner')
+  await dialog.getByRole('button', { name: catalog.previousPage }).click()
+  await expect(candidates.getByRole('listitem')).toHaveCount(5)
+  expect(writes).toEqual([])
+})
+
+test('withholds an altered duplicate barcode continuation during Item review', async ({ page, application }) => {
+  await provision(page, application)
+  const writes = watchDomainWrites(page, ['/api/v1/items', '/api/v1/barcodes'])
+  await page.route((url) => url.pathname === '/api/v1/search/barcodes' && url.searchParams.has('cursor'), async (route) => {
+    const response = await route.fetch(), body = await response.json()
+    body.matches[0].barcode_id = '00-legacy'
+    await route.fulfill({ response, json: body })
+  })
+  await openScan(page)
+  await page.getByRole('combobox', { name: text.symbology }).selectOption('EAN_8')
+  await search(page, value)
+  await page.getByRole('button', { name: text.create }).click()
+  await page.getByRole('textbox', { name: new RegExp(`^${catalog.fields.name}`) }).fill('Inconsistent candidate page')
+  await page.getByRole('button', { name: catalog.review }).click()
+  const dialog = page.getByRole('alertdialog')
+  await expect(dialog.getByRole('list', { name: text.reviewCandidates }).getByRole('listitem')).toHaveCount(5)
+  await dialog.getByRole('button', { name: catalog.nextPage }).click()
+  await expect(dialog.getByText(catalog.invalidRead)).toBeVisible()
+  await expect(dialog.getByRole('list', { name: text.reviewCandidates })).toHaveCount(0)
+  await expect(dialog.getByRole('button', { name: catalog.confirmCreate })).toBeDisabled()
+  await dialog.getByRole('button', { name: text.reviewCandidatesRetry }).click()
+  await expect(dialog.getByRole('list', { name: text.reviewCandidates }).getByRole('listitem')).toHaveCount(5)
+  expect(writes).toEqual([])
+})
+
+test('keeps shared barcode candidates accessible at 320px and 200% text', async ({ page, application }) => {
+  await provision(page, application)
+  await page.setViewportSize({ width: 320, height: 568 })
+  await openScan(page)
+  await page.locator('html').evaluate((element) => { element.style.fontSize = '200%' })
+  await page.getByRole('combobox', { name: text.symbology }).selectOption('EAN_8')
+  await search(page, value)
+  await page.getByRole('button', { name: text.create }).click()
+  await page.getByRole('textbox', { name: new RegExp(`^${catalog.fields.name}`) }).fill('Accessible candidate review')
+  await page.getByRole('button', { name: catalog.review }).click()
+  const dialog = page.getByRole('alertdialog'), candidates = dialog.getByRole('list', { name: text.reviewCandidates })
+  await expect(candidates.getByRole('listitem')).toHaveCount(5)
+  await expect(dialog.getByRole('heading', { name: catalog.reviewTitle })).toBeFocused()
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme }); await expect(page.locator('html')).toHaveAttribute('data-theme', colorScheme)
+    expect(await page.evaluate(() => innerWidth)).toBe(320)
+    await noOverflow(page)
+    expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
+    expect(await dialog.getByRole('button', { name: catalog.confirmCreate }).evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
+    expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze()).violations).toEqual([])
+  }
+  await dialog.getByRole('button', { name: catalog.nextPage }).click()
+  await expect(candidates.getByRole('listitem')).toHaveCount(2)
+  await expect(candidates).toContainText('極長物品')
+  await noOverflow(page)
+  expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
+  expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze()).violations).toEqual([])
+})
+
+test('withholds all review candidates when one actual Item read disappears', async ({ page, application }) => {
+  await provision(page, application)
+  const scanned = '012345678905', writes = watchDomainWrites(page, ['/api/v1/items', '/api/v1/barcodes'])
+  await openScan(page); await search(page, scanned)
+  await page.getByRole('button', { name: text.create }).click()
+  for (const [owner, symbology] of [['owner-1', 'UPC_A'], ['owner-2', 'OTHER']] as const) {
+    const response = await page.request.post(`/api/v1/items/${owner}/barcodes`, { headers: await writeContext(page, application.url, 7), data: { symbology, raw_value: scanned } })
+    expect(response.status()).toBe(200)
+  }
+  const missing = (url: URL) => url.pathname === '/api/v1/items-by-identity' && url.searchParams.get('id') === 'owner-2'
+  await page.route(missing, (route) => route.fulfill({ status: 404, contentType: 'application/json', body: '{"error":{"code":"NOT_FOUND","request_id":"missing-owner"}}' }))
+  await page.getByRole('textbox', { name: new RegExp(`^${catalog.fields.name}`) }).fill('Candidate with missing owner')
+  await page.getByRole('button', { name: catalog.review }).click()
+  const dialog = page.getByRole('alertdialog')
+  await expect(dialog.getByText(catalog.invalidRead)).toBeVisible()
+  await expect(dialog.getByRole('list', { name: text.reviewCandidates })).toHaveCount(0)
+  await expect(dialog.getByRole('button', { name: catalog.confirmCreate })).toBeDisabled()
+  await page.unroute(missing)
+  await dialog.getByRole('button', { name: text.reviewCandidatesRetry }).click()
+  await expect(dialog.getByRole('list', { name: text.reviewCandidates }).getByRole('listitem')).toHaveCount(2)
+  await expect(dialog.getByRole('button', { name: catalog.confirmCreate })).toBeEnabled()
+  expect(writes).toEqual([])
+})
+
+test('requires an explicit bypass when barcode recheck fails before Item creation', async ({ page, application }) => {
+  await provision(page, application)
+  const scanned = '012345678905', writes = watchDomainWrites(page, ['/api/v1/items', '/api/v1/barcodes'])
+  let requests = 0
+  await page.route((url) => url.pathname === '/api/v1/search/barcodes', async (route) => {
+    requests++
+    if (requests === 2) { await route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":{"code":"SERVICE_UNAVAILABLE","request_id":"review-failure"}}' }); return }
+    await route.continue()
+  })
+  await openScan(page); await search(page, scanned)
+  await page.getByRole('button', { name: text.create }).click()
+  await page.getByRole('textbox', { name: new RegExp(`^${catalog.fields.name}`) }).fill('Create after failed review lookup')
+  await page.getByRole('button', { name: catalog.review }).click()
+  const dialog = page.getByRole('alertdialog'), confirm = dialog.getByRole('button', { name: catalog.confirmCreate })
+  await expect(dialog.getByRole('button', { name: text.reviewCandidatesSkip })).toBeVisible()
+  await expect(confirm).toBeDisabled()
+  await expect(dialog.getByText(text.reviewCandidatesEmpty)).toHaveCount(0)
+  expect(writes).toEqual([])
+  await dialog.getByRole('button', { name: text.reviewCandidatesSkip }).click()
+  await expect(dialog.getByText(text.reviewCandidatesSkipped)).toBeVisible()
+  await confirm.click()
+  await expect(page).toHaveURL(/\/items\/[^/]+\/barcodes\/new$/)
+  expect(writes.filter((request) => request.method === 'POST')).toHaveLength(1)
+  expect(requests).toBe(2)
+})
+
+test('reports failed session revalidation separately from offline during barcode review', async ({ page, application }) => {
+  await provision(page, application)
+  const scanned = '012345678905', writes = watchDomainWrites(page, ['/api/v1/items', '/api/v1/barcodes'])
+  let failAuth = false, searches = 0
+  page.on('request', (request) => { if (new URL(request.url()).pathname === '/api/v1/search/barcodes') searches++ })
+  await page.route((url) => url.pathname === '/api/v1/auth/me', async (route) => {
+    if (failAuth) {
+      failAuth = false
+      await route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":{"code":"SERVICE_UNAVAILABLE","request_id":"auth-check-failure"}}' })
+      return
+    }
+    await route.continue()
+  })
+  await openScan(page); await search(page, scanned)
+  await page.getByRole('button', { name: text.create }).click()
+  await page.getByRole('textbox', { name: new RegExp(`^${catalog.fields.name}`) }).fill('Item after failed session check')
+  await page.getByRole('button', { name: catalog.review }).click()
+  const dialog = page.getByRole('alertdialog')
+  await expect(dialog.getByText(text.reviewCandidatesEmpty)).toBeVisible()
+  expect(searches).toBe(2)
+  failAuth = true
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' })
+    window.dispatchEvent(new Event('visibilitychange'))
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' })
+    window.dispatchEvent(new Event('visibilitychange'))
+  })
+  await expect(dialog.getByText(text.reviewSessionError)).toBeVisible()
+  await expect(dialog.getByText(text.offline, { exact: true })).toHaveCount(0)
+  await expect(dialog.getByRole('button', { name: catalog.confirmCreate })).toBeDisabled()
+  expect(searches).toBe(2)
+  await dialog.getByRole('button', { name: catalog.cancel }).click()
+  await page.getByRole('button', { name: catalog.refresh }).click()
+  await expect(page.getByRole('button', { name: catalog.review })).toBeEnabled()
+  await page.getByRole('button', { name: catalog.review }).click()
+  await expect(page.getByRole('alertdialog').getByText(text.reviewCandidatesEmpty)).toBeVisible()
+  expect(searches).toBe(3)
+  expect(writes).toEqual([])
+})
+
+test('requires an explicit fresh barcode recheck after review goes offline', async ({ page, context, application }) => {
+  await provision(page, application)
+  const scanned = '012345678905', writes = watchDomainWrites(page, ['/api/v1/items', '/api/v1/barcodes'])
+  let searches = 0
+  page.on('request', (request) => { if (new URL(request.url()).pathname === '/api/v1/search/barcodes') searches++ })
+  await openScan(page); await search(page, scanned)
+  await page.getByRole('button', { name: text.create }).click()
+  await page.getByRole('textbox', { name: new RegExp(`^${catalog.fields.name}`) }).fill('Item reviewed after offline')
+  await page.getByRole('button', { name: catalog.review }).click()
+  const dialog = page.getByRole('alertdialog'), confirm = dialog.getByRole('button', { name: catalog.confirmCreate })
+  await expect(dialog.getByText(text.reviewCandidatesEmpty)).toBeVisible()
+  await expect(confirm).toBeEnabled()
+  expect(searches).toBe(2)
+  await context.setOffline(true)
+  try { await expect(confirm).toBeDisabled() } finally { await context.setOffline(false) }
+  await expect(dialog.getByText(text.reviewCandidatesStale)).toBeVisible()
+  await expect(confirm).toBeDisabled()
+  expect(searches).toBe(2)
+  expect(writes).toEqual([])
+  await dialog.getByRole('button', { name: text.reviewCandidatesRetry }).click()
+  await expect(dialog.getByText(text.reviewCandidatesEmpty)).toBeVisible()
+  await expect(confirm).toBeEnabled()
+  expect(searches).toBe(3)
+  await confirm.click()
+  await expect(page).toHaveURL(/\/items\/[^/]+\/barcodes\/new$/)
+  expect(writes.filter((request) => request.method === 'POST')).toHaveLength(1)
+  expect(searches).toBe(3)
+})
+
+test('reconciles the original Item key after a lost reply despite a later failed barcode recheck', async ({ page, application }) => {
+  await provision(page, application)
+  const scanned = '012345678905', writes = watchDomainWrites(page, ['/api/v1/items', '/api/v1/barcodes'])
+  let searches = 0, itemPosts = 0
+  await page.route((url) => url.pathname === '/api/v1/search/barcodes' || url.pathname === '/api/v1/items', async (route) => {
+    const path = new URL(route.request().url()).pathname
+    if (path === '/api/v1/search/barcodes') {
+      searches++
+      if (searches === 3) { await route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":{"code":"SERVICE_UNAVAILABLE","request_id":"recheck-failure"}}' }); return }
+    } else if (route.request().method() === 'POST') {
+      itemPosts++
+      if (itemPosts === 1) {
+        const committed = await route.fetch()
+        expect(committed.status()).toBe(200)
+        await route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":{"code":"SERVICE_UNAVAILABLE","request_id":"lost-reply"}}' })
+        return
+      }
+    }
+    await route.continue()
+  })
+  await openScan(page); await search(page, scanned)
+  await page.getByRole('button', { name: text.create }).click()
+  await page.getByRole('textbox', { name: new RegExp(`^${catalog.fields.name}`) }).fill('Item with lost original reply')
+  await page.getByRole('button', { name: catalog.review }).click()
+  const dialog = page.getByRole('alertdialog')
+  await expect(dialog.getByText(text.reviewCandidatesEmpty)).toBeVisible()
+  await dialog.getByRole('button', { name: catalog.confirmCreate }).click()
+  await expect(dialog.getByRole('heading', { name: catalog.uncertain })).toBeVisible()
+  expect(searches).toBe(2)
+  await dialog.getByRole('button', { name: text.reviewCandidatesRetry }).click()
+  await expect(dialog.getByRole('button', { name: text.reviewCandidatesSkip })).toBeVisible()
+  const retry = dialog.getByRole('button', { name: catalog.retryOriginal })
+  await expect(retry).toBeEnabled()
+  let release!: () => void, started!: () => void, delivered!: () => void
+  const held = new Promise<void>((resolve) => { release = resolve })
+  const checking = new Promise<void>((resolve) => { started = resolve })
+  const finished = new Promise<void>((resolve) => { delivered = resolve })
+  await page.route((url) => url.pathname === '/api/v1/auth/me', async (route) => {
+    const response = await route.fetch()
+    started()
+    await held
+    try { await route.fulfill({ response }) } catch { /* The browser may already have aborted the request. */ }
+    finally { delivered() }
+  })
+  try {
+    await dialog.getByRole('button', { name: catalog.readCurrent }).click()
+    await checking
+    await expect(retry).toBeDisabled()
+    expect(itemPosts).toBe(1)
+    expect(searches).toBe(3)
+    release()
+    await finished
+    await expect(retry).toBeEnabled()
+  } finally { release() }
+  await retry.click()
+  await expect(page).toHaveURL(/\/items\/[^/]+\/barcodes\/new$/)
+  const itemWrites = writes.filter((request) => request.method === 'POST' && request.path === '/api/v1/items')
+  expect(itemWrites).toHaveLength(2)
+  expect(itemWrites[0]?.key).toBeTruthy()
+  expect(itemWrites[1]?.key).toBe(itemWrites[0]?.key)
+  expect(itemWrites[1]?.body).toBe(itemWrites[0]?.body)
+  const current = await page.request.get('/api/v1/items?q=Item%20with%20lost%20original%20reply')
+  expect(current.status()).toBe(200)
+  expect((await current.json()).data).toEqual([expect.objectContaining({ name: 'Item with lost original reply' })])
+  expect(searches).toBe(3)
+})
+
 test('prefills a separate reviewed barcode after creating an Item, without automatic writes', async ({ page, application }) => {
   await provision(page, application)
   const scanned = '012345678905', owned = messages.owned
@@ -303,10 +605,90 @@ test('clears a displayed Item-creation handoff after logout in another tab', asy
     await other.goto('/settings/account')
     await other.getByRole('button', { name: messages.auth.logout, exact: true }).click()
     await other.getByRole('alertdialog').getByRole('button', { name: messages.auth.logout, exact: true }).click()
-    await expect(page.getByText(text.handoffLost)).toBeVisible()
+    await expect(page.getByText(messages.owned.sessionClearedHelp)).toBeVisible()
     await expect(page.getByText(text.handoffHelp)).toHaveCount(0)
     await expect(page.locator('body')).not.toContainText(scanned)
   } finally { await other.close() }
+})
+
+for (const transport of ['storage', 'broadcast'] as const) test(`purges an open Item candidate review on cross-tab logout using ${transport} only`, async ({ page, context, application }) => {
+  await page.addInitScript((selected) => {
+    if (selected === 'storage') Object.defineProperty(window, 'BroadcastChannel', { configurable: true, value: undefined })
+    else window.addEventListener = new Proxy(window.addEventListener, { apply(target, receiver, args: unknown[]) {
+      return args[0] === 'storage' ? undefined : Reflect.apply(target, receiver, args)
+    } })
+  }, transport)
+  await provision(page, application)
+  const writes = watchDomainWrites(page, ['/api/v1/items', '/api/v1/barcodes'])
+  await openScan(page)
+  await page.getByRole('combobox', { name: text.symbology }).selectOption('EAN_8')
+  await search(page, value)
+  await page.getByRole('button', { name: text.create }).click()
+  await page.getByRole('textbox', { name: new RegExp(`^${catalog.fields.name}`) }).fill('Private unsent candidate Item')
+  await page.getByRole('button', { name: catalog.review }).click()
+  const dialog = page.getByRole('alertdialog')
+  await expect(dialog.getByRole('list', { name: text.reviewCandidates })).toContainText('Shared first')
+  const other = await context.newPage()
+  try {
+    await other.goto('/settings/account')
+    await other.getByRole('button', { name: messages.auth.logout, exact: true }).click()
+    await other.getByRole('alertdialog').getByRole('button', { name: messages.auth.logout, exact: true }).click()
+    await expect(page.getByText(messages.owned.sessionClearedHelp)).toBeVisible()
+    await expect(page.getByText(messages.owned.sessionClearedUncertain)).toBeVisible()
+    await expect(page.getByRole('alertdialog')).toHaveCount(0)
+    await expect(page.locator('body')).not.toContainText(value)
+    await expect(page.locator('body')).not.toContainText('Private unsent candidate Item')
+    await expect(page.locator('body')).not.toContainText('Shared first')
+    await page.getByRole('link', { name: text.signIn }).click()
+    await expect(page).toHaveURL(/\/login$/)
+    expect(JSON.stringify(await page.evaluate(() => history.state))).not.toContain(value)
+    expect(writes).toEqual([])
+  } finally { await other.close() }
+})
+
+test('clears a committed Item with a held reply on cross-tab logout and requires reconciliation', async ({ page, context, application }) => {
+  const password = await provision(page, application), scanned = '012345678905'
+  const writes = watchDomainWrites(page, ['/api/v1/items', '/api/v1/barcodes'])
+  await openScan(page); await search(page, scanned)
+  await page.getByRole('button', { name: text.create }).click()
+  await page.getByRole('textbox', { name: new RegExp(`^${catalog.fields.name}`) }).fill('Private committed Item')
+  let release!: () => void, committed!: () => void, delivered!: () => void
+  const held = new Promise<void>((resolve) => { release = resolve })
+  const received = new Promise<void>((resolve) => { committed = resolve })
+  const finished = new Promise<void>((resolve) => { delivered = resolve })
+  await page.route((url) => url.pathname === '/api/v1/items', async (route) => {
+    if (route.request().method() !== 'POST') { await route.continue(); return }
+    const response = await route.fetch()
+    expect(response.status()).toBe(200)
+    committed()
+    await held
+    try { await route.fulfill({ response }) } catch { /* The browser may already have aborted the request. */ }
+    finally { delivered() }
+  })
+  const other = await context.newPage()
+  try {
+    await page.getByRole('button', { name: catalog.review }).click()
+    const dialog = page.getByRole('alertdialog')
+    await expect(dialog.getByText(text.reviewCandidatesEmpty)).toBeVisible()
+    await dialog.getByRole('button', { name: catalog.confirmCreate }).click()
+    await received
+    await other.goto('/settings/account')
+    await other.getByRole('button', { name: messages.auth.logout, exact: true }).click()
+    await other.getByRole('alertdialog').getByRole('button', { name: messages.auth.logout, exact: true }).click()
+    await expect(page.getByText(messages.owned.sessionClearedUncertain)).toBeVisible()
+    await expect(page.getByRole('alertdialog')).toHaveCount(0)
+    await expect(page.locator('body')).not.toContainText(scanned)
+    await expect(page.locator('body')).not.toContainText('Private committed Item')
+    release()
+    await finished
+    await expect(page).toHaveURL(/\/items\/new$/)
+    expect(writes.filter((request) => request.method === 'POST')).toHaveLength(1)
+    expect((await page.request.post('/api/v1/auth/login', { headers: { Origin: application.url }, data: { username: 'owner', password } })).status()).toBe(200)
+    const current = await page.request.get('/api/v1/items?q=Private%20committed%20Item')
+    expect(current.status()).toBe(200)
+    expect((await current.json()).data).toEqual([expect.objectContaining({ name: 'Private committed Item' })])
+    expect(writes.filter((request) => request.method === 'POST')).toHaveLength(1)
+  } finally { release(); await other.close() }
 })
 
 test('clears an idle prefilled barcode editor after logout in another tab', async ({ page, context, application }) => {
@@ -409,16 +791,33 @@ test('clears a committed barcode with a held reply on cross-tab logout and requi
   } finally { release(); await other.close() }
 })
 
-test('reports the cleared code if a real session expires before Item creation', async ({ page, application }) => {
+test('reports the cleared code if a real session expires before the Item candidate recheck', async ({ page, application }) => {
   await provision(page, application)
   const scanned = '012345678905', writes = watchDomainWrites(page, ['/api/v1/items', '/api/v1/barcodes'])
   await openScan(page); await search(page, scanned)
   await page.getByRole('button', { name: text.create }).click()
   await expect(page.getByText(text.handoffHelp)).toBeVisible()
-  expect((await page.request.post('/api/v1/auth/logout', { headers: await writeContext(page, application.url) })).status()).toBe(200)
   await page.getByRole('textbox', { name: new RegExp(`^${catalog.fields.name}`) }).fill('Unsaved Item')
+  await expect(page.getByRole('button', { name: catalog.review })).toBeEnabled()
+  expect((await page.request.post('/api/v1/auth/logout', { headers: await writeContext(page, application.url) })).status()).toBe(200)
   await page.getByRole('button', { name: catalog.review }).click()
-  await page.getByRole('alertdialog').getByRole('button', { name: catalog.confirmCreate }).click()
+  await expect(page).toHaveURL(/\/login$/)
+  await expect(page.getByText(messages.auth.scanHandoffLost)).toBeVisible()
+  expect(JSON.stringify(await page.evaluate(() => history.state))).not.toContain(scanned)
+  expect(writes).toEqual([])
+})
+
+test('requires a real current session after candidate review and before Item confirmation', async ({ page, application }) => {
+  await provision(page, application)
+  const scanned = '012345678905', writes = watchDomainWrites(page, ['/api/v1/items', '/api/v1/barcodes'])
+  await openScan(page); await search(page, scanned)
+  await page.getByRole('button', { name: text.create }).click()
+  await page.getByRole('textbox', { name: new RegExp(`^${catalog.fields.name}`) }).fill('Reviewed but unsaved Item')
+  await page.getByRole('button', { name: catalog.review }).click()
+  const dialog = page.getByRole('alertdialog')
+  await expect(dialog.getByText(text.reviewCandidatesEmpty)).toBeVisible()
+  expect((await page.request.post('/api/v1/auth/logout', { headers: await writeContext(page, application.url) })).status()).toBe(200)
+  await dialog.getByRole('button', { name: catalog.confirmCreate }).click()
   await expect(page).toHaveURL(/\/login$/)
   await expect(page.getByText(messages.auth.scanHandoffLost)).toBeVisible()
   expect(JSON.stringify(await page.evaluate(() => history.state))).not.toContain(scanned)

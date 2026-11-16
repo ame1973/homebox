@@ -160,6 +160,32 @@ test('invalidates a held restoration-session reply after a real cross-tab logout
   } finally { release(); await other.close() }
 })
 
+test('purges live barcode review candidates before actual BFCache restoration', async ({ page, application }) => {
+  await provision(page, application)
+  const diagnostics = await permitBFCache(page, application.url), writes = watchDomainWrites(page, ['/api/v1/items', '/api/v1/barcodes'])
+  let searches = 0
+  page.on('request', (request) => { if (new URL(request.url()).pathname === '/api/v1/search/barcodes') searches++ })
+  await openHandoff(page)
+  const created = await page.request.post('/api/v1/items', { headers: await writeContext(page, application.url), data: { name: 'Private existing candidate' } })
+  expect(created.status()).toBe(200)
+  const existing = await created.json()
+  const added = await page.request.post(`/api/v1/items/${existing.id}/barcodes`, { headers: await writeContext(page, application.url, existing.revision), data: { symbology: 'UPC_A', raw_value: raw } })
+  expect(added.status()).toBe(200)
+  await page.getByRole('button', { name: catalog.review }).click()
+  await expect(page.getByRole('alertdialog').getByRole('list', { name: scan.reviewCandidates })).toContainText('Private existing candidate')
+  expect(searches).toBe(2)
+  await leaveDocument(page, true)
+  await returnFromBFCache(page, diagnostics)
+  await expect(page.getByText(scan.restoreReady)).toBeVisible()
+  await expect(page.getByRole('alertdialog')).toHaveCount(0)
+  await expect(page.locator('body')).not.toContainText(raw)
+  await expect(page.locator('body')).not.toContainText('Private existing candidate')
+  await page.getByRole('button', { name: scan.restoreContinue }).click()
+  await expect(page.getByText(scan.handoffLost)).toBeVisible()
+  expect(searches).toBe(2)
+  expect(writes).toEqual([])
+})
+
 test('discards an open barcode review before actual BFCache restoration', async ({ page, application }) => {
   await provision(page, application)
   const diagnostics = await permitBFCache(page, application.url), writes = watchDomainWrites(page, ['/api/v1/items', '/api/v1/barcodes'])
@@ -191,9 +217,10 @@ test('never replays a committed barcode after its reply is held across page susp
   await expect(page).toHaveURL(/\/items\/[^/]+\/barcodes\/new$/)
   const itemID = new URL(page.url()).pathname.split('/')[2]!
   await page.getByRole('combobox', { name: new RegExp(`^${owned.fields.symbology}`) }).selectOption('UPC_A')
-  let release!: () => void, committed!: () => void
+  let release!: () => void, committed!: () => void, delivered!: () => void
   const held = new Promise<void>((resolve) => { release = resolve })
   const received = new Promise<void>((resolve) => { committed = resolve })
+  const finished = new Promise<void>((resolve) => { delivered = resolve })
   await page.route((url) => url.pathname === `/api/v1/items/${itemID}/barcodes`, async (route) => {
     if (route.request().method() !== 'POST') { await route.fallback(); return }
     const response = await route.fetch()
@@ -201,6 +228,7 @@ test('never replays a committed barcode after its reply is held across page susp
     committed()
     await held
     try { await route.fulfill({ response }) } catch { /* The suspended page can already have aborted the request. */ }
+    finally { delivered() }
   })
   try {
     await page.getByRole('button', { name: owned.review }).click()
@@ -212,6 +240,7 @@ test('never replays a committed barcode after its reply is held across page susp
     await expect(page.getByRole('alertdialog')).toHaveCount(0)
     await expect(page.locator('body')).not.toContainText(raw)
     release()
+    await finished
     await expect(page.getByText(scan.restoreReady)).toBeVisible()
     expect(writes.filter((request) => request.method === 'POST')).toHaveLength(2)
     const current = await page.request.get(`/api/v1/items/${itemID}/barcodes`)
@@ -219,6 +248,7 @@ test('never replays a committed barcode after its reply is held across page susp
     expect((await current.json()).data).toEqual([expect.objectContaining({ raw_value: raw, symbology: 'UPC_A' })])
     await page.getByRole('button', { name: scan.restoreContinue }).click()
     await expect(page.getByText(scan.barcodeDraftLost)).toBeVisible()
+    await expect(page.getByRole('textbox', { name: new RegExp(`^${owned.fields.raw_value}`) })).toHaveValue('')
     expect(writes.filter((request) => request.method === 'POST')).toHaveLength(2)
   } finally { release() }
 })

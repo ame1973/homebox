@@ -13,8 +13,8 @@ const text = messages.mutations
 
 // Feature composition owns the reviewed body/effects. This shared frame preserves
 // first-Escape handling, static-content focus and original-request reconciliation.
-export function MutationReviewDialog({ operation, title, help, confirmLabel, destructive = false, children, error, online, onReadCurrent }: {
-  operation: ReviewOperation; title: string; help: string; confirmLabel: string; destructive?: boolean
+export function MutationReviewDialog({ operation, title, help, confirmLabel, destructive = false, confirmDisabled = false, children, error, online, onReadCurrent }: {
+  operation: ReviewOperation; title: string; help: string; confirmLabel: string; destructive?: boolean; confirmDisabled?: boolean
   children: ReactNode; error: ReactNode; online: boolean; onReadCurrent: () => Promise<unknown>
 }) {
   const titleRef = useRef<HTMLHeadingElement>(null)
@@ -37,7 +37,7 @@ export function MutationReviewDialog({ operation, title, help, confirmLabel, des
       {uncertain && <div className="space-y-2"><p className="text-sm font-medium">{text.requestKey}</p><p className="text-sm [overflow-wrap:anywhere]">{command.key}</p><Button type="button" variant="outline" disabled={!online} className={mutationControl} onClick={() => { void onReadCurrent() }}>{text.readCurrent}</Button></div>}
       <AlertDialogFooter>
         <AlertDialogCancel className={mutationControl} onClick={(event) => { event.preventDefault(); if (pending) operation.abort(); else operation.dismiss() }}>{pending ? text.stopWaiting : text.cancel}</AlertDialogCancel>
-        <AlertDialogAction disabled={pending || !online || !retryable} variant={destructive ? 'destructive' : 'default'} className={`${mutationControl} gap-2`} onClick={(event) => { event.preventDefault(); void operation.confirm() }}>
+        <AlertDialogAction disabled={pending || !online || !retryable || confirmDisabled} variant={destructive ? 'destructive' : 'default'} className={`${mutationControl} gap-2`} onClick={(event) => { event.preventDefault(); void operation.confirm() }}>
           {pending && <LoaderCircle className="animate-spin motion-reduce:animate-none" aria-hidden="true" />}{pending ? text.pending : uncertain ? text.retryOriginal : confirmLabel}
         </AlertDialogAction>
       </AlertDialogFooter>

@@ -28,11 +28,20 @@ import { CatalogFilters } from './filters'
 import { CatalogReviewDialog } from './review-dialog'
 import { catalogDisplay } from './display'
 import { useCatalogMutation } from './use-catalog-mutation'
+import { SessionClearBoundary } from './session-clear-boundary'
 import type { CatalogCommand, CatalogResult } from './commands'
 
 const text = messages.catalog
 type Mode = 'list' | 'detail' | 'create' | 'edit'
-export default function CatalogPage({ mode }: { mode: Mode }) {
+export default function CatalogPage(props: { mode: Mode }) {
+  const route = useLocation()
+  const scanToken: unknown = route.state?.scanToken
+  return props.mode === 'create' && typeof scanToken === 'string' && scanToken.length === 36
+    ? <SessionClearBoundary><CatalogPageContent {...props} /></SessionClearBoundary>
+    : <CatalogPageContent {...props} />
+}
+
+function CatalogPageContent({ mode }: { mode: Mode }) {
   const route = useLocation()
   const navigate = useNavigate()
   const client = useQueryClient()
@@ -90,12 +99,13 @@ export default function CatalogPage({ mode }: { mode: Mode }) {
     const target = command.kind === 'delete' ? listReturn : command.kind === 'create' && 'id' in result ? catalogRoute(result.id) : command.kind !== 'create' ? catalogRoute(command.subject.id) : listReturn
     navigate(target, { replace: true, state: { catalogNotice: 'confirmed', catalogList: listReturn, catalogCursors: trail } })
   }
-  const operation = useCatalogMutation(confirmed, sessionLost)
+  const operation = useCatalogMutation(confirmed, sessionLost, scanHandoffRequested)
   const errors = [categories.error, ...(mode === 'list' ? [locations.error, list.error] : needRecord ? [record.error] : [])]
   const credentialFailure = errors.find((error) => error instanceof ApiError && (error.status === 401 || error.code === 'PASSWORD_CHANGE_REQUIRED'))
   const mandatory = !!auth.data?.must_change_password || credentialFailure instanceof ApiError && credentialFailure.code === 'PASSWORD_CHANGE_REQUIRED'
   const denied = mandatory || !auth.isFetching && auth.data === null || credentialFailure !== undefined
   const { allowNavigation } = operation
+  const candidateSessionLost = useCallback((mandatory: boolean) => { allowNavigation(); sessionLost(mandatory) }, [allowNavigation, sessionLost])
   useEffect(() => {
     if (!online || transitioning || !denied) return
     allowNavigation()
@@ -169,6 +179,6 @@ export default function CatalogPage({ mode }: { mode: Mode }) {
                 <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{text.future}</p>
                 {readAt > 0 && <p className="text-sm text-muted-foreground">{text.readAt}：{new Intl.DateTimeFormat('zh-TW', { dateStyle: 'short', timeStyle: 'short' }).format(readAt)}</p>}
               </>}
-    <CatalogReviewDialog operation={operation} online={permitted} onReadCurrent={readCurrent} scanDraft={scanDraft} scanHandoffRequested={scanHandoffRequested} />
+    <CatalogReviewDialog operation={operation} online={permitted} networkOnline={online} sessionChecking={auth.isFetching} onReadCurrent={readCurrent} onSessionLost={candidateSessionLost} scanDraft={scanDraft} scanHandoffRequested={scanHandoffRequested} />
   </div>
 }

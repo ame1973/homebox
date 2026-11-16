@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { flushSync } from 'react-dom'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, NavLink, useLocation, useNavigate, useParams } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { LoaderCircle, Plus, RefreshCw, WifiOff } from 'lucide-react'
@@ -12,7 +11,6 @@ import { ApiError } from '@/lib/api/client'
 import { catalogNavigationState, catalogOwnedCreateRoute, catalogOwnedKinds, catalogOwnedRoute, catalogReturnPath, catalogRoute, type CatalogOwnedKind } from '@/lib/catalog-navigation'
 import { messages } from '@/lib/messages'
 import { clearBarcodeHandoff, useBarcodeHandoff } from '@/lib/scan-handoff'
-import { subscribeSessionCleared } from '@/lib/session-lifecycle'
 import { quoteExactText } from '@/lib/text-literal'
 import { useOnline } from '@/lib/use-online'
 import { clearSessionQueries } from '@/features/auth/use-auth-action'
@@ -21,6 +19,7 @@ import { OwnedList } from './owned-list'
 import { readOwnedMetadata, type OwnedMetadata } from './owned-model'
 import { OwnedReviewDialog } from './owned-review-dialog'
 import { OwnedRowEditor } from './owned-row-editor'
+import { SessionClearBoundary } from './session-clear-boundary'
 import { OwnedTagsEditor } from './owned-tags-editor'
 import type { OwnedRow } from './display'
 import { useOwnedMutation } from './use-owned-mutation'
@@ -29,25 +28,7 @@ const text = messages.owned
 type OwnedPageProps = { kind: CatalogOwnedKind; mode: 'list' | 'create' | 'edit' }
 
 export default function OwnedPage(props: OwnedPageProps) {
-  const client = useQueryClient(), route = useLocation()
-  const [cleared, setCleared] = useState(false)
-  const latched = useRef(false)
-  useLayoutEffect(() => subscribeSessionCleared((source) => {
-    if (latched.current) return
-    latched.current = true
-    void client.cancelQueries()
-    client.clear()
-    // A remote browser event can otherwise leave a reviewed portal visible
-    // until React's next commit. Local signals can originate in a React effect.
-    if (source === 'remote') flushSync(() => setCleared(true))
-    else setCleared(true)
-  }), [client])
-  if (cleared) {
-    const returnTo = catalogReturnPath(route.pathname + route.search) ?? '/items'
-    const notice = typeof route.state?.scanToken === 'string' && route.state.scanToken.length === 36 ? 'scanHandoffLost' : 'expired'
-    return <div className="max-w-3xl py-8"><Alert role="alert" className="space-y-3 p-4"><AlertTitle>{text.sessionCleared}</AlertTitle><AlertDescription className="space-y-3 text-base leading-relaxed"><p>{text.sessionClearedHelp}</p><p>{text.sessionClearedUncertain}</p><Button asChild variant="outline" className={control}><Link to="/login" state={{ notice, returnTo }}>{messages.scan.signIn}</Link></Button></AlertDescription></Alert></div>
-  }
-  return <OwnedPageContent {...props} />
+  return <SessionClearBoundary><OwnedPageContent {...props} /></SessionClearBoundary>
 }
 
 function OwnedPageContent({ kind, mode }: OwnedPageProps) {
