@@ -161,6 +161,17 @@ func (s *Store) migrate(ctx context.Context, cfg Config, all []migrations.Migrat
 			return report, fmt.Errorf("revalidate retained media backfill: %w", err)
 		}
 	}
+	// No thumbnail producer runs during this migration; even a late ledger
+	// trigger must not manufacture file claims for retained source records.
+	if version < 23 && len(all) >= 23 {
+		var thumbnails int
+		if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM media_thumbnails").Scan(&thumbnails); err != nil {
+			return report, err
+		}
+		if thumbnails != 0 {
+			return report, fmt.Errorf("validate new thumbnail source: %w", ErrDomainState)
+		}
+	}
 	finalVersion, finalLedger, err := history(ctx, tx, all)
 	if err != nil {
 		return report, err

@@ -15,14 +15,12 @@ import (
 	"path/filepath"
 	"sync"
 
-	"homebox/internal/mediaimage"
-
 	"golang.org/x/sys/unix"
 )
 
 // The input has a separate 32 MiB limit. Re-encoded 16-bit RGBA PNG can be
 // larger than its compressed input, so bound the staged output independently.
-const maxMediaStageBytes = int64(mediaimage.MaxPixels)*8 + (16 << 20)
+const maxMediaStageBytes = maxMediaFileBytes
 
 var (
 	errMediaStageLimit    = errors.New("invalid media staging limit")

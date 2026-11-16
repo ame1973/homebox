@@ -15,6 +15,8 @@
 
 ### Added
 
+- Retain bounded private JPEG-thumbnail source metadata independently from Media, with verified-parent and immutable-owner guards, shared digest lookup, source validation and late link/owner-deletion rollback. Migration preserves older claims and frozen bytes without inventing thumbnails; actual upload, files and streams remain unimplemented.
+
 - Pin the database server secret atomically with keyed Media domain receipts, verify it after audit and session writes on new requests and replays, and fail closed if the pinned key is lost or changed. Preserve legacy receipts without assuming they used keyed fingerprints. This transaction protection does not implement the upload endpoint.
 
 - Add bounded, lossless photo crop/quarter-turn geometry that maps displayed selections back to the original oriented pixels without resampling. Exhaustive small pixel grids and private Chromium canvas checks cover rotations and repeated crops; this is not a photo editor or upload screen.

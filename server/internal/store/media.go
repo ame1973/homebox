@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+
+	"homebox/internal/mediaimage"
 )
 
 // Media source metadata is retained exactly; it does not establish that a
@@ -22,10 +24,16 @@ type mediaData struct {
 	PerceptualHash *string `json:"perceptual_hash"`
 }
 
+type retainedMediaThumbnail struct {
+	SHA256               string
+	Width, Height, Bytes int64
+}
+
 type retainedMedia struct {
 	mediaData
 	storageKey   string
 	createdAt    string
+	thumbnail    *retainedMediaThumbnail
 	Verification string
 	Revision     int64
 }
@@ -50,8 +58,14 @@ type mediaMember struct {
 	payload string
 }
 
-const mediaSelect = `SELECT m.id,m.sha256,m.mime_type,m.width,m.height,m.bytes,m.perceptual_hash,m.verification,m.storage_key,m.created_at,COALESCE(r.revision,0)
- FROM media m LEFT JOIN projection_revisions r ON r.entity_type='media' AND r.entity_id=m.id`
+const mediaSelectFields = `SELECT m.id,m.sha256,m.mime_type,m.width,m.height,m.bytes,m.perceptual_hash,m.verification,m.storage_key,m.created_at,COALESCE(r.revision,0)`
+const mediaSelectFrom = ` FROM media m LEFT JOIN projection_revisions r ON r.entity_type='media' AND r.entity_id=m.id`
+
+// Migration 0019 must validate its own backfill before the thumbnail table exists.
+const legacyMediaSelect = mediaSelectFields + mediaSelectFrom
+const mediaSelect = mediaSelectFields + `,t.sha256,t.width,t.height,t.bytes` + mediaSelectFrom + ` LEFT JOIN media_thumbnails t ON t.media_id=m.id`
+
+const maxMediaFileBytes = int64(mediaimage.MaxPixels)*8 + (16 << 20)
 
 const mediaLinkSelect = `SELECT l.id,l.media_id,l.item_id,l.item_unit_id,l.location_id,l.is_cover,l.sort_order,l.description,COALESCE(r.revision,0)
  FROM media_links l LEFT JOIN projection_revisions r ON r.entity_type='media_link' AND r.entity_id=l.id`
@@ -73,10 +87,23 @@ func supportedMediaMIME(value string) bool {
 }
 
 func scanMedia(row rowScanner) (retainedMedia, error) {
+	return scanMediaSource(row, true)
+}
+
+func scanLegacyMedia(row rowScanner) (retainedMedia, error) {
+	return scanMediaSource(row, false)
+}
+
+func scanMediaSource(row rowScanner, withThumbnail bool) (retainedMedia, error) {
 	var value retainedMedia
-	var hash sql.NullString
-	if err := row.Scan(&value.ID, &value.SHA256, &value.MIMEType, &value.Width, &value.Height, &value.Bytes,
-		&hash, &value.Verification, &value.storageKey, &value.createdAt, &value.Revision); err != nil {
+	var hash, thumbnailHash sql.NullString
+	var thumbnailWidth, thumbnailHeight, thumbnailBytes sql.NullInt64
+	fields := []any{&value.ID, &value.SHA256, &value.MIMEType, &value.Width, &value.Height, &value.Bytes,
+		&hash, &value.Verification, &value.storageKey, &value.createdAt, &value.Revision}
+	if withThumbnail {
+		fields = append(fields, &thumbnailHash, &thumbnailWidth, &thumbnailHeight, &thumbnailBytes)
+	}
+	if err := row.Scan(fields...); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return retainedMedia{}, ErrNotFound
 		}
@@ -92,8 +119,18 @@ func scanMedia(row rowScanner) (retainedMedia, error) {
 		(value.Verification == "verified" && !supportedMediaMIME(value.MIMEType)) || value.Revision < 1 || value.Revision > maxSafeInteger {
 		return retainedMedia{}, ErrDomainState
 	}
-	// No thumbnail storage or byte-verification producer exists yet. Both
-	// nullable fields deliberately remain null rather than inventing a file.
+	if thumbnailHash.Valid || thumbnailWidth.Valid || thumbnailHeight.Valid || thumbnailBytes.Valid {
+		if !thumbnailHash.Valid || !thumbnailWidth.Valid || !thumbnailHeight.Valid || !thumbnailBytes.Valid ||
+			value.Verification != "verified" || !validMediaDigest(thumbnailHash.String) ||
+			thumbnailWidth.Int64 < 1 || thumbnailWidth.Int64 > mediaimage.MaxThumbnailDimension || thumbnailWidth.Int64 > value.Width ||
+			thumbnailHeight.Int64 < 1 || thumbnailHeight.Int64 > mediaimage.MaxThumbnailDimension || thumbnailHeight.Int64 > value.Height ||
+			thumbnailBytes.Int64 < 1 || thumbnailBytes.Int64 > maxMediaFileBytes {
+			return retainedMedia{}, ErrDomainState
+		}
+		value.thumbnail = &retainedMediaThumbnail{SHA256: thumbnailHash.String, Width: thumbnailWidth.Int64, Height: thumbnailHeight.Int64, Bytes: thumbnailBytes.Int64}
+	}
+	// A source record is not proof that a file exists or a stream is available.
+	// Public and offline thumbnail fields remain null until streaming is implemented.
 	return value, nil
 }
 
@@ -139,6 +176,14 @@ func mediaAuthorityError(err error) error {
 
 func validateMediaLinkAuthority(ctx context.Context, query queryer, link retainedMediaLink) error {
 	if _, err := loadMedia(ctx, query, link.MediaID); err != nil {
+		return mediaAuthorityError(err)
+	}
+	return mediaAuthorityError(loadMediaOwner(ctx, query, link.OwnerType, link.OwnerID))
+}
+
+// The version-19 backfill runs before the later thumbnail source exists.
+func validateLegacyMediaLinkAuthority(ctx context.Context, query queryer, link retainedMediaLink) error {
+	if _, err := scanLegacyMedia(query.QueryRowContext(ctx, legacyMediaSelect+" WHERE m.id=?", link.MediaID)); err != nil {
 		return mediaAuthorityError(err)
 	}
 	return mediaAuthorityError(loadMediaOwner(ctx, query, link.OwnerType, link.OwnerID))
@@ -201,8 +246,8 @@ func validateMediaBackfill(ctx context.Context, tx *sql.Tx) error {
 		query string
 		scan  func(rowScanner) error
 	}{
-		{mediaSelect, func(row rowScanner) error {
-			value, err := scanMedia(row)
+		{legacyMediaSelect, func(row rowScanner) error {
+			value, err := scanLegacyMedia(row)
 			if err == nil && value.Verification != "unverified" {
 				return ErrDomainState
 			}
@@ -214,7 +259,7 @@ func validateMediaBackfill(ctx context.Context, tx *sql.Tx) error {
 		{mediaLinkSelect, func(row rowScanner) error {
 			value, err := scanMediaLink(row)
 			if err == nil {
-				err = validateMediaLinkAuthority(ctx, tx, value)
+				err = validateLegacyMediaLinkAuthority(ctx, tx, value)
 			}
 			if err == nil {
 				err = validateMediaCurrentProjection(ctx, tx, "media_link", value.ID, value.Revision)
