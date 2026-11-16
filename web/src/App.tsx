@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef } from 'react'
 import { Link, NavLink, Route, Routes, useLocation } from 'react-router'
-import { MapPin, NotebookTabs, Package, ReceiptText, Settings, UserRound } from 'lucide-react'
+import { MapPin, NotebookTabs, Package, ReceiptText, ScanLine, Settings, UserRound } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ThemeMenu } from '@/components/theme-menu'
 import { AppErrorBoundary } from '@/components/app-error-boundary'
@@ -15,6 +15,7 @@ const HoldingPage = lazy(() => import('@/features/holdings/holding-page'))
 const PurchasePage = lazy(() => import('@/features/purchases/purchase-page'))
 const AssetPage = lazy(() => import('@/features/assets/asset-page'))
 const MediaPage = lazy(() => import('@/features/media/media-page'))
+const ScanPage = lazy(() => import('@/features/scan/scan-page'))
 const DisposalCorrectionPage = lazy(() => import('@/features/financial-corrections/disposal-page'))
 const PurchaseCorrectionHistoryPage = lazy(() => import('@/features/financial-corrections/purchase-history-page'))
 const PurchaseCorrectionPage = lazy(() => import('@/features/financial-corrections/purchase-page'))
@@ -39,6 +40,7 @@ export default function App() {
         </Link>
         <nav aria-label={messages.app.navigation} className="flex max-w-full flex-wrap items-center gap-2">
           <Button variant="outline" asChild className="min-h-11 h-auto gap-2 whitespace-normal text-base aria-[current=page]:border-primary aria-[current=page]:bg-muted"><NavLink to="/locations"><MapPin className="size-4" aria-hidden="true" />{messages.locations.nav}</NavLink></Button>
+          <Button variant="outline" asChild className="min-h-11 h-auto gap-2 whitespace-normal text-base aria-[current=page]:border-primary aria-[current=page]:bg-muted"><NavLink to="/scan"><ScanLine className="size-4" aria-hidden="true" />{messages.scan.nav}</NavLink></Button>
           <Button variant="outline" asChild className="min-h-11 h-auto gap-2 whitespace-normal text-base aria-[current=page]:border-primary aria-[current=page]:bg-muted"><NavLink to="/items"><Package className="size-4" aria-hidden="true" />{messages.catalog.nav}</NavLink></Button>
           <Button variant="outline" asChild className="min-h-11 h-auto gap-2 whitespace-normal text-base aria-[current=page]:border-primary aria-[current=page]:bg-muted"><NavLink to="/purchases"><ReceiptText className="size-4" aria-hidden="true" />{messages.purchases.nav}</NavLink></Button>
           <Button variant="outline" asChild className="min-h-11 h-auto gap-2 whitespace-normal text-base aria-[current=page]:border-primary aria-[current=page]:bg-muted"><NavLink to="/assets"><NotebookTabs className="size-4" aria-hidden="true" />{messages.assets.nav}</NavLink></Button>
@@ -67,6 +69,7 @@ export default function App() {
               <Route path="/locations/:id/view" element={<LocationsPage key={location.key} mode="detail" />} />
               <Route path="/locations/:id" element={<LocationsPage key={location.key} mode="detail" />} />
               <Route path="/locations/:id/edit" element={<LocationsPage key={location.key} mode="edit" />} />
+              <Route path="/scan" element={<ScanPage key={location.key} />} />
               <Route path="/items" element={<CatalogPage key={location.key} mode="list" />} />
               <Route path="/items/new" element={<CatalogPage key={location.key} mode="create" />} />
               <Route path="/items/:id/view" element={<CatalogPage key={location.key} mode="detail" />} />

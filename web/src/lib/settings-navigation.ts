@@ -36,5 +36,5 @@ export function settingsReturnPath(value: unknown): string | undefined {
 }
 
 export function applicationReturnPath(value: unknown): string | undefined {
-  return locationReturnPath(value) ?? settingsReturnPath(value) ?? catalogReturnPath(value) ?? holdingReturnPath(value) ?? purchaseReturnPath(value) ?? assetReturnPath(value) ?? mediaReturnPath(value)
+  return value === '/scan' ? value : locationReturnPath(value) ?? settingsReturnPath(value) ?? catalogReturnPath(value) ?? holdingReturnPath(value) ?? purchaseReturnPath(value) ?? assetReturnPath(value) ?? mediaReturnPath(value)
 }

@@ -31,6 +31,11 @@ it.each([null, undefined, {}, 7, '', '/login', '/settings-extra', '/settings/sys
   expect(applicationReturnPath(path)).toBeUndefined()
 })
 
+it('preserves only the parameter-free implemented scan return', () => {
+  expect(applicationReturnPath('/scan')).toBe('/scan')
+  for (const path of ['/scan?value=secret', '/scan?', '/scan#secret', '/scan/', '//evil.example/scan', '/scan\\elsewhere']) expect(applicationReturnPath(path)).toBeUndefined()
+})
+
 it('retains established safe location returns without admitting unrelated routes', () => {
   expect(applicationReturnPath('/locations/room/edit')).toBe('/locations/room/edit')
   expect(settingsReturnPath('/locations/room/edit')).toBeUndefined()
