@@ -15,9 +15,11 @@
 
 ### Added
 
+- Add internal Linux content-addressed promotion of sealed private Media stages. Atomically link without replacement, verify actual bytes and permissions before reusing an existing object, synchronize files and directories, reject cross-device stages before changing them, and retain possibly shared objects on failure. This is not an upload, SQLite publication, startup recovery or safe streaming implementation.
+
 - Add an internal video-frame capture helper that encodes a live video-only stream to a bounded JPEG, discards pending results on session/page suspension, and serializes uncancelable canvas encoders with explicit timeout recovery. Test actual fake-camera pixels, real JPEG decoding, both cross-window logout transports and genuine BFCache restoration. This is not a production photo-capture screen, uploader or physical-device acceptance.
 
-- Add an internal Linux private-media staging writer with exclusive random `0600` files, bounded output, anchored directory/inode checks, actual-byte SHA-256 verification, file/directory synchronization and retryable explicit cleanup. Tests cover real sanitizer output, concurrency, cancellation, tampering, permissions and process exit without cleanup. This does not enable upload, image validation by itself, promotion, recovery, streaming or WebP.
+- Add an internal Linux private-media staging writer with exclusive random `0600` files, bounded output, anchored directory/inode checks, actual-byte SHA-256 verification, file/directory synchronization and retryable explicit cleanup. Tests cover real sanitizer output, concurrency, cancellation, tampering, permissions and process exit without cleanup. At that increment this did not enable upload, image validation by itself, promotion, recovery, streaming or WebP.
 
 - Connect native `BarcodeDetector` support to the explicitly opened `/scan` camera. Report supported and missing formats, stop on results or errors, preserve and separately display exact returned values, require explicit selection and manual lookup, and offer only validated same-origin Location/Unit QR links. Bound visible results, ignore late replies and serialize uncancelable detections across in-app navigation; an eight-second timeout requires a page reload. Browser coverage uses an injected detector and fake camera, not native pixel decoding or physical-device acceptance. Missing-format fallback, image-file scanning and photo capture remain unfinished.
 

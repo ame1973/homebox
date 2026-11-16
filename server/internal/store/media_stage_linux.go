@@ -57,13 +57,7 @@ type mediaStage struct {
 	discarded bool
 }
 
-func newMediaStage(ctx context.Context, directory string, limit int64) (*mediaStage, error) {
-	if ctx == nil || limit <= 0 || limit > maxMediaStageBytes {
-		return nil, errMediaStageLimit
-	}
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
+func openPrivateMediaDirectory(directory string) (*os.File, error) {
 	if directory == "" {
 		return nil, ErrUnsafePath
 	}
@@ -78,7 +72,7 @@ func newMediaStage(ctx context.Context, directory string, limit int64) (*mediaSt
 	if err != nil {
 		return nil, err
 	}
-	dir := os.NewFile(uintptr(fd), "media-stage-directory")
+	dir := os.NewFile(uintptr(fd), "media-private-directory")
 	info, err := dir.Stat()
 	if err != nil || !info.IsDir() || info.Mode().Perm()&0o077 != 0 {
 		return nil, errors.Join(ErrUnsafePath, err, dir.Close())
@@ -94,6 +88,21 @@ func newMediaStage(ctx context.Context, directory string, limit int64) (*mediaSt
 	if err = syncMediaStageParent(dir); err != nil {
 		return nil, errors.Join(err, dir.Close())
 	}
+	return dir, nil
+}
+
+func newMediaStage(ctx context.Context, directory string, limit int64) (*mediaStage, error) {
+	if ctx == nil || limit <= 0 || limit > maxMediaStageBytes {
+		return nil, errMediaStageLimit
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	dir, err := openPrivateMediaDirectory(directory)
+	if err != nil {
+		return nil, err
+	}
+	fd := int(dir.Fd())
 	for range 8 {
 		var random [16]byte
 		if _, err = rand.Read(random[:]); err != nil {
@@ -173,8 +182,8 @@ func (stage *mediaStage) Write(data []byte) (int, error) {
 	return n, err
 }
 
-func (stage *mediaStage) checkDirectory() error {
-	info, err := stage.dir.Stat()
+func checkPrivateMediaDirectory(dir *os.File) error {
+	info, err := dir.Stat()
 	if err != nil {
 		return err
 	}
@@ -182,6 +191,10 @@ func (stage *mediaStage) checkDirectory() error {
 		return ErrUnsafePath
 	}
 	return nil
+}
+
+func (stage *mediaStage) checkDirectory() error {
+	return checkPrivateMediaDirectory(stage.dir)
 }
 
 // checkName prevents sealing or deleting a different file substituted at the
@@ -195,6 +208,41 @@ func (stage *mediaStage) checkName() error {
 		return errMediaStageChanged
 	}
 	return nil
+}
+
+func hashMediaFile(ctx context.Context, file *os.File, expected int64) ([sha256.Size]byte, error) {
+	var digest [sha256.Size]byte
+	if expected < 1 || expected > maxMediaStageBytes {
+		return digest, errMediaStageChanged
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return digest, err
+	}
+	hash := sha256.New()
+	buffer := make([]byte, 64<<10)
+	var count int64
+	for {
+		if err := ctx.Err(); err != nil {
+			return digest, err
+		}
+		n, err := file.Read(buffer)
+		count += int64(n)
+		if count > expected {
+			return digest, errMediaStageChanged
+		}
+		_, _ = hash.Write(buffer[:n])
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return digest, err
+		}
+	}
+	if count != expected {
+		return digest, errMediaStageChanged
+	}
+	copy(digest[:], hash.Sum(nil))
+	return digest, nil
 }
 
 // seal synchronizes the file and its directory and checks the actual bytes
@@ -239,30 +287,11 @@ func (stage *mediaStage) seal() (mediaStageDigest, error) {
 	if err = stage.file.Sync(); err != nil {
 		return fail(err)
 	}
-	if _, err = stage.file.Seek(0, io.SeekStart); err != nil {
+	actual, err := hashMediaFile(stage.ctx, stage.file, stage.written)
+	if err != nil {
 		return fail(err)
 	}
-	actual := sha256.New()
-	buffer := make([]byte, 64<<10)
-	var count int64
-	for {
-		if err = stage.ctx.Err(); err != nil {
-			return fail(err)
-		}
-		n, readErr := stage.file.Read(buffer)
-		count += int64(n)
-		if count > stage.written {
-			return fail(errMediaStageChanged)
-		}
-		_, _ = actual.Write(buffer[:n])
-		if errors.Is(readErr, io.EOF) {
-			break
-		}
-		if readErr != nil {
-			return fail(readErr)
-		}
-	}
-	if count != stage.written || !bytes.Equal(actual.Sum(nil), stage.hash.Sum(nil)) {
+	if !bytes.Equal(actual[:], stage.hash.Sum(nil)) {
 		return fail(errMediaStageChanged)
 	}
 	info, err = stage.file.Stat()
@@ -298,8 +327,7 @@ func (stage *mediaStage) seal() (mediaStageDigest, error) {
 	if err = stage.ctx.Err(); err != nil {
 		return fail(err)
 	}
-	result := mediaStageDigest{Bytes: count}
-	copy(result.SHA256[:], actual.Sum(nil))
+	result := mediaStageDigest{Bytes: stage.written, SHA256: actual}
 	stage.result = &result
 	return result, nil
 }
