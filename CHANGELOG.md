@@ -15,7 +15,9 @@
 
 ### Added
 
-- Add an explicitly opened live camera preview to `/scan`, with safe start/stop, front/back preference, supported torch controls, playback recovery and track cleanup. It does not yet decode barcodes, capture images or replace the manual lookup and future file fallback; fake-device browser checks are not physical-device acceptance.
+- Connect native `BarcodeDetector` support to the explicitly opened `/scan` camera. Report supported and missing formats, stop on results or errors, preserve and separately display exact returned values, require explicit selection and manual lookup, and offer only validated same-origin Location/Unit QR links. Bound visible results, ignore late replies and serialize uncancelable detections across in-app navigation; an eight-second timeout requires a page reload. Browser coverage uses an injected detector and fake camera, not native pixel decoding or physical-device acceptance. Missing-format fallback, image-file scanning and photo capture remain unfinished.
+
+- Add an explicitly opened live camera preview to `/scan`, with safe start/stop, front/back preference, supported torch controls, playback recovery and track cleanup. At that increment it did not decode barcodes, capture images or replace the manual lookup and future file fallback; fake-device browser checks are not physical-device acceptance.
 
 - Check the proposed Item name against approved item-search text during creation review, including alongside a scanned-barcode check. Show explicit five-row live pages, do not equate a match with duplication, require explicit bypass on failed checks and avoid an unfiltered read for whitespace-only names.
 

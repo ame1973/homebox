@@ -17,6 +17,7 @@ import { pathIDSchema } from '@/lib/api/domain'
 import { catalogRoute } from '@/lib/catalog-navigation'
 import { messages } from '@/lib/messages'
 import { barcodeJSONInputMax, startBarcodeHandoff } from '@/lib/scan-handoff'
+import { type ScannedCode } from '@/lib/scan-native'
 import { subscribeSessionCleared } from '@/lib/session-lifecycle'
 import { quoteExactText } from '@/lib/text-literal'
 import { useOnline } from '@/lib/use-online'
@@ -96,6 +97,12 @@ export default function ScanPage() {
     void client.cancelQueries({ queryKey: ['catalog', 'barcode-choices'] })
     setScope(undefined); setTrail([]); setError(false)
   }
+  function useDetectedCode(code: ScannedCode) {
+    if (!cameraSessionActive || !validText(code.rawValue, 1, 512)) return
+    clearResults()
+    setRaw(quoteExactText(code.rawValue)); setFormat('json'); setSymbology(code.format)
+    inputRef.current?.focus()
+  }
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!enabled || page.isFetching) return
@@ -135,7 +142,7 @@ export default function ScanPage() {
           : auth.isError && online ? <div className="space-y-4"><CatalogError error={auth.error} /><Button type="button" variant="outline" className={control} onClick={() => { void auth.refetch() }}>{messages.auth.checkAgain}</Button></div>
             : <>
               {!online && <Alert role="status" className="p-4"><WifiOff aria-hidden="true" /><AlertTitle>{text.offline}</AlertTitle><AlertDescription className="text-base">{text.offlineHelp}</AlertDescription></Alert>}
-              <ScanCamera sessionActive={cameraSessionActive} />
+              <ScanCamera sessionActive={cameraSessionActive} onUseCode={useDetectedCode} />
               <form noValidate onSubmit={submit} className="min-w-0 max-w-3xl space-y-5 rounded-lg border p-5 sm:p-6">
                 <div className="space-y-2"><label htmlFor="scan-format" className="block text-base font-medium">{text.inputFormat}</label><NativeSelect id="scan-format" value={format} onChange={(event) => { setFormat(event.target.value === 'json' ? 'json' : 'plain'); clearResults() }} className="w-full [&_select]:min-h-12 [&_select]:text-base"><NativeSelectOption value="plain">{text.plain}</NativeSelectOption><NativeSelectOption value="json">{text.json}</NativeSelectOption></NativeSelect><p className="text-sm leading-relaxed text-muted-foreground">{format === 'json' ? text.jsonHelp : text.inputHelp}</p></div>
                 <div className="min-w-0 space-y-2"><label htmlFor="scan-value" className="block text-base font-medium">{text.input}</label><Textarea ref={inputRef} id="scan-value" value={raw} onChange={(event) => { setRaw(event.target.value); clearResults() }} rows={2} maxLength={format === 'json' ? barcodeJSONInputMax : 1024} autoComplete="off" spellCheck={false} aria-invalid={error} aria-describedby={error ? 'scan-value-error' : undefined} className="min-h-20 text-base md:text-base" />{error && <p id="scan-value-error" role="alert" className="text-sm text-destructive">{text.invalid}</p>}</div>

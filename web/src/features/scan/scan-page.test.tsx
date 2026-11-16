@@ -11,6 +11,8 @@ import { ApiError } from '@/lib/api/client'
 import { messages } from '@/lib/messages'
 import { createQueryClient } from '@/lib/query'
 import { readBarcodeHandoff } from '@/lib/scan-handoff'
+import * as native from '@/lib/scan-native'
+import { quoteExactText } from '@/lib/text-literal'
 import { notifySessionCleared } from '@/lib/session-lifecycle'
 import * as model from './barcode-model'
 
@@ -68,6 +70,50 @@ it('withholds the camera until a completed session and never opens it automatica
   } finally {
     if (original) Object.defineProperty(navigator, 'mediaDevices', original)
     else Reflect.deleteProperty(navigator, 'mediaDevices')
+  }
+})
+
+it('uses a chosen exact native result only as a new explicitly submitted lookup', async () => {
+  const device = Object.getOwnPropertyDescriptor(navigator, 'mediaDevices'), source = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'srcObject')
+  class Track extends EventTarget {
+    readonly kind = 'video'
+    readyState: 'live' | 'ended' = 'live'
+    stop() { this.readyState = 'ended' }
+    getCapabilities() { return {} }
+  }
+  const track = new Track(), stream = { getTracks: () => [track], getVideoTracks: () => [track] } as unknown as MediaStream
+  Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia: vi.fn().mockResolvedValue(stream) } })
+  Object.defineProperty(HTMLMediaElement.prototype, 'srcObject', { configurable: true, writable: true, value: null })
+  vi.stubGlobal('isSecureContext', true)
+  const spies = [vi.spyOn(HTMLMediaElement.prototype, 'readyState', 'get').mockReturnValue(2), vi.spyOn(HTMLVideoElement.prototype, 'videoWidth', 'get').mockReturnValue(640),
+    vi.spyOn(HTMLVideoElement.prototype, 'videoHeight', 'get').mockReturnValue(480), vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(),
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {}), vi.spyOn(native, 'createNativeBarcodeDecoder').mockResolvedValue({
+      formats: ['UPC_A'], detect: vi.fn().mockResolvedValue([{ format: 'UPC_A', rawValue: '\0é\r\n001' }]),
+    })]
+  try {
+    mount()
+    await search('previous')
+    await screen.findByRole('heading', { name: text.empty })
+    await userEvent.setup().click(screen.getByRole('button', { name: text.cameraStart }))
+    const results = await screen.findByRole('list', { name: text.nativeResults })
+    expect(track.readyState).toBe('ended')
+    expect(model.readBarcodeChoices).toHaveBeenCalledTimes(1)
+    await userEvent.setup().click(within(results).getByRole('button', { name: text.nativeUse }))
+    const input = screen.getByRole('textbox', { name: text.input })
+    expect(input).toHaveFocus()
+    expect(input).toHaveValue(quoteExactText('\0é\r\n001'))
+    expect(screen.getByRole('combobox', { name: text.inputFormat })).toHaveValue('json')
+    expect(screen.getByRole('combobox', { name: text.symbology })).toHaveValue('UPC_A')
+    expect(screen.queryByRole('heading', { name: text.empty })).not.toBeInTheDocument()
+    expect(model.readBarcodeChoices).toHaveBeenCalledTimes(1)
+    await userEvent.setup().click(screen.getByRole('button', { name: text.search }))
+    await screen.findByRole('heading', { name: text.empty })
+    expect(model.readBarcodeChoices).toHaveBeenLastCalledWith({ value: '\0é\r\n001', symbology: 'UPC_A' }, expect.any(AbortSignal))
+  } finally {
+    for (const restore of spies) restore.mockRestore()
+    vi.unstubAllGlobals()
+    if (device) Object.defineProperty(navigator, 'mediaDevices', device); else Reflect.deleteProperty(navigator, 'mediaDevices')
+    if (source) Object.defineProperty(HTMLMediaElement.prototype, 'srcObject', source); else Reflect.deleteProperty(HTMLMediaElement.prototype, 'srcObject')
   }
 })
 

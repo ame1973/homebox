@@ -151,7 +151,12 @@ export const messages = {
   },
   scan: {
     nav: '掃描與條碼', title: '掃描與條碼查詢', intro: '輸入完整商品條碼，查看共用這個代碼的物品。商品條碼不是個體識別碼，也不會自動變更庫存。',
-    cameraTitle: '即時相機預覽', cameraUnavailable: '相機只會在你選擇開啟後啟動；條碼辨識與拍照儲存尚未接上，可先使用下方手動查詢。',
+    cameraTitle: '即時相機掃描', cameraUnavailable: '相機只會在你選擇開啟後啟動；可辨識的格式由瀏覽器決定。拍照儲存與圖片檔案辨識尚未提供。',
+    nativeChecking: '正在檢查瀏覽器支援的辨識格式…', nativeUnavailable: '此瀏覽器目前無法使用原生條碼辨識；仍可預覽相機或使用下方手動查詢。', nativeRetry: '重新檢查辨識支援',
+    nativeFormats: '瀏覽器可辨識', nativeMissing: '此瀏覽器尚無法辨識', nativePause: '暫停辨識', nativeResume: '繼續辨識', nativePaused: '辨識已暫停；相機仍然開啟。',
+    nativeError: '辨識發生錯誤，相機已關閉。可重新開啟相機再試，或使用手動查詢。', nativeTimeout: '辨識逾時，掃描已停止。請重新載入此頁後再掃描；也可僅開啟相機預覽或使用手動查詢。',
+    nativeResults: '辨識到的內容', nativeResultsHelp: '辨識後相機已關閉。請核對原始內容與印刷格式；選擇內容會取代下方輸入及查詢結果，但不會自動查詢或變更資料。', nativeTruncated: '這次結果超過 20 筆，僅顯示前 20 筆；請調整畫面後重新掃描。',
+    nativeUse: '帶入下方條碼查詢', nativeClear: '清除辨識結果', nativeTooLong: '此內容超過條碼查詢的 512 字元上限，不能帶入查詢。', nativeOpenLocation: '開啟此位置', nativeOpenUnit: '開啟此個體', nativeUntrustedQR: '此 QR 內容不是可確認的本系統位置或個體連結；請勿直接開啟不明網址。',
     cameraPermission: '瀏覽器可能要求相機權限；離開、登出或將頁面移至背景時會關閉鏡頭。裝置可能忽略前後鏡頭偏好。', cameraSession: '請先連線並確認登入，才能開啟相機。',
     cameraStart: '開啟相機', cameraStop: '關閉相機', cameraSwitch: '切換前後鏡頭', cameraRear: '偏好後鏡頭', cameraFront: '偏好前鏡頭', cameraWaiting: '正在等待相機權限…', cameraLive: '相機已開啟', cameraVideo: '即時相機畫面',
     cameraPlaybackError: '無法播放相機畫面；可重試播放或關閉相機。', cameraPlaybackRetry: '重試播放畫面', cameraTorchOn: '開啟手電筒', cameraTorchOff: '關閉手電筒', cameraTorchError: '無法變更手電筒狀態；請檢查裝置後重試。',
