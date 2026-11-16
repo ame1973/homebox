@@ -15,6 +15,8 @@
 
 ### Added
 
+- Connect real JPEG/PNG sanitization, private stages, verified content-addressed objects and atomic Media/thumbnail SQLite publication in an internal upload transaction. Preserve exact original-key reconciliation, reject legacy storage collisions and recheck actual source, membership and files after audit/session writes. HTTP admission, crash recovery, streams and WebP remain unimplemented.
+
 - Retain bounded private JPEG-thumbnail source metadata independently from Media, with verified-parent and immutable-owner guards, shared digest lookup, source validation and late link/owner-deletion rollback. Migration preserves older claims and frozen bytes without inventing thumbnails; actual upload, files and streams remain unimplemented.
 
 - Pin the database server secret atomically with keyed Media domain receipts, verify it after audit and session writes on new requests and replays, and fail closed if the pinned key is lost or changed. Preserve legacy receipts without assuming they used keyed fingerprints. This transaction protection does not implement the upload endpoint.
