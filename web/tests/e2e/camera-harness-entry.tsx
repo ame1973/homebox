@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client'
 import { createQueryClient } from '../../src/lib/query'
 import { CameraHarness } from './camera-harness'
+export { captureVideoFrame } from '../../src/lib/capture-frame'
 
 // Playwright serves this entry only from a disposable private bundle.
 export function mountCameraHarness() {

@@ -161,6 +161,14 @@ A browser permission request cannot itself be canceled: a request invalidated wh
 
 This preview also supports the browser's available native barcode formats as described in [Camera scanning and manual barcode lookup](catalog-links.md#camera-scanning-and-manual-barcode-lookup). It does not take or store photos, provide image-file fallback, or cover formats unsupported by the browser. Image upload, offline drafts and general cross-window private-cache purge also remain unimplemented. A delivered session-clear signal closes the `/scan` preview and clears that screen's lookup input/results; other mounted routes and future offline replicas are not universally purged, and blocked browser transports can prevent delivery. Automated browser tests use Chromium's fake video device, a test detector and a native document permission policy for the denial case; they do not exercise native pixel decoding or an operating-system permission prompt. Real iPhone/Android browser and installed-PWA acceptance remains blocked until performed on those devices.
 
+## Video-frame capture groundwork
+
+The internal `captureVideoFrame` helper draws the current live video frame into a fresh canvas and requests a JPEG Blob at quality 0.9. It accepts only a visible, ready video bound to the caller's live video-only stream, and rejects dimensions above 16,384, more than 64 million pixels or an encoded result above 32 MiB without silently resizing it. Browser memory limits may be lower, especially on mobile devices. A failed canvas/encoder, invalid Blob or oversized frame returns a bounded state rather than private device diagnostics.
+
+The caller must verify a completed session and invoke capture from an explicit user action. The helper does not open or stop a camera, store a draft, upload or perform a search. An abort, pagehide, hidden page or delivered session-clear signal discards an in-flight result; after awaiting, the caller must recheck its current session and generation before installing a Blob, and must separately clear any Blob already returned and stop its camera on completion or departure. Canvas encoding cannot be canceled: only one call may remain in flight in a document, and a hung callback locks further captures until a real reload after 30 seconds. Canvas cleanup is best effort, not guaranteed memory erasure.
+
+Browser tests use a private harness to draw real Chromium fake-camera pixels, decode the resulting JPEG, and check late results through session purge, cross-window logout and actual BFCache restoration. The test harness is not a production capture screen and emulation is not physical-device or native permission-prompt acceptance. The Blob is not proof of validated image bytes or stripped metadata; a future upload must still apply the server's full sanitizer and authorization. Photo capture controls, multi-shot drafts, file fallback, crop/rotation, upload and visual search remain unimplemented.
+
 ## Image processing groundwork
 
 The internal `server/internal/mediaimage` utility currently accepts JPEG and PNG bytes only. It checks the declared MIME without parameters against the actual format, applies the 32 MiB input, 16,384-per-dimension and 64-million-pixel ceilings before full decoding, and permits callers to specify stricter limits. PNG chunk framing and CRCs are checked across the entire file; APNG control/frame chunks are rejected. JPEG segment and scan framing requires one complete image with no appended data. Malformed or duplicate EXIF orientation is rejected rather than guessed. Input may already occupy memory: a future HTTP boundary must independently bound and stage the multipart stream before calling it.
@@ -198,9 +206,9 @@ npm --prefix web run api:check
 npm --prefix web run typecheck
 npm --prefix web test -- --coverage.enabled=false src/lib/api/client.test.ts src/lib/api/media.test.ts src/lib/api/media-writes.test.ts src/features/media/model.test.ts src/features/media/form.test.ts src/features/media/commands.test.ts src/features/media/use-media-mutation.test.tsx src/features/media/media-page.test.tsx src/features/media/media-editor-page.test.tsx src/features/media/media-attach-page.test.tsx src/features/media/media-error.test.tsx src/lib/media-navigation.test.ts
 npm --prefix web run test:e2e -- --project=phone tests/e2e/media-api.spec.ts
-npm --prefix web test -- --coverage.enabled=false src/lib/use-camera-stream.test.tsx src/features/scan/scan-camera.test.tsx src/features/auth/use-auth-action.test.tsx
+npm --prefix web test -- --coverage.enabled=false src/lib/use-camera-stream.test.tsx src/lib/capture-frame.test.ts src/features/scan/scan-camera.test.tsx src/features/auth/use-auth-action.test.tsx
 make build-web
-npm --prefix web run test:e2e -- tests/e2e/camera-stream.spec.ts --workers=1
+npm --prefix web run test:e2e -- tests/e2e/camera-stream.spec.ts tests/e2e/capture-frame-bfcache.spec.ts --workers=1
 npm --prefix web run test:e2e -- tests/e2e/scan-camera.spec.ts --workers=1
 npm --prefix web run test:e2e -- tests/e2e/scan-camera-bfcache.spec.ts --workers=1
 ```

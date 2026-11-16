@@ -16,8 +16,9 @@ type CameraProbe = {
   hold: boolean
   resume?: () => void
 }
+type FrameProbe = { held: boolean; kind?: string; release?: () => void }
 declare global {
-  interface Window { __cameraProbe: CameraProbe; __unmountCamera: () => void }
+  interface Window { __cameraProbe: CameraProbe; __unmountCamera: () => void; __frameCaptureProbe: FrameProbe }
 }
 
 const test = applicationTest.extend<{}, { cameraBundle: string }>({
@@ -78,6 +79,21 @@ async function streamState(page: Page, index: number) {
   return page.evaluate((position) => window.__cameraProbe.streams[position]?.getVideoTracks()[0]?.readyState, index)
 }
 
+async function holdFrameEncoding(page: Page) {
+  await page.evaluate(async () => {
+    const modulePath = '/assets/camera-harness.js', harness = await import(modulePath)
+    const video = document.querySelector<HTMLVideoElement>('video[aria-label="Live camera"]')
+    if (!video || !(video.srcObject instanceof MediaStream)) throw new Error('Missing live video stream')
+    const native = HTMLCanvasElement.prototype.toBlob, probe: FrameProbe = { held: false }
+    window.__frameCaptureProbe = probe
+    HTMLCanvasElement.prototype.toBlob = function (callback, type, quality) {
+      native.call(this, (blob) => { probe.held = true; probe.release = () => callback(blob) }, type, quality)
+    }
+    void harness.captureVideoFrame(video, video.srcObject, new AbortController().signal).then((result: { kind: string }) => { probe.kind = result.kind })
+  })
+  await expect.poll(() => page.evaluate(() => window.__frameCaptureProbe.held)).toBe(true)
+}
+
 async function hidePage(page: Page) {
   await page.evaluate(() => {
     Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' })
@@ -131,6 +147,101 @@ test('uses a live fake video, switches only after stopping, and releases it on h
   await expect(page.locator('[aria-label="Camera state"]')).toHaveText('active')
   await page.evaluate(() => { window.__unmountCamera() })
   expect(await streamState(page, 3)).toBe('ended')
+})
+
+test('encodes actual fake-camera video pixels into a bounded JPEG in the private helper', async ({ page, cameraBundle }) => {
+  await prepareCamera(page, cameraBundle)
+  const uploads: string[] = []
+  page.on('request', (request) => { if (request.method() === 'POST' && new URL(request.url()).pathname.startsWith('/api/v1/media')) uploads.push(request.url()) })
+  await page.getByRole('button', { name: 'Start camera' }).click()
+  await expect(page.locator('[aria-label="Camera state"]')).toHaveText('active')
+  await expect.poll(() => page.locator('video[aria-label="Live camera"]').evaluate((video: HTMLVideoElement) => video.videoWidth)).toBeGreaterThan(0)
+  await expect.poll(() => page.locator('video[aria-label="Live camera"]').evaluate((video: HTMLVideoElement) => {
+    const canvas = document.createElement('canvas')
+    canvas.width = video.videoWidth; canvas.height = video.videoHeight
+    const context = canvas.getContext('2d')
+    if (!context) return 0
+    context.drawImage(video, 0, 0)
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data, colors = new Set<string>()
+    for (let index = 0; index < pixels.length; index += 4 * 29) colors.add(`${pixels[index]! >> 4},${pixels[index + 1]! >> 4},${pixels[index + 2]! >> 4}`)
+    return colors.size
+  })).toBeGreaterThan(1)
+  const result = await page.evaluate(async () => {
+    const modulePath = '/assets/camera-harness.js'
+    const harness = await import(modulePath)
+    const video = document.querySelector<HTMLVideoElement>('video[aria-label="Live camera"]')
+    if (!video || !(video.srcObject instanceof MediaStream)) throw new Error('Missing live video stream')
+    const captured = await harness.captureVideoFrame(video, video.srcObject, new AbortController().signal)
+    if (captured.kind !== 'captured') return captured
+    const bytes = new Uint8Array(await captured.blob.arrayBuffer())
+    const bitmap = await createImageBitmap(captured.blob)
+    try {
+      const canvas = document.createElement('canvas')
+      canvas.width = bitmap.width; canvas.height = bitmap.height
+      const context = canvas.getContext('2d')
+      if (!context) throw new Error('Missing image context')
+      context.drawImage(bitmap, 0, 0)
+      const pixels = context.getImageData(0, 0, bitmap.width, bitmap.height).data, colors = new Set<string>()
+      for (let index = 0; index < pixels.length; index += 4 * 29) colors.add(`${pixels[index]! >> 4},${pixels[index + 1]! >> 4},${pixels[index + 2]! >> 4}`)
+      return { kind: captured.kind, width: captured.width, height: captured.height, mime: captured.blob.type,
+        size: captured.blob.size, first: [...bytes.slice(0, 3)], last: [...bytes.slice(-2)], decodedWidth: bitmap.width, decodedHeight: bitmap.height, colors: colors.size }
+    } finally { bitmap.close() }
+  })
+  expect(result).toMatchObject({ kind: 'captured', mime: 'image/jpeg', first: [255, 216, 255], last: [255, 217] })
+  if (result.kind !== 'captured') throw new Error('Camera frame was not captured')
+  expect(result.size).toBeGreaterThan(0)
+  expect(result.width).toBe(result.decodedWidth)
+  expect(result.height).toBe(result.decodedHeight)
+  expect(result.colors).toBeGreaterThan(1)
+  expect(await streamState(page, 0)).toBe('live')
+  await page.getByRole('button', { name: 'Stop camera' }).click()
+  expect(await streamState(page, 0)).toBe('ended')
+  expect(uploads).toEqual([])
+})
+
+for (const reason of ['pagehide', 'session'] as const) test(`discards a real encoded frame returned after ${reason}`, async ({ page, cameraBundle }) => {
+  await prepareCamera(page, cameraBundle)
+  await page.getByRole('button', { name: 'Start camera' }).click()
+  await expect(page.locator('[aria-label="Camera state"]')).toHaveText('active')
+  await expect.poll(() => page.locator('video[aria-label="Live camera"]').evaluate((video: HTMLVideoElement) => video.videoWidth)).toBeGreaterThan(0)
+  await holdFrameEncoding(page)
+  if (reason === 'pagehide') await page.evaluate(() => { window.dispatchEvent(new Event('pagehide')) })
+  else await page.getByRole('button', { name: 'Purge session' }).click()
+  await expect.poll(() => page.evaluate(() => window.__frameCaptureProbe.kind)).toBe('cancelled')
+  await expect.poll(() => streamState(page, 0)).toBe('ended')
+  const blocked = await page.evaluate(async () => {
+    const modulePath = '/assets/camera-harness.js', harness = await import(modulePath)
+    const video = document.querySelector<HTMLVideoElement>('video[aria-label="Live camera"]')
+    if (!video) throw new Error('Missing camera video')
+    return (await harness.captureVideoFrame(video, window.__cameraProbe.streams[0], new AbortController().signal)).kind
+  })
+  expect(blocked).toBe('busy')
+  await page.evaluate(() => { window.__frameCaptureProbe.release?.() })
+  expect(await page.evaluate(() => window.__frameCaptureProbe.kind)).toBe('cancelled')
+})
+
+for (const transport of ['broadcast', 'storage'] as const) test(`discards a pending encoded frame after real cross-window logout using ${transport}`, async ({ page, context, cameraBundle, application }) => {
+  await provision(page, application)
+  await context.addInitScript((selected: 'broadcast' | 'storage') => {
+    if (selected === 'broadcast') Object.defineProperty(window, 'localStorage', { configurable: true, get() { throw new DOMException('disabled for test', 'SecurityError') } })
+    else Object.defineProperty(window, 'BroadcastChannel', { configurable: true, value: undefined })
+  }, transport)
+  await prepareCamera(page, cameraBundle, '/settings/account')
+  await page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' }) })
+  await page.getByRole('button', { name: 'Start camera' }).click()
+  await expect(page.locator('[aria-label="Camera state"]')).toHaveText('active')
+  await expect.poll(() => page.locator('video[aria-label="Live camera"]').evaluate((video: HTMLVideoElement) => video.videoWidth)).toBeGreaterThan(0)
+  await holdFrameEncoding(page)
+  const other = await context.newPage()
+  try {
+    await other.goto('/settings/account')
+    await other.getByRole('button', { name: messages.auth.logout, exact: true }).click()
+    await other.getByRole('alertdialog').getByRole('button', { name: messages.auth.logout, exact: true }).click()
+    await expect.poll(() => page.evaluate(() => window.__frameCaptureProbe.kind)).toBe('cancelled')
+    await expect.poll(() => streamState(page, 0)).toBe('ended')
+    await page.evaluate(() => { window.__frameCaptureProbe.release?.() })
+    expect(await page.evaluate(() => window.__frameCaptureProbe.kind)).toBe('cancelled')
+  } finally { await other.close() }
 })
 
 test('stops a real fake-device stream returned after the page was hidden', async ({ page, cameraBundle }) => {
