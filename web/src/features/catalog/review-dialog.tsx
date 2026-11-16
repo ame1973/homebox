@@ -1,5 +1,8 @@
 import { MutationReviewDialog } from '@/components/mutation-review'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { messages } from '@/lib/messages'
+import type { ScanBarcodeDraft } from '@/lib/scan-handoff'
+import { quoteExactText } from '@/lib/text-literal'
 import { commandName, type CatalogCommand } from './commands'
 import { CatalogError } from './catalog-error'
 import { catalogDisplay } from './display'
@@ -22,12 +25,16 @@ function reviewRows(command: CatalogCommand) {
   }
   return rows
 }
-export function CatalogReviewDialog({ operation, online, onReadCurrent }: { operation: CatalogMutation; online: boolean; onReadCurrent: () => Promise<unknown> }) {
+export function CatalogReviewDialog({ operation, online, onReadCurrent, scanDraft, scanHandoffRequested = false }: {
+  operation: CatalogMutation; online: boolean; onReadCurrent: () => Promise<unknown>; scanDraft?: ScanBarcodeDraft; scanHandoffRequested?: boolean
+}) {
   const command = operation.command
   if (!command) return null
   const help = command.kind === 'delete' ? text.deleteHelp : command.kind === 'archive' ? text.archiveHelp : command.kind === 'restore' ? text.restoreHelp : text.reviewHelp
   return <MutationReviewDialog operation={operation} title={text.reviewTitle} help={help} confirmLabel={labels[command.kind]} destructive={command.kind === 'delete'} online={online} onReadCurrent={onReadCurrent} error={<CatalogError error={operation.error} />}>
     <p className="whitespace-pre-wrap text-lg font-semibold [overflow-wrap:anywhere]">「{commandName(command)}」</p>
+    {command.kind === 'create' && scanHandoffRequested && (scanDraft ? <section className="min-w-0 space-y-2 rounded-lg border p-4"><h3 className="font-semibold">{messages.scan.handoffTitle}</h3><p className="text-base leading-relaxed">{messages.scan.reviewHandoffHelp}</p><p className="whitespace-pre-wrap text-sm [overflow-wrap:anywhere]">{messages.scan.input}：{quoteExactText(scanDraft.rawValue)}<br />{messages.scan.symbology}：{scanDraft.symbology ? messages.owned.symbologies[scanDraft.symbology] : messages.scan.chooseFormatLater}</p></section>
+      : <Alert role="alert" className="p-4"><AlertDescription className="text-base">{messages.scan.handoffLost}</AlertDescription></Alert>)}
     {'subject' in command && <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">{text.identifier}：{command.subject.id}<br />{text.originalVersion}{command.subject.revision}</p>}
     <dl className="space-y-4">{reviewRows(command).map((row) => <div key={row.label} className="space-y-1 border-b pb-3"><dt className="text-base font-medium">{row.label}</dt>
       {row.before !== undefined && <dd className="whitespace-pre-wrap text-sm text-muted-foreground [overflow-wrap:anywhere]">{text.previous}：{row.before}</dd>}

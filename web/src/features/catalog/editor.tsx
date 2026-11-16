@@ -28,8 +28,8 @@ export function MetadataError({ message, error }: { message: string; error?: { m
   return <div className="grid text-sm font-normal"><span aria-hidden="true" data-error-space={message} className="invisible col-start-1 row-start-1 after:content-[attr(data-error-space)]" /><FieldError className="col-start-1 row-start-1" errors={[error]} /></div>
 }
 
-export function CatalogEditor({ mode, subject, categories, operation, online, canWrite }: {
-  mode: 'create' | 'edit'; subject?: Item; categories: CategoryTree; operation: CatalogMutation; online: boolean; canWrite: boolean
+export function CatalogEditor({ mode, subject, categories, operation, online, canWrite, pendingBarcode = false }: {
+  mode: 'create' | 'edit'; subject?: Item; categories: CategoryTree; operation: CatalogMutation; online: boolean; canWrite: boolean; pendingBarcode?: boolean
 }) {
   const prefix = useId()
   const [base, setBase] = useState(subject)
@@ -106,6 +106,6 @@ export function CatalogEditor({ mode, subject, categories, operation, online, ca
       {noChanges && <p role="status">{text.noChanges}</p>}
       <Button type="submit" disabled={!online || !canWrite || locked || changed || unavailable || staleCategory} className={`${control} w-full sm:w-auto`}>{text.review}</Button>
     </form>
-    <DraftLeaveGuard labels={text} when={form.formState.isDirty || locked} canLeave={operation.canLeave} onLeave={operation.allowNavigation} onBlocked={operation.suspend} onStay={operation.reopen} />
+    <DraftLeaveGuard labels={text} when={form.formState.isDirty || locked || pendingBarcode} canLeave={operation.canLeave} onLeave={operation.allowNavigation} onBlocked={operation.suspend} onStay={operation.reopen} />
   </>
 }

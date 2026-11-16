@@ -9,7 +9,9 @@
 
 ### Added
 
-- Add responsive manual barcode lookup at `/scan`, with exact plain/JSON-string input, optional namespace, explicit bounded pages of shared Item choices and visible archived or path-unaddressable owners. Reject inconsistent live pages and late Item-read failures, clear this screen's results on offline/session loss, and never write inventory automatically. Live camera decoding, file fallback and creation prefill remain separate work.
+- Carry an unmatched exact barcode through reviewed Item creation into a separately reviewed barcode editor without storing the code in URLs or history state. Preserve an explicit format or require one after an all-format search, retain NUL/CR/LF and visibly escape invisible format marks through a labeled JSON-string input, warn when the volatile handoff is lost, retain it visibly through missing/failed Item reads and offline editing, and never automatically attach a barcode or create stock.
+
+- Add responsive manual barcode lookup at `/scan`, with exact plain/JSON-string input, optional namespace, explicit bounded pages of shared Item choices and visible archived or path-unaddressable owners. Reject inconsistent live pages and late Item-read failures, clear this screen's results on offline/session loss, and never write inventory automatically. At that increment live camera decoding, file fallback and creation prefill remained separate work.
 
 - Add protected `GET /items-by-identity?id=...` and a stateless adapter for exact retained Item identities that cannot be path segments. Both query and path reads use the actual Item and aggregate ETag, including archived metadata, with completed-session revalidation. Media owner reviews now bracket their link pages with exact Item reads rather than scanning the full catalog. Actual retained-source and real-Go browser tests cover special IDs and concurrent link changes; verified-TLS tests cover exact Item reads. Ordinary Item writes and detail routes remain path-based.
 

@@ -11,6 +11,8 @@ import type { Item } from '@/lib/api/catalog'
 import { aliasWriteSchema, attributeWriteSchema, barcodeWriteSchema } from '@/lib/api/catalog-links'
 import type { CatalogRowKind } from '@/lib/catalog-navigation'
 import { messages } from '@/lib/messages'
+import { barcodeJSONInputMax, type ScanBarcodeDraft } from '@/lib/scan-handoff'
+import { needsTextLiteral, quoteExactText } from '@/lib/text-literal'
 import { MetadataError } from './editor'
 import { aliasBody, aliasDefaults, aliasPatch, attributeBody, attributeDefaults, attributePatch, barcodeBody, barcodeDefaults, barcodePatch, retainAliasEdits, retainAttributeEdits, retainBarcodeEdits } from './owned-form'
 import { OwnedFields } from './owned-fields'
@@ -24,14 +26,22 @@ function defaults(subject?: OwnedRow): Values {
   return { ...barcodeDefaults(subject && 'symbology' in subject ? subject : undefined), ...aliasDefaults(subject && 'alias' in subject ? subject : undefined), ...attributeDefaults(subject && 'attribute_key' in subject ? subject : undefined) }
 }
 function barcodeValues(values: Values) { return { symbology: values.symbology, raw_value: values.raw_value } }
+function decodedBarcodeValues(values: Values, json: boolean) {
+  if (!json) return barcodeValues(values)
+  try {
+    const raw: unknown = JSON.parse(values.raw_value)
+    return typeof raw === 'string' ? { symbology: values.symbology, raw_value: raw } : undefined
+  } catch { return undefined }
+}
 function aliasValues(values: Values) { return { alias: values.alias } }
 function attributeValues(values: Values) { return { attribute_key: values.attribute_key, attribute_value: values.attribute_value } }
 
 // The UI keeps one flat form; authoritative field/pair validation still comes
 // from the same SDK schemas, with only localized error placement composed here.
-function resolver(kind: CatalogRowKind): Resolver<Values> {
+function resolver(kind: CatalogRowKind, jsonBarcode: boolean): Resolver<Values> {
   return (values) => {
-    const result = kind === 'barcodes' ? barcodeWriteSchema.safeParse(barcodeValues(values)) : kind === 'aliases' ? aliasWriteSchema.safeParse(aliasValues(values)) : attributeWriteSchema.safeParse(attributeValues(values))
+    const barcode = decodedBarcodeValues(values, jsonBarcode)
+    const result = kind === 'barcodes' ? barcodeWriteSchema.safeParse(barcode ?? { symbology: values.symbology, raw_value: undefined }) : kind === 'aliases' ? aliasWriteSchema.safeParse(aliasValues(values)) : attributeWriteSchema.safeParse(attributeValues(values))
     if (result.success) return { values, errors: {} }
     const fieldErrors: FieldErrors<Values> = {}
     for (const issue of result.error.issues) {
@@ -42,14 +52,20 @@ function resolver(kind: CatalogRowKind): Resolver<Values> {
   }
 }
 
-export function OwnedRowEditor({ kind, owner, subject, operation, online, canWrite }: {
+export function OwnedRowEditor({ kind, owner, subject, operation, online, canWrite, barcodePrefill, onDiscardBarcodePrefill }: {
   kind: CatalogRowKind; owner: Item; subject?: OwnedRow; operation: OwnedMutation; online: boolean; canWrite: boolean
+  barcodePrefill?: ScanBarcodeDraft; onDiscardBarcodePrefill?: () => void
 }) {
   const prefix = useId()
   const [base, setBase] = useState(subject)
   const [baseOwner, setBaseOwner] = useState(owner)
   const [noChanges, setNoChanges] = useState(false)
-  const form = useForm<Values>({ resolver: resolver(kind), defaultValues: defaults(base), mode: 'onBlur', reValidateMode: 'onBlur' })
+  const [hasPrefill, setHasPrefill] = useState(() => kind === 'barcodes' && !subject && !!barcodePrefill)
+  const [jsonBarcode, setJSONBarcode] = useState(() => hasPrefill && needsTextLiteral(barcodePrefill!.rawValue))
+  const [initialValues] = useState(() => ({ ...defaults(base), ...(hasPrefill && barcodePrefill ? {
+    symbology: barcodePrefill.symbology ?? '', raw_value: jsonBarcode ? quoteExactText(barcodePrefill.rawValue) : barcodePrefill.rawValue,
+  } : {}) }))
+  const form = useForm<Values>({ resolver: resolver(kind, jsonBarcode), defaultValues: initialValues, mode: 'onBlur', reValidateMode: 'onBlur' })
   const locked = operation.phase === 'pending' || operation.phase === 'uncertain'
   // A changed Item is a creation conflict, not a second proof for row writes.
   const changed = base ? !!subject && base.revision !== subject.revision : baseOwner.revision !== owner.revision
@@ -66,6 +82,7 @@ export function OwnedRowEditor({ kind, owner, subject, operation, online, canWri
     }
     setBase(subject)
     setBaseOwner(owner)
+    if (!keep && hasPrefill) { setHasPrefill(false); setJSONBarcode(false); onDiscardBarcodePrefill?.() }
     form.reset(fresh)
     for (const key of Object.keys(values) as (keyof Values)[]) if (values[key] !== fresh[key]) form.setValue(key, values[key], { shouldDirty: true, shouldValidate: true })
     operation.dismiss()
@@ -75,9 +92,11 @@ export function OwnedRowEditor({ kind, owner, subject, operation, online, canWri
     if (disabled) return
     setNoChanges(false)
     if (kind === 'barcodes') {
-      if (!base) operation.review({ kind: 'create-barcode', owner: baseOwner, body: barcodeBody(barcodeValues(values)) })
+      const barcode = decodedBarcodeValues(values, jsonBarcode)
+      if (!barcode) return
+      if (!base) operation.review({ kind: 'create-barcode', owner: baseOwner, body: barcodeBody(barcode) })
       else if ('symbology' in base) {
-        const body = barcodePatch(barcodeValues(values), base)
+        const body = barcodePatch(barcode, base)
         if (body) operation.review({ kind: 'patch-barcode', owner, subject: base, body }); else setNoChanges(true)
       }
     } else if (kind === 'aliases') {
@@ -101,7 +120,7 @@ export function OwnedRowEditor({ kind, owner, subject, operation, online, canWri
   function field(name: Exclude<keyof Values, 'symbology'>) {
     return <Controller key={name} name={name} control={form.control} render={({ field, fieldState }) => <Field data-invalid={fieldState.invalid}>
       <FieldLabel htmlFor={`${prefix}-${name}`} className="text-base">{text.fields[name]}{name !== 'attribute_value' && <span aria-hidden="true">*</span>}</FieldLabel>
-      <Textarea {...field} id={`${prefix}-${name}`} required={name !== 'attribute_value'} rows={name === 'attribute_value' ? 4 : 2} maxLength={name === 'attribute_value' ? 20000 : name === 'attribute_key' ? 200 : name === 'alias' ? 600 : 1024} autoComplete="off" spellCheck={false} aria-invalid={fieldState.invalid} aria-describedby={`${prefix}-${name}-error`} className="min-h-20 text-base md:text-base" />
+      <Textarea {...field} id={`${prefix}-${name}`} required={name !== 'attribute_value'} rows={name === 'attribute_value' ? 4 : 2} maxLength={name === 'attribute_value' ? 20000 : name === 'attribute_key' ? 200 : name === 'alias' ? 600 : jsonBarcode ? barcodeJSONInputMax : 1024} autoComplete="off" spellCheck={false} aria-invalid={fieldState.invalid} aria-describedby={`${prefix}-${name}-error${name === 'raw_value' && jsonBarcode ? ` ${prefix}-barcode-json-help` : ''}`} className="min-h-20 text-base md:text-base" />
       <div id={`${prefix}-${name}-error`}><MetadataError message={errors[name]} error={fieldState.error} /></div>
     </Field>} />
   }
@@ -112,19 +131,20 @@ export function OwnedRowEditor({ kind, owner, subject, operation, online, canWri
     </AlertDescription></Alert>}
     <form noValidate aria-busy={operation.phase === 'pending'} onSubmit={form.handleSubmit(submit)} className="min-w-0 space-y-6">
       <FieldSet disabled={locked}><FieldLegend className="text-xl">{base ? text.edit[kind] : text.create[kind]}</FieldLegend><FieldDescription className="text-base">{kind === 'barcodes' ? text.barcodeHelp : kind === 'aliases' ? text.aliasHelp : text.attributeHelp}</FieldDescription><FieldGroup>
+        {jsonBarcode && <p id={`${prefix}-barcode-json-help`} className="text-base leading-relaxed">{messages.scan.encodedBarcodeHelp}</p>}
         {kind === 'barcodes' ? <><Controller name="symbology" control={form.control} render={({ field, fieldState }) => <Field data-invalid={fieldState.invalid}>
           <FieldLabel htmlFor={`${prefix}-symbology`} className="text-base">{text.fields.symbology}<span aria-hidden="true">*</span></FieldLabel>
           <NativeSelect {...field} id={`${prefix}-symbology`} required aria-invalid={fieldState.invalid} aria-describedby={`${prefix}-symbology-error`} className="w-full [&_select]:min-h-12 [&_select]:text-base"><NativeSelectOption value="">{text.chooseSymbology}</NativeSelectOption>{Object.entries(text.symbologies).map(([value, label]) => <NativeSelectOption key={value} value={value}>{label}</NativeSelectOption>)}</NativeSelect>
           <div id={`${prefix}-symbology-error`}><MetadataError message={errors.symbology} error={fieldState.error} /></div>
         </Field>} />{field('raw_value')}</> : kind === 'aliases' ? field('alias') : <>{field('attribute_key')}{field('attribute_value')}</>}
       </FieldGroup></FieldSet>
-      <p className="text-sm leading-relaxed text-muted-foreground">{text.literalHelp}</p>
+      <p className="text-sm leading-relaxed text-muted-foreground">{jsonBarcode ? messages.scan.encodedReviewHelp : text.literalHelp}</p>
       <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">{base ? `${text.identifier}：${base.id}` : baseOwner.id}<br />{base ? `${text.rowProof}${base.revision}` : `${text.ownerProof}${baseOwner.revision}`}</p>
       {base && <OwnedFields value={base} />}
       {noChanges && <p role="status">{text.noChanges}</p>}
       <Button type="submit" disabled={disabled} className={`${control} w-full sm:w-auto`}>{text.review}</Button>
     </form>
     {base && <section className="mt-8 min-w-0 space-y-4 border-t pt-6"><p className="text-base leading-relaxed text-muted-foreground">{text.deleteHelp}</p><Button type="button" variant="destructive" disabled={disabled} className={control} onClick={remove}>{text.remove[kind]}</Button></section>}
-    <DraftLeaveGuard labels={text} when={form.formState.isDirty || !!operation.command} canLeave={operation.canLeave} onLeave={operation.allowNavigation} onBlocked={operation.suspend} onStay={operation.reopen} />
+    <DraftLeaveGuard labels={text} when={form.formState.isDirty || !!operation.command || hasPrefill} canLeave={operation.canLeave} onLeave={operation.allowNavigation} onBlocked={operation.suspend} onStay={operation.reopen} />
   </>
 }

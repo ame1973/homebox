@@ -9,8 +9,11 @@ import { MutationNotice, mutationControl as control } from '@/components/mutatio
 import { fetchAdmin } from '@/lib/api/auth'
 import { fetchItem, fetchItemsPage, type Item } from '@/lib/api/catalog'
 import { ApiError } from '@/lib/api/client'
-import { catalogListRoute, catalogNavigationState, catalogOwnedKinds, catalogOwnedRoute, catalogQuery, catalogReturnPath, catalogRoute } from '@/lib/catalog-navigation'
+import { pathIDSchema } from '@/lib/api/domain'
+import { catalogListRoute, catalogNavigationState, catalogOwnedCreateRoute, catalogOwnedKinds, catalogOwnedRoute, catalogQuery, catalogReturnPath, catalogRoute } from '@/lib/catalog-navigation'
 import { messages } from '@/lib/messages'
+import { advanceBarcodeHandoff, clearBarcodeHandoff, useBarcodeHandoff } from '@/lib/scan-handoff'
+import { quoteExactText } from '@/lib/text-literal'
 import { itemHoldingsRoute } from '@/lib/holding-navigation'
 import { itemPurchasesRoute } from '@/lib/purchase-navigation'
 import { mediaOwnerRoute } from '@/lib/media-navigation'
@@ -38,6 +41,10 @@ export default function CatalogPage({ mode }: { mode: Mode }) {
   const [transitioning, setTransitioning] = useState(false)
   const [remembered, setRemembered] = useState<Item>()
   const validPath = catalogReturnPath(route.pathname + route.search) !== undefined
+  const scanToken: unknown = route.state?.scanToken
+  const handoff = useBarcodeHandoff(scanToken, route.pathname + route.search + route.hash)
+  const scanDraft = mode === 'create' ? handoff : undefined
+  const [scanHandoffRequested] = useState(() => mode === 'create' && typeof scanToken === 'string' && scanToken.length === 36)
   const query = mode === 'list' ? catalogQuery(route.search) : undefined
   const needRecord = mode === 'edit' || mode === 'detail'
   const navigationState = catalogNavigationState(mode === 'list' ? route.pathname + route.search : route.state?.catalogList, route.state?.catalogCursors)
@@ -64,9 +71,22 @@ export default function CatalogPage({ mode }: { mode: Mode }) {
     setTransitioning(true)
     clearSessionQueries(client)
     if (!mandatory) client.setQueryData(['auth', 'me'], null)
-    navigate(mandatory ? '/settings/account' : '/login', { replace: true, state: { ...(mandatory ? {} : { notice: 'expired' }), returnTo } })
-  }, [client, navigate, returnTo])
+    navigate(mandatory ? '/settings/account' : '/login', { replace: true, state: { ...(scanHandoffRequested ? { notice: 'scanHandoffLost' } : mandatory ? {} : { notice: 'expired' }), returnTo } })
+  }, [client, navigate, returnTo, scanHandoffRequested])
   function confirmed(command: CatalogCommand, result: CatalogResult) {
+    if (command.kind === 'create' && 'id' in result && scanHandoffRequested) {
+      const addressable = pathIDSchema.safeParse(result.id).success && !result.id.includes('%2F')
+      if (addressable) {
+        const target = catalogOwnedCreateRoute(result.id, 'barcodes')
+        if (advanceBarcodeHandoff(scanToken, target)) {
+          navigate(target, { replace: true, state: { ...navigationState, scanToken } })
+          return
+        }
+      }
+      clearBarcodeHandoff(typeof scanToken === 'string' ? scanToken : undefined)
+      navigate(addressable ? catalogRoute(result.id) : listReturn, { replace: true, state: { ...navigationState, catalogNotice: 'confirmed', scanNotice: 'unavailable' } })
+      return
+    }
     const target = command.kind === 'delete' ? listReturn : command.kind === 'create' && 'id' in result ? catalogRoute(result.id) : command.kind !== 'create' ? catalogRoute(command.subject.id) : listReturn
     navigate(target, { replace: true, state: { catalogNotice: 'confirmed', catalogList: listReturn, catalogCursors: trail } })
   }
@@ -81,8 +101,8 @@ export default function CatalogPage({ mode }: { mode: Mode }) {
     allowNavigation()
     clearSessionQueries(client)
     if (!mandatory) client.setQueryData(['auth', 'me'], null)
-    navigate(mandatory ? '/settings/account' : '/login', { replace: true, state: { ...(mandatory ? {} : { notice: 'expired' }), returnTo } })
-  }, [online, transitioning, denied, mandatory, allowNavigation, client, navigate, returnTo])
+    navigate(mandatory ? '/settings/account' : '/login', { replace: true, state: { ...(scanHandoffRequested ? { notice: 'scanHandoffLost' } : mandatory ? {} : { notice: 'expired' }), returnTo } })
+  }, [online, transitioning, denied, mandatory, allowNavigation, client, navigate, returnTo, scanHandoffRequested])
   async function readCurrent() {
     return Promise.all([auth.refetch(), ...(validPath ? [categories.refetch(), ...(mode === 'list' ? [locations.refetch(), list.refetch()] : needRecord ? [record.refetch()] : [])] : [])])
   }
@@ -112,6 +132,7 @@ export default function CatalogPage({ mode }: { mode: Mode }) {
     </header>
     {!online && <Alert role="status" className="p-4"><WifiOff aria-hidden="true" /><AlertTitle>{text.offline}</AlertTitle><AlertDescription className="text-base">{text.offlineHelp}</AlertDescription></Alert>}
     {route.state?.catalogNotice === 'confirmed' && <Alert role="status" className="p-4"><AlertDescription className="text-base">{text.done}</AlertDescription></Alert>}
+    {route.state?.scanNotice === 'unavailable' && <Alert role="alert" className="p-4"><AlertDescription className="text-base">{messages.scan.handoffUnavailable}</AlertDescription></Alert>}
     <MutationNotice operation={operation} online={permitted} onReadCurrent={readCurrent} />
     {transitioning || denied || pending && (!tree || needRecord && !subject || mode === 'list' && (!locations.data || !list.data)) ? <p role="status" className="flex min-h-28 items-center gap-3"><LoaderCircle aria-hidden="true" className="size-6 animate-spin motion-reduce:animate-none" />{auth.isPending || denied || transitioning ? text.checking : text.loading}</p>
       : !validPath ? <><CatalogError error={new ApiError('INVALID_QUERY')} /><Button asChild variant="outline" className={control}><Link to="/items">{text.firstPage}</Link></Button></>
@@ -133,7 +154,9 @@ export default function CatalogPage({ mode }: { mode: Mode }) {
                     <nav aria-label={text.pagination} className="flex flex-wrap gap-2"><Button type="button" variant="outline" disabled={!permitted || reading || !trail.length} className={control} onClick={() => page(trail.at(-1) ?? null, trail.slice(0, -1))}>{text.previousPage}</Button><Button type="button" variant="outline" disabled={!permitted || reading || !query.cursor} className={control} onClick={() => page(null, [])}>{text.firstPage}</Button><Button type="button" variant="outline" disabled={!permitted || reading || !list.data.next_cursor} className={control} onClick={() => page(list.data!.next_cursor, [...trail, query.cursor ?? null])}>{text.nextPage}</Button></nav>
                   </>}
                 </>}
-                {(mode === 'create' || mode === 'edit' && subject) && <Card className="max-w-3xl [--card-spacing:--spacing(6)]"><CardContent className="pt-6"><CatalogEditor mode={mode === 'create' ? 'create' : 'edit'} subject={subject} categories={tree} operation={operation} online={online} canWrite={canWrite} /></CardContent></Card>}
+                {mode === 'create' && scanHandoffRequested && !scanDraft && <Alert role="alert" className="max-w-3xl p-4"><AlertDescription className="text-base">{messages.scan.handoffLost}</AlertDescription></Alert>}
+                {mode === 'create' && scanDraft && <Alert className="max-w-3xl p-4"><AlertTitle>{messages.scan.handoffTitle}</AlertTitle><AlertDescription className="space-y-2 text-base leading-relaxed"><p>{messages.scan.handoffHelp}</p><p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{messages.scan.input}：{quoteExactText(scanDraft.rawValue)}<br />{messages.scan.symbology}：{scanDraft.symbology ? messages.owned.symbologies[scanDraft.symbology] : messages.scan.chooseFormatLater}</p></AlertDescription></Alert>}
+                {(mode === 'create' || mode === 'edit' && subject) && <Card className="max-w-3xl [--card-spacing:--spacing(6)]"><CardContent className="pt-6"><CatalogEditor mode={mode === 'create' ? 'create' : 'edit'} subject={subject} categories={tree} operation={operation} online={online} canWrite={canWrite} pendingBarcode={!!scanDraft} /></CardContent></Card>}
                 {mode === 'detail' && subject && <section className="min-w-0 max-w-3xl space-y-6"><div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl font-semibold">{text.detail}</h2>{canWrite ? <Button asChild className={control}><Link to={catalogRoute(subject.id, 'edit')} state={navigationState}>{text.edit}</Link></Button> : <Button disabled className={control}>{text.edit}</Button>}</div>
                   <dl className="grid min-w-0 gap-5 sm:grid-cols-2">{Object.entries(text.fields).map(([key, label]) => <div key={key} className="min-w-0 space-y-2"><dt className="text-sm font-medium text-muted-foreground">{label}</dt><dd className="whitespace-pre-wrap text-base [overflow-wrap:anywhere]">{key === 'category_id' && subject.category_id && tree.byID.has(subject.category_id) ? `「${tree.byID.get(subject.category_id)!.name}」 (${subject.category_id})` : catalogDisplay(key, subject[key as keyof typeof text.fields])}</dd></div>)}</dl>
                   <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">{text.identifier}：{subject.id}<br />{text.version}：{subject.revision}</p>
@@ -146,6 +169,6 @@ export default function CatalogPage({ mode }: { mode: Mode }) {
                 <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{text.future}</p>
                 {readAt > 0 && <p className="text-sm text-muted-foreground">{text.readAt}：{new Intl.DateTimeFormat('zh-TW', { dateStyle: 'short', timeStyle: 'short' }).format(readAt)}</p>}
               </>}
-    <CatalogReviewDialog operation={operation} online={permitted} onReadCurrent={readCurrent} />
+    <CatalogReviewDialog operation={operation} online={permitted} onReadCurrent={readCurrent} scanDraft={scanDraft} scanHandoffRequested={scanHandoffRequested} />
   </div>
 }

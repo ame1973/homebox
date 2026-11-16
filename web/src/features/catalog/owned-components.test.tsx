@@ -27,6 +27,13 @@ it('renders exact escaped values without interpreting HTML, URLs, controls, norm
   expect(ownedFields({ attribute_key: 'Repeated', attribute_value: '' })).toEqual([{ key: 'attribute_key', label: text.fields.attribute_key, value: '"Repeated"' }, { key: 'attribute_value', label: text.fields.attribute_value, value: '""' }])
   expect(ownedFields({})).toEqual([])
 })
+it('renders invisible format controls as explicit escapes during review', () => {
+  const raw = `a\u0085${String.fromCodePoint(0x202e)}b`
+  render(<OwnedFields value={{ symbology: 'QR_CODE', raw_value: raw }} />)
+  expect(screen.getByText('"a\\u0085\\u202eb"')).toBeVisible()
+  expect(document.body.textContent).not.toContain(String.fromCodePoint(0x202e))
+})
+
 it('explains an unaddressable retained row without hiding its source or inventing an edit route', () => {
   render(<MemoryRouter><OwnedList itemID={item.id} kind="aliases" records={[{ ...alias, id: 'retained/identity' }]} navigationState={{ catalogList: '/items', catalogCursors: [] }} /></MemoryRouter>)
   expect(screen.getByText(text.unaddressable)).toBeVisible()

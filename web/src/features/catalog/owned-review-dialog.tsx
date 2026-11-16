@@ -1,6 +1,7 @@
 import { MutationReviewDialog } from '@/components/mutation-review'
 import type { Tag } from '@/lib/api/taxonomy'
 import { messages } from '@/lib/messages'
+import { quoteExactText } from '@/lib/text-literal'
 import type { CatalogRowKind } from '@/lib/catalog-navigation'
 import { CatalogError } from './catalog-error'
 import { OwnedFields } from './owned-fields'
@@ -25,6 +26,6 @@ export function OwnedReviewDialog({ operation, online, onReadCurrent }: { operat
     {command.kind === 'replace-tags' ? <><TagSet tags={command.before} label={text.beforeTags} /><TagSet tags={command.after} label={text.afterTags} />{!command.after.length && <p className="text-base leading-relaxed">{text.clearHelp}</p>}</>
       : 'body' in command ? <dl className="space-y-4">{ownedFields(command.body).map((field) => <div key={field.key} className="min-w-0 space-y-1 border-b pb-3"><dt className="text-base font-medium">{field.label}</dt>{'subject' in command && <dd className="whitespace-pre-wrap text-sm text-muted-foreground [overflow-wrap:anywhere]">{text.previous}：{ownedFields(command.subject).find((original) => original.key === field.key)!.value}</dd>}<dd className="whitespace-pre-wrap text-base [overflow-wrap:anywhere]">{text.proposed}：{field.value}</dd></div>)}</dl>
         : <OwnedFields value={command.subject} />}
-    {'subject' in command && 'symbology' in command.subject && <p className="whitespace-pre-wrap text-sm text-muted-foreground [overflow-wrap:anywhere]">{text.fields.normalized_value}：{JSON.stringify(command.subject.normalized_value)}</p>}
+    {'subject' in command && 'symbology' in command.subject && <p className="whitespace-pre-wrap text-sm text-muted-foreground [overflow-wrap:anywhere]">{text.fields.normalized_value}：{quoteExactText(command.subject.normalized_value)}</p>}
   </MutationReviewDialog>
 }

@@ -13,6 +13,8 @@ import * as locations from '@/lib/api/locations'
 import { ApiError } from '@/lib/api/client'
 import { messages } from '@/lib/messages'
 import { createQueryClient } from '@/lib/query'
+import { advanceBarcodeHandoff, readBarcodeHandoff, retainBarcodeHandoff, startBarcodeHandoff } from '@/lib/scan-handoff'
+import { notifySessionCleared } from '@/lib/session-lifecycle'
 import { buildTags } from '@/features/taxonomy/model'
 import type { CatalogRowKind } from '@/lib/catalog-navigation'
 
@@ -102,6 +104,172 @@ async function confirm(label: string) {
 }
 function fill(body: object) { for (const [key, value] of Object.entries(body)) fireEvent.change(field(text.fields[key as keyof typeof text.fields]), { target: { value } }) }
 async function refresh(work: ReturnType<typeof mount>) { await act(async () => { await work.client.invalidateQueries({ queryKey: ['catalog'] }) }) }
+
+it('keeps the barcode draft visible if the created Item is no longer available', async () => {
+  const rawValue = '\0draft\r\n001', token = startBarcodeHandoff({ rawValue, symbology: 'CODE_128' })
+  expect(advanceBarcodeHandoff(token, '/items/item/barcodes/new')).toBe(true)
+  items.delete(item.id)
+  mount('/items/item/barcodes/new', { scanToken: token })
+  expect(await screen.findByRole('heading', { name: messages.catalog.missing })).toBeVisible()
+  expect(screen.getByText(messages.scan.barcodeDraftHelp).parentElement).toHaveTextContent(JSON.stringify(rawValue))
+  expect(readBarcodeHandoff(token, '/items/item/barcodes/new')?.rawValue).toBe(rawValue)
+  expect(api.createBarcode).not.toHaveBeenCalled()
+})
+
+it('does not reveal a barcode handoff before the completed-session check succeeds', async () => {
+  const rawValue = 'private-012345678905', token = startBarcodeHandoff({ rawValue, symbology: 'OTHER' })
+  expect(advanceBarcodeHandoff(token, '/items/item/barcodes/new')).toBe(true)
+  vi.mocked(auth.fetchAdmin).mockRejectedValueOnce(new ApiError('NETWORK_ERROR'))
+  mount('/items/item/barcodes/new', { scanToken: token })
+  expect(await screen.findByText(messages.locations.network)).toBeVisible()
+  expect(document.body).not.toHaveTextContent(rawValue)
+  expect(readBarcodeHandoff(token, '/items/item/barcodes/new')?.rawValue).toBe(rawValue)
+  await userEvent.setup().click(screen.getByRole('button', { name: text.refresh }))
+  expect(await screen.findByText(messages.scan.barcodeDraftHelp)).toBeVisible()
+  expect(document.body).toHaveTextContent(rawValue)
+})
+
+it('keeps the barcode draft visible when current owner reads fail', async () => {
+  const rawValue = '012345678905', token = startBarcodeHandoff({ rawValue, symbology: 'UPC_A' })
+  expect(advanceBarcodeHandoff(token, '/items/item/barcodes/new')).toBe(true)
+  vi.mocked(catalog.fetchItem).mockRejectedValueOnce(new ApiError('NETWORK_ERROR'))
+  mount('/items/item/barcodes/new', { scanToken: token })
+  expect(await screen.findByText(messages.locations.network)).toBeVisible()
+  expect(screen.getByText(messages.scan.barcodeDraftHelp).parentElement).toHaveTextContent(rawValue)
+  expect(readBarcodeHandoff(token, '/items/item/barcodes/new')?.rawValue).toBe(rawValue)
+  expect(api.createBarcode).not.toHaveBeenCalled()
+})
+
+it('reviews and creates an exact control-character barcode from a volatile handoff', async () => {
+  const rawValue = '\0code\r\n001', token = startBarcodeHandoff({ rawValue, symbology: 'CODE_128' })
+  expect(advanceBarcodeHandoff(token, '/items/item/barcodes/new')).toBe(true)
+  mount('/items/item/barcodes/new', { scanToken: token })
+  await ready()
+  expect(screen.getByText(messages.scan.barcodeDraftHelp)).toBeVisible()
+  expect(screen.getByText(messages.scan.encodedBarcodeHelp)).toBeVisible()
+  expect(field(text.fields.symbology)).toHaveValue('CODE_128')
+  expect(field(text.fields.raw_value)).toHaveValue(JSON.stringify(rawValue))
+  await userEvent.setup().click(screen.getByRole('button', { name: text.review }))
+  expect(screen.getByRole('alertdialog')).toHaveTextContent(JSON.stringify(rawValue))
+  expect(api.createBarcode).not.toHaveBeenCalled()
+  await confirm(text.confirmCreate.barcodes)
+  expect(api.createBarcode).toHaveBeenCalledWith(item.id, { symbology: 'CODE_128', raw_value: rawValue }, expect.objectContaining({ expectedRevision: 7 }))
+  expect(readBarcodeHandoff(token, '/items/item/barcodes/new')).toBeUndefined()
+})
+
+it('visibly escapes retained C1 and directional controls in prefill and review', async () => {
+  const rawValue = `a\u0085${String.fromCodePoint(0x202e)}b\u{e0001}`, token = startBarcodeHandoff({ rawValue, symbology: 'QR_CODE' })
+  expect(advanceBarcodeHandoff(token, '/items/item/barcodes/new')).toBe(true)
+  mount('/items/item/barcodes/new', { scanToken: token })
+  await ready()
+  const literal = '"a\\u0085\\u202eb\\udb40\\udc01"'
+  expect(field(text.fields.raw_value)).toHaveValue(literal)
+  await userEvent.setup().click(screen.getByRole('button', { name: text.review }))
+  expect(screen.getByRole('alertdialog')).toHaveTextContent(literal)
+  await confirm(text.confirmCreate.barcodes)
+  expect(api.createBarcode).toHaveBeenCalledWith(item.id, { symbology: 'QR_CODE', raw_value: rawValue }, expect.anything())
+})
+
+it('accepts a maximally escaped JSON barcode without truncating astral characters', async () => {
+  const rawValue = '\0' + '😀'.repeat(511), token = startBarcodeHandoff({ rawValue, symbology: 'QR_CODE' })
+  expect(advanceBarcodeHandoff(token, '/items/item/barcodes/new')).toBe(true)
+  mount('/items/item/barcodes/new', { scanToken: token })
+  await ready()
+  const input = field(text.fields.raw_value), escaped = `"\\u0000${'\\ud83d\\ude00'.repeat(511)}"`
+  expect(input).toHaveAttribute('maxlength', '6146')
+  fireEvent.change(input, { target: { value: escaped } })
+  await userEvent.setup().click(screen.getByRole('button', { name: text.review }))
+  await confirm(text.confirmCreate.barcodes)
+  expect(api.createBarcode).toHaveBeenCalledWith(item.id, { symbology: 'QR_CODE', raw_value: rawValue }, expect.objectContaining({ expectedRevision: 7 }))
+})
+
+it('retains invalid encoded draft text during explicit owner adoption', async () => {
+  const token = startBarcodeHandoff({ rawValue: '\0old\r\n001', symbology: 'CODE_128' })
+  expect(advanceBarcodeHandoff(token, '/items/item/barcodes/new')).toBe(true)
+  const work = mount('/items/item/barcodes/new', { scanToken: token })
+  await ready()
+  fireEvent.change(field(text.fields.raw_value), { target: { value: '"invalid\\q"' } })
+  items.set(item.id, { ...item, revision: 8, name: 'Current owner' })
+  await refresh(work)
+  await screen.findByText(text.changed)
+  await userEvent.setup().click(screen.getByRole('button', { name: text.keepEdits }))
+  expect(field(text.fields.raw_value)).toHaveValue('"invalid\\q"')
+  await userEvent.setup().click(screen.getByRole('button', { name: text.review }))
+  expect(await screen.findByText(text.barcodeError)).toBeVisible()
+  expect(api.createBarcode).not.toHaveBeenCalled()
+  const raw = '\0new\r\n001'
+  fireEvent.change(field(text.fields.raw_value), { target: { value: JSON.stringify(raw) } })
+  fireEvent.blur(field(text.fields.raw_value))
+  await userEvent.setup().click(screen.getByRole('button', { name: text.review }))
+  await confirm(text.confirmCreate.barcodes)
+  expect(api.createBarcode).toHaveBeenCalledWith(item.id, { symbology: 'CODE_128', raw_value: raw }, expect.objectContaining({ expectedRevision: 8 }))
+})
+
+it('discards a handoff explicitly on owner adoption and restores plain entry', async () => {
+  const token = startBarcodeHandoff({ rawValue: '\0old', symbology: 'CODE_128' })
+  expect(advanceBarcodeHandoff(token, '/items/item/barcodes/new')).toBe(true)
+  const work = mount('/items/item/barcodes/new', { scanToken: token })
+  await ready()
+  items.set(item.id, { ...item, revision: 8 })
+  await refresh(work)
+  await screen.findByText(text.changed)
+  await userEvent.setup().click(screen.getByRole('button', { name: text.discardEdits }))
+  expect(field(text.fields.raw_value)).toHaveValue('')
+  expect(field(text.fields.symbology)).toHaveValue('')
+  expect(screen.queryByText(messages.scan.encodedBarcodeHelp)).not.toBeInTheDocument()
+  expect(readBarcodeHandoff(token, '/items/item/barcodes/new')).toBeUndefined()
+})
+
+it('clears an idle prefilled barcode form on a delivered session-clear signal', async () => {
+  const rawValue = '\0private\r\n001', token = startBarcodeHandoff({ rawValue, symbology: 'CODE_128' })
+  expect(advanceBarcodeHandoff(token, '/items/item/barcodes/new')).toBe(true)
+  mount('/items/item/barcodes/new', { scanToken: token })
+  await ready()
+  expect(field(text.fields.raw_value)).toHaveValue(JSON.stringify(rawValue))
+  fireEvent.change(field(text.fields.raw_value), { target: { value: '"edited private draft"' } })
+  act(() => { notifySessionCleared() })
+  expect(await screen.findByText(messages.scan.barcodeDraftLost)).toBeVisible()
+  expect(field(text.fields.raw_value)).toHaveValue('')
+  expect(field(text.fields.symbology)).toHaveValue('')
+  expect(api.createBarcode).not.toHaveBeenCalled()
+})
+
+it('reports a cleared handoff when the barcode review loses its session', async () => {
+  const rawValue = '\0private\r\n001', token = startBarcodeHandoff({ rawValue, symbology: 'CODE_128' })
+  expect(advanceBarcodeHandoff(token, '/items/item/barcodes/new')).toBe(true)
+  const work = mount('/items/item/barcodes/new', { scanToken: token })
+  await ready()
+  vi.mocked(auth.fetchCSRF).mockImplementationOnce(async () => { administrator = null; throw new ApiError('AUTHENTICATION_REQUIRED', { status: 401 }) })
+  await userEvent.setup().click(screen.getByRole('button', { name: text.review }))
+  await userEvent.setup().click(within(screen.getByRole('alertdialog')).getByRole('button', { name: text.confirmCreate.barcodes }))
+  await waitFor(() => expect(work.router.state.location.pathname).toBe('/login'))
+  expect(work.router.state.location.state).toEqual({ notice: 'scanHandoffLost', returnTo: '/items/item/barcodes/new' })
+  expect(JSON.stringify(work.router.state.location.state)).not.toContain(rawValue)
+  expect(await screen.findByText(messages.auth.scanHandoffLost)).toBeVisible()
+  expect(readBarcodeHandoff(token, '/items/item/barcodes/new')).toBeUndefined()
+  expect(api.createBarcode).not.toHaveBeenCalled()
+})
+
+it('shows a missing-handoff warning instead of inventing a barcode after a reload', async () => {
+  const token = startBarcodeHandoff({ rawValue: '012345678905', symbology: 'UPC_A' })
+  expect(advanceBarcodeHandoff(token, '/items/item/barcodes/new')).toBe(true)
+  // A full page reload destroys the in-memory slot while history can retain the marker.
+  retainBarcodeHandoff(undefined, '/items/item/barcodes/new')
+  mount('/items/item/barcodes/new', { scanToken: token })
+  await ready()
+  expect(screen.getByText(messages.scan.barcodeDraftLost)).toBeVisible()
+  expect(field(text.fields.raw_value)).toHaveValue('')
+})
+
+it('does not apply a handoff bound to a different Item route', async () => {
+  const token = startBarcodeHandoff({ rawValue: '012345678905', symbology: 'UPC_A' })
+  expect(advanceBarcodeHandoff(token, '/items/other/barcodes/new')).toBe(true)
+  mount('/items/item/barcodes/new', { scanToken: token })
+  await ready()
+  expect(field(text.fields.raw_value)).toHaveValue('')
+  expect(screen.queryByText(messages.scan.barcodeDraftHelp)).not.toBeInTheDocument()
+  expect(readBarcodeHandoff(token, '/items/other/barcodes/new')).toBeUndefined()
+})
 
 it.each(rowCases)('lists a complete real $kind collection and exposes only implemented owner-scoped routes', async ({ kind, id }) => {
   mount(`/items/item/${kind}`)

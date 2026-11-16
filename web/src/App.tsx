@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button'
 import { ThemeMenu } from '@/components/theme-menu'
 import { AppErrorBoundary } from '@/components/app-error-boundary'
 import { messages } from '@/lib/messages'
+import { clearBarcodeHandoff, retainBarcodeHandoff } from '@/lib/scan-handoff'
+import { subscribeSessionCleared } from '@/lib/session-lifecycle'
 
 const ConnectionPage = lazy(() => import('@/features/system/connection-page'))
 const AccountPage = lazy(() => import('@/features/auth/account-page'))
@@ -31,6 +33,13 @@ export default function App() {
     if (previousPath.current !== location.pathname) main.current?.focus()
     previousPath.current = location.pathname
   }, [location.pathname])
+  useEffect(() => {
+    const unsubscribe = subscribeSessionCleared(() => clearBarcodeHandoff())
+    return () => { unsubscribe(); clearBarcodeHandoff() }
+  }, [])
+  useEffect(() => {
+    retainBarcodeHandoff(location.state?.scanToken, location.pathname + location.search + location.hash)
+  }, [location.pathname, location.search, location.hash, location.state])
   return (
     <div className="safe-page mx-auto flex min-h-dvh max-w-5xl flex-col">
       <a href="#main" onClick={(event) => { event.preventDefault(); main.current?.focus() }} className="sr-only z-50 rounded-md bg-primary p-3 text-primary-foreground focus:not-sr-only focus:absolute focus:top-2">{messages.app.skip}</a>

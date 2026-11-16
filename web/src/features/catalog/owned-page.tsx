@@ -10,6 +10,8 @@ import { fetchAdmin } from '@/lib/api/auth'
 import { ApiError } from '@/lib/api/client'
 import { catalogNavigationState, catalogOwnedCreateRoute, catalogOwnedKinds, catalogOwnedRoute, catalogReturnPath, catalogRoute, type CatalogOwnedKind } from '@/lib/catalog-navigation'
 import { messages } from '@/lib/messages'
+import { clearBarcodeHandoff, useBarcodeHandoff } from '@/lib/scan-handoff'
+import { quoteExactText } from '@/lib/text-literal'
 import { useOnline } from '@/lib/use-online'
 import { clearSessionQueries } from '@/features/auth/use-auth-action'
 import { CatalogError } from './catalog-error'
@@ -31,7 +33,13 @@ export default function OwnedPage({ kind, mode }: { kind: CatalogOwnedKind; mode
   const [transitioning, setTransitioning] = useState(false)
   const [remembered, setRemembered] = useState<OwnedMetadata>()
   const [rememberedRow, setRememberedRow] = useState<OwnedRow>()
+  const [discardedBarcode, setDiscardedBarcode] = useState(false)
   const validPath = catalogReturnPath(route.pathname + route.search) !== undefined
+  const scanToken: unknown = route.state?.scanToken
+  const handoff = useBarcodeHandoff(scanToken, route.pathname + route.search + route.hash)
+  const scanDraft = kind === 'barcodes' && mode === 'create' ? handoff : undefined
+  const scanHandoffRequested = kind === 'barcodes' && mode === 'create' && typeof scanToken === 'string' && scanToken.length === 36 && !discardedBarcode
+  const scanHandoffLost = scanHandoffRequested && !scanDraft
   const returnTo = validPath ? route.pathname + route.search : '/items'
   const navigationState = catalogNavigationState(route.state?.catalogList, route.state?.catalogCursors)
   const auth = useQuery({ queryKey: ['auth', 'me'], enabled: online && !transitioning, staleTime: 0, refetchOnMount: 'always', queryFn: async ({ signal }) => {
@@ -54,9 +62,10 @@ export default function OwnedPage({ kind, mode }: { kind: CatalogOwnedKind; mode
     setTransitioning(true)
     clearSessionQueries(client)
     if (!mandatory) client.setQueryData(['auth', 'me'], null)
-    navigate(mandatory ? '/settings/account' : '/login', { replace: true, state: { ...(mandatory ? {} : { notice: 'expired' }), returnTo } })
-  }, [client, navigate, returnTo])
-  const operation = useOwnedMutation(() => {
+    navigate(mandatory ? '/settings/account' : '/login', { replace: true, state: { ...(scanHandoffRequested ? { notice: 'scanHandoffLost' } : mandatory ? {} : { notice: 'expired' }), returnTo } })
+  }, [client, navigate, returnTo, scanHandoffRequested])
+  const operation = useOwnedMutation((command) => {
+    if (command.kind === 'create-barcode' && scanDraft && typeof scanToken === 'string') clearBarcodeHandoff(scanToken)
     navigate(catalogOwnedRoute(id, kind), { replace: true, state: { ...navigationState, ownedNotice: 'confirmed' } })
   }, sessionLost)
   const credentialFailure = data.error instanceof ApiError && (data.error.status === 401 || data.error.code === 'PASSWORD_CHANGE_REQUIRED') ? data.error : undefined
@@ -68,8 +77,8 @@ export default function OwnedPage({ kind, mode }: { kind: CatalogOwnedKind; mode
     allowNavigation()
     clearSessionQueries(client)
     if (!mandatory) client.setQueryData(['auth', 'me'], null)
-    navigate(mandatory ? '/settings/account' : '/login', { replace: true, state: { ...(mandatory ? {} : { notice: 'expired' }), returnTo } })
-  }, [online, transitioning, denied, mandatory, allowNavigation, client, navigate, returnTo])
+    navigate(mandatory ? '/settings/account' : '/login', { replace: true, state: { ...(scanHandoffRequested ? { notice: 'scanHandoffLost' } : mandatory ? {} : { notice: 'expired' }), returnTo } })
+  }, [online, transitioning, denied, mandatory, allowNavigation, client, navigate, returnTo, scanHandoffRequested])
   async function readCurrent() { return Promise.all([auth.refetch(), ...(authorized && validPath ? [data.refetch()] : [])]) }
   const reading = auth.isFetching || data.isFetching
   const pending = online && (auth.isPending || !authorized && !auth.isError || authorized && validPath && data.isPending)
@@ -91,6 +100,8 @@ export default function OwnedPage({ kind, mode }: { kind: CatalogOwnedKind; mode
     </div></header>
     {!online && <Alert role="status" className="p-4"><WifiOff aria-hidden="true" /><AlertTitle>{text.offline}</AlertTitle><AlertDescription className="text-base">{text.offlineHelp}</AlertDescription></Alert>}
     {route.state?.ownedNotice === 'confirmed' && <Alert role="status" className="p-4"><AlertDescription className="text-base">{text.done}</AlertDescription></Alert>}
+    {scanHandoffLost && <Alert role="alert" className="p-4"><AlertDescription className="text-base">{messages.scan.barcodeDraftLost}</AlertDescription></Alert>}
+    {scanDraft && !transitioning && !denied && (!online || authorized && auth.isFetchedAfterMount && !auth.isFetching && !auth.isError) && <Alert className="max-w-3xl p-4"><AlertTitle>{messages.scan.handoffTitle}</AlertTitle><AlertDescription className="space-y-2 text-base leading-relaxed"><p>{messages.scan.barcodeDraftHelp}</p><p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{messages.scan.input}：{quoteExactText(scanDraft.rawValue)}<br />{messages.scan.symbology}：{scanDraft.symbology ? text.symbologies[scanDraft.symbology] : messages.scan.chooseFormatLater}</p></AlertDescription></Alert>}
     <MutationNotice operation={operation} online={permitted} onReadCurrent={readCurrent} />
     {transitioning || denied || initializing || pending && !metadata ? <p role="status" className="flex min-h-28 items-center gap-3"><LoaderCircle aria-hidden="true" className="size-6 animate-spin motion-reduce:animate-none" />{auth.isPending || denied || transitioning ? messages.catalog.checking : text.loading}</p>
       : !validPath ? <CatalogError error={new ApiError('INVALID_QUERY')} />
@@ -103,7 +114,7 @@ export default function OwnedPage({ kind, mode }: { kind: CatalogOwnedKind; mode
               {(missingOwner || missingRow) && <Alert role="alert" className="p-4"><AlertTitle>{missingOwner ? messages.catalog.missing : text.missing}</AlertTitle><AlertDescription className="text-base">{text.missingHelp}</AlertDescription></Alert>}
               {metadata.kind === 'tags' ? <Card className="max-w-3xl [--card-spacing:--spacing(6)]"><CardContent className="pt-6"><OwnedTagsEditor data={metadata} operation={operation} online={online} canWrite={canWrite} /></CardContent></Card>
                 : mode === 'list' ? <section className="max-w-3xl space-y-5">{canWrite ? <Button asChild className={`${control} gap-2`}><Link to={catalogOwnedCreateRoute(id, metadata.kind)} state={navigationState}><Plus aria-hidden="true" />{text.create[metadata.kind]}</Link></Button> : <Button disabled className={control}>{text.create[metadata.kind]}</Button>}<OwnedList itemID={id} kind={metadata.kind} records={metadata.rows} navigationState={navigationState} /></section>
-                  : missingRow && !subject ? <p>{text.missingHelp}</p> : <Card className="max-w-3xl [--card-spacing:--spacing(6)]"><CardContent className="pt-6"><OwnedRowEditor kind={metadata.kind} owner={metadata.item} subject={subject} operation={operation} online={online} canWrite={canWrite} /></CardContent></Card>}
+                  : missingRow && !subject ? <p>{text.missingHelp}</p> : <Card className="max-w-3xl [--card-spacing:--spacing(6)]"><CardContent className="pt-6"><OwnedRowEditor key={scanDraft ? 'scan-handoff' : 'manual'} kind={metadata.kind} owner={metadata.item} subject={subject} operation={operation} online={online} canWrite={canWrite} barcodePrefill={scanDraft} onDiscardBarcodePrefill={() => { setDiscardedBarcode(true); if (typeof scanToken === 'string') clearBarcodeHandoff(scanToken) }} /></CardContent></Card>}
               {data.dataUpdatedAt > 0 && <p className="text-sm text-muted-foreground">{text.readAt}：{new Intl.DateTimeFormat('zh-TW', { dateStyle: 'short', timeStyle: 'short' }).format(data.dataUpdatedAt)}</p>}
             </>}
     <OwnedReviewDialog operation={operation} online={permitted} onReadCurrent={readCurrent} />

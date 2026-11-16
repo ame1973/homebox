@@ -10,6 +10,7 @@ import type { Item } from '@/lib/api/catalog'
 import { ApiError } from '@/lib/api/client'
 import { messages } from '@/lib/messages'
 import { createQueryClient } from '@/lib/query'
+import { readBarcodeHandoff } from '@/lib/scan-handoff'
 import { notifySessionCleared } from '@/lib/session-lifecycle'
 import * as model from './barcode-model'
 
@@ -79,8 +80,35 @@ it('preserves JSON-escaped controls and shows empty results without inventing in
   expect(await screen.findByRole('heading', { name: text.empty })).toBeVisible()
   expect(model.readBarcodeChoices).toHaveBeenCalledExactlyOnceWith({ value: '\0é\r\n001' }, expect.any(AbortSignal))
   expect(screen.getByText(text.createHelp)).toBeVisible()
-  expect(screen.getByRole('link', { name: text.create })).toHaveAttribute('href', '/items/new')
+  expect(screen.getByRole('button', { name: text.create })).toBeEnabled()
   expect(screen.getByRole('region', { name: text.results })).toHaveTextContent(JSON.stringify('\0é\r\n001'))
+})
+
+it('accepts all 512 astral code points as fully escaped JSON', async () => {
+  mount()
+  const input = await ready(), user = userEvent.setup()
+  await user.selectOptions(screen.getByRole('combobox', { name: text.inputFormat }), 'json')
+  const escaped = `"${'\\ud83d\\ude00'.repeat(512)}"`
+  expect(input).toHaveAttribute('maxlength', String(escaped.length))
+  fireEvent.change(input, { target: { value: escaped } })
+  await user.click(screen.getByRole('button', { name: text.search }))
+  await screen.findByRole('heading', { name: text.empty })
+  expect(model.readBarcodeChoices).toHaveBeenCalledExactlyOnceWith({ value: '😀'.repeat(512) }, expect.any(AbortSignal))
+})
+
+it('hands a first-page empty search to Item creation without putting the barcode in router state', async () => {
+  const work = mount(), user = userEvent.setup()
+  await ready()
+  await user.selectOptions(screen.getByRole('combobox', { name: text.symbology }), 'UPC_A')
+  fireEvent.change(screen.getByRole('textbox', { name: text.input }), { target: { value: '012345678905' } })
+  await user.click(screen.getByRole('button', { name: text.search }))
+  await screen.findByRole('heading', { name: text.empty })
+  await user.click(screen.getByRole('button', { name: text.create }))
+  await waitFor(() => expect(work.router.state.location.pathname).toBe('/items/new'))
+  const state = work.router.state.location.state as { scanToken: string }
+  expect(state.scanToken).toEqual(expect.any(String))
+  expect(JSON.stringify(state)).not.toContain('012345678905')
+  expect(readBarcodeHandoff(state.scanToken, '/items/new')).toEqual({ rawValue: '012345678905', symbology: 'UPC_A' })
 })
 
 it('rejects invalid text and JSON without querying and focuses the field', async () => {
@@ -134,7 +162,7 @@ it('does not call an empty continuation page an entirely empty search', async ()
   await userEvent.setup().click(screen.getByRole('button', { name: catalog.nextPage }))
   expect(await screen.findByRole('heading', { name: text.emptyPage })).toBeVisible()
   expect(screen.queryByRole('heading', { name: text.empty })).not.toBeInTheDocument()
-  expect(screen.queryByRole('link', { name: text.create })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: text.create })).not.toBeInTheDocument()
 })
 
 it('discards late results after the input changes and cancels the old read', async () => {

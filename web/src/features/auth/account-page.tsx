@@ -20,7 +20,7 @@ import { clearSessionQueries, useAuthAction, type AuthNotice, type AuthOutcome }
 const text = messages.auth
 const authQueryKey = ['auth', 'me'] as const
 const control = 'min-h-12 h-auto whitespace-normal py-3 text-base! leading-normal'
-const notices: Record<AuthNotice, string> = { setup: text.setupDone, password: text.passwordDone, logout: text.logoutDone, expired: text.expired, uncertain: text.uncertain }
+const notices: Record<AuthNotice, string> = { setup: text.setupDone, password: text.passwordDone, logout: text.logoutDone, expired: text.expired, uncertain: text.uncertain, scanHandoffLost: text.scanHandoffLost }
 
 export default function AccountPage({ mode }: { mode: 'login' | 'setup' | 'account' }) {
   const client = useQueryClient()

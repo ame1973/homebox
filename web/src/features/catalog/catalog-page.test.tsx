@@ -12,6 +12,8 @@ import * as locations from '@/lib/api/locations'
 import { ApiError } from '@/lib/api/client'
 import { messages } from '@/lib/messages'
 import { createQueryClient } from '@/lib/query'
+import { clearBarcodeHandoff, readBarcodeHandoff, startBarcodeHandoff } from '@/lib/scan-handoff'
+import { notifySessionCleared } from '@/lib/session-lifecycle'
 
 vi.mock('@/lib/api/auth', async (original) => ({ ...await original<typeof import('@/lib/api/auth')>(), fetchAdmin: vi.fn(), fetchCSRF: vi.fn(), login: vi.fn() }))
 vi.mock('@/lib/api/catalog', async (original) => ({ ...await original<typeof import('@/lib/api/catalog')>(), fetchItemsPage: vi.fn(), fetchItem: vi.fn(), createItem: vi.fn(), patchItem: vi.fn(), archiveItem: vi.fn(), deleteItem: vi.fn() }))
@@ -78,6 +80,130 @@ it('reads actual bounded metadata pages and offers real routes without fake coun
   expect(locations.fetchLocationsPage).toHaveBeenCalledWith({ limit: 100 }, expect.any(AbortSignal))
   expect(auth.fetchCSRF).not.toHaveBeenCalled()
 })
+it('retains a scanned barcode only as an unsent draft until Item creation succeeds', async () => {
+  const barcode = { rawValue: '\0é\r\n001', symbology: 'OTHER' as const }, token = startBarcodeHandoff(barcode)
+  const work = mount('/items/new', { scanToken: token })
+  await editor()
+  expect(screen.getByText(messages.scan.handoffTitle)).toBeVisible()
+  expect(screen.getByText(messages.scan.handoffHelp).parentElement).toHaveTextContent(JSON.stringify(barcode.rawValue))
+  const user = userEvent.setup()
+  fireEvent.change(field(text.fields.name), { target: { value: 'Scanned Item' } })
+  await user.click(screen.getByRole('button', { name: text.review }))
+  expect(screen.getByRole('alertdialog')).toHaveTextContent(messages.scan.reviewHandoffHelp)
+  expect(screen.getByRole('alertdialog')).toHaveTextContent(JSON.stringify(barcode.rawValue))
+  expect(api.createItem).not.toHaveBeenCalled()
+  await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: text.confirmCreate }))
+  await waitFor(() => expect(work.router.state.location.pathname).toBe('/items/created/barcodes/new'))
+  expect(readBarcodeHandoff(token, '/items/created/barcodes/new')).toEqual(barcode)
+  expect(JSON.stringify(work.router.state.location.state)).not.toContain(barcode.rawValue)
+  expect(api.createItem).toHaveBeenCalledOnce()
+})
+
+it('warns before discarding an untouched barcode handoff', async () => {
+  const token = startBarcodeHandoff({ rawValue: '012345678905', symbology: 'UPC_A' })
+  const work = mount('/items/new', { scanToken: token })
+  await editor()
+  await userEvent.setup().click(screen.getByRole('link', { name: text.back }))
+  expect(await screen.findByRole('alertdialog')).toHaveTextContent(text.leaveTitle)
+  expect(work.router.state.location.pathname).toBe('/items/new')
+  await userEvent.setup().click(within(screen.getByRole('alertdialog')).getByRole('button', { name: text.stay }))
+  expect(readBarcodeHandoff(token, '/items/new')?.rawValue).toBe('012345678905')
+})
+
+it('removes the displayed barcode handoff on a delivered session-clear signal', async () => {
+  const rawValue = 'private-code-012345678905', token = startBarcodeHandoff({ rawValue })
+  mount('/items/new', { scanToken: token })
+  await editor()
+  expect(screen.getByText(messages.scan.handoffHelp).parentElement).toHaveTextContent(rawValue)
+  act(() => { notifySessionCleared() })
+  expect(await screen.findByText(messages.scan.handoffLost)).toBeVisible()
+  expect(screen.queryByText(messages.scan.handoffTitle)).not.toBeInTheDocument()
+  expect(document.body).not.toHaveTextContent(rawValue)
+  expect(readBarcodeHandoff(token, '/items/new')).toBeUndefined()
+})
+
+it('updates the open Item review if the volatile barcode is cleared', async () => {
+  const rawValue = 'private-code-012345678905', token = startBarcodeHandoff({ rawValue })
+  mount('/items/new', { scanToken: token })
+  await editor()
+  fireEvent.change(field(text.fields.name), { target: { value: 'Unsent Item' } })
+  await userEvent.setup().click(screen.getByRole('button', { name: text.review }))
+  expect(screen.getByRole('alertdialog')).toHaveTextContent(rawValue)
+  act(() => { notifySessionCleared() })
+  expect(await within(screen.getByRole('alertdialog')).findByText(messages.scan.handoffLost)).toBeVisible()
+  expect(screen.getByRole('alertdialog')).not.toHaveTextContent(rawValue)
+  expect(api.createItem).not.toHaveBeenCalled()
+})
+
+it('shows an explicit warning if a volatile handoff is gone when creation opens', async () => {
+  const token = startBarcodeHandoff({ rawValue: '012345678905', symbology: 'UPC_A' })
+  clearBarcodeHandoff()
+  mount('/items/new', { scanToken: token })
+  await editor()
+  expect(screen.getByText(messages.scan.handoffLost)).toBeVisible()
+  expect(screen.queryByText(messages.scan.handoffTitle)).not.toBeInTheDocument()
+})
+
+it('warns when a handoff is cleared while the Item request completes', async () => {
+  const token = startBarcodeHandoff({ rawValue: '012345678905', symbology: 'UPC_A' })
+  vi.mocked(api.createItem).mockImplementationOnce(async (body) => {
+    clearBarcodeHandoff()
+    const value: api.Item = { ...item, model: null, ...body, id: 'created', revision: 1 }
+    items.set(value.id, value)
+    return value
+  })
+  const work = mount('/items/new', { scanToken: token })
+  await editor()
+  fireEvent.change(field(text.fields.name), { target: { value: 'Created despite lost handoff' } })
+  await userEvent.setup().click(screen.getByRole('button', { name: text.review }))
+  await userEvent.setup().click(within(screen.getByRole('alertdialog')).getByRole('button', { name: text.confirmCreate }))
+  await waitFor(() => expect(work.router.state.location.pathname).toBe('/items/created'))
+  expect(await screen.findByText(messages.scan.handoffUnavailable)).toBeVisible()
+  expect(readBarcodeHandoff(token, '/items/created/barcodes/new')).toBeUndefined()
+})
+
+it.each(['unsafe/id', 'ambiguous%2Fid'])('does not navigate a barcode draft to an unsafe created Item ID %j', async (id) => {
+  const token = startBarcodeHandoff({ rawValue: '012345678905', symbology: 'UPC_A' })
+  vi.mocked(api.createItem).mockResolvedValueOnce({ ...item, id, revision: 1 })
+  const work = mount('/items/new', { scanToken: token })
+  await editor()
+  fireEvent.change(field(text.fields.name), { target: { value: 'Item with unsafe reply' } })
+  await userEvent.setup().click(screen.getByRole('button', { name: text.review }))
+  await userEvent.setup().click(within(screen.getByRole('alertdialog')).getByRole('button', { name: text.confirmCreate }))
+  await waitFor(() => expect(work.router.state.location.pathname).toBe('/items'))
+  expect(await screen.findByText(messages.scan.handoffUnavailable)).toBeVisible()
+  expect(readBarcodeHandoff(token, `/items/${id}/barcodes/new`)).toBeUndefined()
+})
+
+it('reports a discarded barcode handoff when session loss interrupts Item creation', async () => {
+  const rawValue = '012345678905', token = startBarcodeHandoff({ rawValue, symbology: 'UPC_A' })
+  const work = mount('/items/new', { scanToken: token })
+  await editor()
+  fireEvent.change(field(text.fields.name), { target: { value: 'Pending Item' } })
+  vi.mocked(auth.fetchCSRF).mockImplementationOnce(async () => { administrator = null; throw new ApiError('AUTHENTICATION_REQUIRED', { status: 401 }) })
+  await userEvent.setup().click(screen.getByRole('button', { name: text.review }))
+  await userEvent.setup().click(within(screen.getByRole('alertdialog')).getByRole('button', { name: text.confirmCreate }))
+  await waitFor(() => expect(work.router.state.location.pathname).toBe('/login'))
+  expect(work.router.state.location.state).toEqual({ notice: 'scanHandoffLost', returnTo: '/items/new' })
+  expect(JSON.stringify(work.router.state.location.state)).not.toContain(rawValue)
+  expect(await screen.findByText(messages.auth.scanHandoffLost)).toBeVisible()
+  expect(readBarcodeHandoff(token, '/items/new')).toBeUndefined()
+  expect(api.createItem).not.toHaveBeenCalled()
+})
+
+it('reports the lost handoff when mandatory password change interrupts a dirty Item form', async () => {
+  const token = startBarcodeHandoff({ rawValue: '012345678905', symbology: 'UPC_A' })
+  const work = mount('/items/new', { scanToken: token })
+  await editor()
+  fireEvent.change(field(text.fields.name), { target: { value: 'Pending Item' } })
+  administrator = { id: 'owner', username: 'owner', revision: 3, must_change_password: true }
+  await act(async () => { await work.client.invalidateQueries({ queryKey: ['auth', 'me'] }) })
+  await waitFor(() => expect(work.router.state.location.pathname).toBe('/settings/account'))
+  expect(work.router.state.location.state).toEqual({ notice: 'scanHandoffLost', returnTo: '/items/new' })
+  expect(await screen.findByText(messages.auth.scanHandoffLost)).toBeVisible()
+  expect(readBarcodeHandoff(token, '/items/new')).toBeUndefined()
+})
+
 it('validates and reviews explicit default metadata before creating without holdings or unrelated proofs', async () => {
   mount('/items/new')
   await editor()
