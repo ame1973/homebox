@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"hash/crc32"
 	"image"
 	"image/color"
@@ -22,6 +23,8 @@ import (
 	"time"
 
 	"homebox/internal/mediaimage"
+
+	"golang.org/x/sys/unix"
 )
 
 func privateUploadPNG(t *testing.T, marker string) []byte {
@@ -100,6 +103,36 @@ func requireEmptyUploadStages(t *testing.T, staging string) {
 	}
 }
 
+func requirePendingUploadStages(t *testing.T, s *Store, staging string, expected int) {
+	t.Helper()
+	entries, err := os.ReadDir(staging)
+	if err != nil || len(entries) != expected {
+		t.Fatal("unexpected retained stages", entries, err)
+	}
+	rows, err := s.db.QueryContext(t.Context(), "SELECT stage_name,stage_device,stage_inode FROM media_pending_objects ORDER BY stage_name")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	count := 0
+	for rows.Next() {
+		var name string
+		var device, inode int64
+		if err = rows.Scan(&name, &device, &inode); err != nil {
+			t.Fatal(err)
+		}
+		var info unix.Stat_t
+		if !validMediaStageName(name) || unix.Lstat(filepath.Join(staging, name), &info) != nil ||
+			info.Mode&unix.S_IFMT != unix.S_IFREG || uint64(info.Dev) != uint64(device) || info.Ino != uint64(inode) {
+			t.Fatal("pending row lost its exact private stage inode", name)
+		}
+		count++
+	}
+	if err = rows.Err(); err != nil || count != expected {
+		t.Fatal("pending rows and preserved stages disagree", count, expected, err)
+	}
+}
+
 func TestStagedMediaUploadPublishesActualSanitizedSourceAndReplays(t *testing.T) {
 	s, auth, library, token, staging, objects := privateUploadFixture(t)
 	raw := privateUploadPNG(t, "secret GPS marker A")
@@ -143,8 +176,9 @@ func TestStagedMediaUploadPublishesActualSanitizedSourceAndReplays(t *testing.T)
 			t.Fatal("raw private metadata entered a durable database record")
 		}
 	}
-	if scalar[int](t, s.db, "SELECT COUNT(*) FROM auth_keyed_receipt_secret") != 1 || scalar[int](t, s.db, "SELECT COUNT(*) FROM media_links") != 0 {
-		t.Fatal("upload omitted the key pin or silently attached an owner")
+	if scalar[int](t, s.db, "SELECT COUNT(*) FROM auth_keyed_receipt_secret") != 1 || scalar[int](t, s.db, "SELECT COUNT(*) FROM media_links") != 0 ||
+		scalar[int](t, s.db, "SELECT COUNT(*) FROM media_pending_objects") != 0 {
+		t.Fatal("upload omitted the key pin, retained committed pending rows or silently attached an owner")
 	}
 	_, freshToken := login(t, auth)
 	replay, err := library.uploadStagedMedia(t.Context(), freshToken, "original-upload-key", "image/png", raw, "/missing-staging", "/missing-objects")
@@ -309,6 +343,8 @@ func TestStagedMediaUploadRollsBackEveryDurableDatabaseBoundary(t *testing.T) {
 		{"ignored thumbnail", `CREATE TRIGGER upload_failure BEFORE INSERT ON media_thumbnails BEGIN SELECT RAISE(IGNORE); END`},
 		{"ignored projection", `CREATE TRIGGER upload_failure BEFORE INSERT ON current_projections WHEN NEW.entity_type='media' BEGIN SELECT RAISE(IGNORE); END`},
 		{"ignored outbox", `CREATE TRIGGER upload_failure BEFORE INSERT ON sync_changes WHEN NEW.entity_type='media' BEGIN SELECT RAISE(IGNORE); END`},
+		{"ignored pending consume", `CREATE TRIGGER upload_failure BEFORE DELETE ON media_pending_objects BEGIN SELECT RAISE(IGNORE); END`},
+		{"reinserted pending", `CREATE TRIGGER upload_failure AFTER DELETE ON media_pending_objects BEGIN INSERT INTO media_pending_objects VALUES(OLD.id,OLD.dataset_epoch,OLD.sha256,OLD.bytes,OLD.created_at,OLD.stage_name,OLD.stage_device,OLD.stage_inode,OLD.staging_device,OLD.staging_inode,OLD.object_device,OLD.object_inode); END`},
 		{"ignored audit", `CREATE TRIGGER upload_failure BEFORE INSERT ON mutation_events WHEN NEW.operation='post_media' BEGIN SELECT RAISE(IGNORE); END`},
 		{"revoked session", `CREATE TRIGGER upload_failure AFTER INSERT ON media BEGIN UPDATE sessions SET revoked_at='2026-01-01T00:00:00Z'; END`},
 		{"changed epoch", `CREATE TRIGGER upload_failure AFTER INSERT ON media BEGIN UPDATE sync_state SET dataset_epoch=lower(hex(randomblob(16))) WHERE singleton=1; END`},
@@ -325,10 +361,11 @@ func TestStagedMediaUploadRollsBackEveryDurableDatabaseBoundary(t *testing.T) {
 				t.Fatal("failed publication returned a Media acknowledgement", result, err)
 			}
 			requireDomainState(t, s, before)
-			if scalar[int](t, s.db, "SELECT COUNT(*) FROM media_thumbnails") != 0 || scalar[int](t, s.db, "SELECT COUNT(*) FROM auth_keyed_receipt_secret") != 0 {
-				t.Fatal("failed publication retained a thumbnail or key pin")
+			if scalar[int](t, s.db, "SELECT COUNT(*) FROM media_thumbnails") != 0 || scalar[int](t, s.db, "SELECT COUNT(*) FROM auth_keyed_receipt_secret") != 0 ||
+				scalar[int](t, s.db, "SELECT COUNT(*) FROM media_pending_objects") != 2 {
+				t.Fatal("failed publication retained source or failed to preserve both pending objects")
 			}
-			requireEmptyUploadStages(t, staging)
+			requirePendingUploadStages(t, s, staging, 2)
 			// Promoted objects can be shared; failure must not delete them.
 			entries, err := os.ReadDir(objects)
 			if err != nil || len(entries) == 0 {
@@ -338,6 +375,10 @@ func TestStagedMediaUploadRollsBackEveryDurableDatabaseBoundary(t *testing.T) {
 			if retry, err := library.uploadStagedMedia(t.Context(), token, "rollback-upload-key", "image/png", raw, staging, objects); err != nil || retry.Revision != 1 {
 				t.Fatal("explicit retry could not reuse safe orphaned objects", retry, err)
 			}
+			if scalar[int](t, s.db, "SELECT COUNT(*) FROM media_pending_objects") != 2 {
+				t.Fatal("retry silently discarded the earlier pending records")
+			}
+			requirePendingUploadStages(t, s, staging, 2)
 		})
 	}
 }
@@ -363,8 +404,8 @@ func TestStagedMediaUploadRejectsUnsafeImagesAndUnauthorizedSessions(t *testing.
 		requireEmptyUploadStages(t, staging)
 	}
 	requireDomainState(t, s, before)
-	if entries, err := os.ReadDir(objects); err != nil || len(entries) != 0 {
-		t.Fatal("invalid input promoted any object", entries, err)
+	if entries, err := os.ReadDir(objects); err != nil || len(entries) != 0 || scalar[int](t, s.db, "SELECT COUNT(*) FROM media_pending_objects") != 0 {
+		t.Fatal("invalid input promoted or journaled any object", entries, err)
 	}
 }
 
@@ -387,10 +428,10 @@ func TestStagedMediaUploadRejectsLegacyStorageKeyCollisions(t *testing.T) {
 				t.Fatal("unverified or unproven legacy storage was silently adopted", got, err)
 			}
 			requireDomainState(t, s, before)
-			if scalar[int](t, s.db, "SELECT COUNT(*) FROM media_thumbnails") != 0 {
-				t.Fatal("legacy collision gained an invented thumbnail")
+			if scalar[int](t, s.db, "SELECT COUNT(*) FROM media_thumbnails") != 0 || scalar[int](t, s.db, "SELECT COUNT(*) FROM media_pending_objects") != 2 {
+				t.Fatal("legacy collision gained a thumbnail or lost its pending records")
 			}
-			requireEmptyUploadStages(t, staging)
+			requirePendingUploadStages(t, s, staging, 2)
 		})
 	}
 }
@@ -435,7 +476,11 @@ func TestStagedMediaUploadConcurrentKeysDeduplicate(t *testing.T) {
 				scalar[int](t, s.db, "SELECT COUNT(*) FROM sync_changes WHERE entity_type='media'") != 1 {
 				t.Fatal("concurrent deduplication produced duplicate source or missed an acknowledgement")
 			}
-			requireEmptyUploadStages(t, staging)
+			remaining := scalar[int](t, s.db, "SELECT COUNT(*) FROM media_pending_objects")
+			if remaining != 0 && (test.name != "same key" || remaining != 2) {
+				t.Fatal("unexpected pending rows after concurrent publication", remaining)
+			}
+			requirePendingUploadStages(t, s, staging, remaining)
 		})
 	}
 }
@@ -455,8 +500,8 @@ func TestStagedMediaUploadDetectsActualFileTamperingBeforeCommit(t *testing.T) {
 	var tamperErr error
 	auth.now = func() time.Time {
 		calls++
-		// The fourth clock read follows the audit and session-activity writes.
-		if calls == 4 {
+		// The eighth clock read follows upload audit and session-activity writes.
+		if calls == 8 {
 			content, readErr := os.ReadFile(path)
 			if readErr != nil || len(content) == 0 {
 				tamperErr = errors.Join(readErr, errors.New("expected promoted object"))
@@ -477,7 +522,100 @@ func TestStagedMediaUploadDetectsActualFileTamperingBeforeCommit(t *testing.T) {
 	if scalar[int](t, s.db, "SELECT COUNT(*) FROM media_thumbnails") != 0 {
 		t.Fatal("corrupt object left a Media thumbnail source")
 	}
-	requireEmptyUploadStages(t, staging)
+	requirePendingUploadStages(t, s, staging, 2)
+}
+
+func TestStagedMediaUploadPreservesStagesOnAmbiguousJournalCommit(t *testing.T) {
+	s, _, library, token, staging, objects := privateUploadFixture(t)
+	execSQL(t, s.db, `CREATE TABLE pending_commit_fault(value TEXT REFERENCES media(id) DEFERRABLE INITIALLY DEFERRED)`)
+	execSQL(t, s.db, `CREATE TRIGGER fail_pending_commit AFTER INSERT ON media_pending_objects BEGIN INSERT INTO pending_commit_fault VALUES('missing-media'); END`)
+	before := domainState(t, s)
+	result, err := library.uploadStagedMedia(t.Context(), token, "ambiguous-pending-key", "image/png", privateUploadPNG(t, "private"), staging, objects)
+	if err == nil || result != (Media{}) {
+		t.Fatal("failed journal COMMIT returned a Media result", result, err)
+	}
+	requireDomainState(t, s, before)
+	if scalar[int](t, s.db, "SELECT COUNT(*) FROM media_pending_objects") != 0 {
+		t.Fatal("deferred foreign-key failure unexpectedly committed pending rows")
+	}
+	stages, err := os.ReadDir(staging)
+	if err != nil || len(stages) != 2 || !validMediaStageName(stages[0].Name()) || !validMediaStageName(stages[1].Name()) {
+		t.Fatal("ambiguous COMMIT error did not conservatively preserve both stages", stages, err)
+	}
+	if entries, err := os.ReadDir(objects); err != nil || len(entries) != 0 {
+		t.Fatal("objects were promoted despite the failed journal COMMIT", entries, err)
+	}
+}
+
+func TestStagedMediaUploadJournalsBeforePromotionWithoutClaimingPreexistingObjects(t *testing.T) {
+	s, _, library, token, staging, objects := privateUploadFixture(t)
+	raw := privateUploadPNG(t, "private")
+	var original, thumbnail bytes.Buffer
+	imageResult, _, err := mediaimage.SanitizeWithThumbnail(t.Context(), raw, "image/png", &original, &thumbnail, mediaimage.Limits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(objects, mediaObjectKey(imageResult.SHA256))
+	unrelated := []byte("do not replace or claim this object")
+	if err = os.WriteFile(path, unrelated, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var existing unix.Stat_t
+	if err = unix.Lstat(path, &existing); err != nil {
+		t.Fatal(err)
+	}
+	before := domainState(t, s)
+	if result, err := library.uploadStagedMedia(t.Context(), token, "existing-object-key", "image/png", raw, staging, objects); !errors.Is(err, errMediaObjectInvalid) || result != (Media{}) {
+		t.Fatal("an invalid existing object was accepted", result, err)
+	}
+	requireDomainState(t, s, before)
+	requirePendingUploadStages(t, s, staging, 2)
+	if data, err := os.ReadFile(path); err != nil || !bytes.Equal(data, unrelated) {
+		t.Fatal("failed promotion changed the existing object", err)
+	}
+	stageInode := scalar[int64](t, s.db, "SELECT stage_inode FROM media_pending_objects WHERE sha256=?", hex.EncodeToString(imageResult.SHA256[:]))
+	if uint64(stageInode) == existing.Ino {
+		t.Fatal("the pending record incorrectly claimed an existing object's inode")
+	}
+}
+
+func TestStagedMediaUploadRejectsReplacedObjectDirectory(t *testing.T) {
+	for _, changeAt := range []int{4, 8} {
+		t.Run(fmt.Sprintf("clock-%d", changeAt), func(t *testing.T) {
+			t.Parallel()
+			s, auth, library, token, staging, objects := privateUploadFixture(t)
+			raw := privateUploadPNG(t, "private")
+			clock := auth.now
+			calls := 0
+			moved := objects + "-moved"
+			var swapErr error
+			auth.now = func() time.Time {
+				calls++
+				if calls == changeAt {
+					swapErr = os.Rename(objects, moved)
+					if swapErr == nil {
+						swapErr = os.Mkdir(objects, 0o700)
+					}
+				}
+				return clock()
+			}
+			before := domainState(t, s)
+			result, err := library.uploadStagedMedia(t.Context(), token, "renamed-object-dir", "image/png", raw, staging, objects)
+			if calls < changeAt || swapErr != nil || !errors.Is(err, ErrUnsafePath) || result != (Media{}) {
+				t.Fatal("a substituted object directory was published", calls, swapErr, result, err)
+			}
+			requireDomainState(t, s, before)
+			requirePendingUploadStages(t, s, staging, 2)
+			var original, replacement unix.Stat_t
+			if err = unix.Stat(moved, &original); err != nil {
+				t.Fatal(err)
+			}
+			if err = unix.Stat(objects, &replacement); err != nil || original.Ino == replacement.Ino ||
+				uint64(scalar[int64](t, s.db, "SELECT object_inode FROM media_pending_objects LIMIT 1")) != original.Ino {
+				t.Fatal("journal lost the original object directory identity", err)
+			}
+		})
+	}
 }
 
 func TestStagedMediaUploadRetainsOriginalReceiptAfterCleanupFailure(t *testing.T) {
@@ -559,7 +697,7 @@ func TestPublishStagedMediaRejectsInconsistentSanitizerResults(t *testing.T) {
 		image, small, source, thumb, objects := imageResult, preview, original, thumbnail, dir
 		mutate(&image, &small, &source, &thumb, &objects)
 		m := mutationTx{ctx: t.Context()}
-		if result, err := m.publishStagedMedia(image, small, source, thumb, objects); !errors.Is(err, ErrDomainState) || result != (Media{}) {
+		if result, err := m.publishStagedMedia(image, small, source, thumb, objects, ""); !errors.Is(err, ErrDomainState) || result != (Media{}) {
 			t.Fatal("inconsistent sanitizer/file results crossed the source boundary", result, err)
 		}
 	}

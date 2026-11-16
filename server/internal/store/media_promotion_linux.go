@@ -115,22 +115,7 @@ func inspectMediaObject(ctx context.Context, dir *os.File, key string, expected 
 func (stage *mediaStage) promote(directory string) (result promotedMedia, finalErr error) {
 	stage.mu.Lock()
 	defer stage.mu.Unlock()
-	if stage.closing || stage.discarded {
-		return promotedMedia{}, errMediaStageClosed
-	}
-	if stage.result == nil {
-		return promotedMedia{}, errMediaStageUnsealed
-	}
-	if err := stage.ctx.Err(); err != nil {
-		return promotedMedia{}, err
-	}
-	if err := stage.checkDirectory(); err != nil {
-		return promotedMedia{}, err
-	}
-	if err := stage.checkName(); err != nil {
-		if errors.Is(err, unix.ENOENT) {
-			return promotedMedia{}, errMediaStageChanged
-		}
+	if err := stage.checkPromotion(); err != nil {
 		return promotedMedia{}, err
 	}
 	objects, err := openPrivateMediaDirectory(directory)
@@ -143,6 +128,51 @@ func (stage *mediaStage) promote(directory string) (result promotedMedia, finalE
 			result = promotedMedia{}
 		}
 	}()
+	return stage.promoteOpen(objects)
+}
+
+// promoteTo uses an already anchored directory so its identity can be journaled
+// before either sanitized object is linked into it. The caller owns the handle.
+func (stage *mediaStage) promoteTo(objects *os.File) (promotedMedia, error) {
+	stage.mu.Lock()
+	defer stage.mu.Unlock()
+	if err := stage.checkPromotion(); err != nil {
+		return promotedMedia{}, err
+	}
+	if objects == nil {
+		return promotedMedia{}, ErrUnsafePath
+	}
+	if err := checkPrivateMediaDirectory(objects); err != nil {
+		return promotedMedia{}, err
+	}
+	return stage.promoteOpen(objects)
+}
+
+func (stage *mediaStage) checkPromotion() error {
+	if stage.closing || stage.discarded {
+		return errMediaStageClosed
+	}
+	if stage.result == nil {
+		return errMediaStageUnsealed
+	}
+	if err := stage.ctx.Err(); err != nil {
+		return err
+	}
+	if err := stage.checkDirectory(); err != nil {
+		return err
+	}
+	if err := stage.checkName(); err != nil {
+		if errors.Is(err, unix.ENOENT) {
+			return errMediaStageChanged
+		}
+		return err
+	}
+	return nil
+}
+
+// promoteOpen requires the stage lock and never closes the caller's directory.
+func (stage *mediaStage) promoteOpen(objects *os.File) (result promotedMedia, finalErr error) {
+	var err error
 	var stagingDir, objectDir unix.Stat_t
 	if err = unix.Fstat(int(stage.dir.Fd()), &stagingDir); err != nil {
 		return promotedMedia{}, err

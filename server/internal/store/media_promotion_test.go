@@ -59,6 +59,36 @@ func sealedMediaStage(t *testing.T, directory string, data []byte) *mediaStage {
 	return stage
 }
 
+func TestMediaPromotionUsesAnchoredObjectDirectory(t *testing.T) {
+	staging, objects := mediaPromotionDirs(t)
+	stage := sealedMediaStage(t, staging, []byte("anchored sanitized bytes"))
+	dir, err := openPrivateMediaDirectory(objects)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dir.Close()
+	moved := objects + "-moved"
+	if err = os.Rename(objects, moved); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Mkdir(objects, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	result, err := stage.promoteTo(dir)
+	if err != nil {
+		t.Fatal("anchored promotion failed after directory rename", err)
+	}
+	if data, err := os.ReadFile(filepath.Join(moved, result.key)); err != nil || string(data) != "anchored sanitized bytes" {
+		t.Fatal("promotion missed the journaled directory inode", err)
+	}
+	if _, err := os.Stat(filepath.Join(objects, result.key)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("promotion followed a substituted directory path", err)
+	}
+	if _, err = stage.promoteTo(nil); !errors.Is(err, ErrUnsafePath) {
+		t.Fatal("nil object directory was accepted", err)
+	}
+}
+
 func TestMediaPromotionCreatesReadOnlyObjectAndDeduplicates(t *testing.T) {
 	staging, objects := mediaPromotionDirs(t)
 	data := []byte("sanitized media bytes")

@@ -22,6 +22,75 @@ import (
 	"homebox/internal/mediaimage"
 )
 
+func TestMediaStageNamesRejectTraversalAndAmbiguousBytes(t *testing.T) {
+	valid := "media-" + strings.Repeat("a1", 16) + ".partial"
+	if !validMediaStageName(valid) {
+		t.Fatal("generated stage spelling was rejected")
+	}
+	for _, name := range []string{"", valid + "\x00", "../" + valid, "media-" + strings.Repeat("A", 32) + ".partial", valid + "/other", "media-" + strings.Repeat("g", 32) + ".partial"} {
+		if validMediaStageName(name) {
+			t.Fatal("unsafe stage spelling was accepted", name)
+		}
+	}
+}
+
+func TestMediaStagePreservesOnlySealedJournaledFiles(t *testing.T) {
+	directory := privateTempDir(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	stage, err := newMediaStage(ctx, directory, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = stage.preserve(); !errors.Is(err, errMediaStageUnsealed) {
+		t.Fatal("unsealed stage was preserved", err)
+	}
+	data := []byte("sealed private bytes")
+	if _, err = stage.Write(data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = stage.seal(); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(directory, stage.name)
+	cancel()
+	if err = stage.preserve(); err != nil {
+		t.Fatal("cancellation prevented safe preservation", err)
+	}
+	if actual, err := os.ReadFile(path); err != nil || !bytes.Equal(actual, data) {
+		t.Fatal("preservation removed or changed the stage", err)
+	}
+	if err = stage.discard(); !errors.Is(err, errMediaStageClosed) {
+		t.Fatal("a detached stage was removed without recovery validation", err)
+	}
+}
+
+func TestMediaStagePreserveRejectsPermissiveFile(t *testing.T) {
+	directory := privateTempDir(t)
+	stage, err := newMediaStage(t.Context(), directory, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = stage.Write([]byte("private")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = stage.seal(); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(directory, stage.name)
+	if err = os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err = stage.preserve(); !errors.Is(err, ErrUnsafePath) {
+		t.Fatal("permissive stage preservation reported success", err)
+	}
+	if content, err := os.ReadFile(path); err != nil || string(content) != "private" {
+		t.Fatal("failed preservation removed or changed the stage", err)
+	}
+	if err = os.Chmod(path, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestMediaStagePrivateBoundedSealAndDiscard(t *testing.T) {
 	directory := privateTempDir(t)
 	existing := filepath.Join(directory, "unrelated")

@@ -13,6 +13,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"golang.org/x/sys/unix"
@@ -53,6 +54,18 @@ type mediaStage struct {
 	failure   error
 	closing   bool
 	discarded bool
+}
+
+func validMediaStageName(name string) bool {
+	if len(name) != len("media-")+32+len(".partial") || !strings.HasPrefix(name, "media-") || !strings.HasSuffix(name, ".partial") {
+		return false
+	}
+	for _, c := range name[len("media-") : len("media-")+32] {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 func openPrivateMediaDirectory(directory string) (*os.File, error) {
@@ -330,6 +343,33 @@ func (stage *mediaStage) seal() (mediaStageDigest, error) {
 	return result, nil
 }
 
+// preserve closes a sealed journaled stage without unlinking it. Recovery must
+// later compare its recorded directory, name and inode before any cleanup.
+func (stage *mediaStage) preserve() error {
+	stage.mu.Lock()
+	defer stage.mu.Unlock()
+	if stage.closing || stage.discarded || stage.dir == nil {
+		return errMediaStageClosed
+	}
+	if stage.result == nil {
+		return errMediaStageUnsealed
+	}
+	stage.closing = true
+	nameErr := stage.checkName()
+	var modeErr error
+	if nameErr == nil {
+		var source unix.Stat_t
+		if modeErr = unix.Fstatat(int(stage.dir.Fd()), stage.name, &source, unix.AT_SYMLINK_NOFOLLOW); modeErr == nil &&
+			(source.Mode&unix.S_IFMT != unix.S_IFREG || source.Mode&0o7777 != 0o400 && source.Mode&0o7777 != 0o600 ||
+				uint64(source.Dev) != stage.device || source.Ino != stage.inode) {
+			modeErr = ErrUnsafePath
+		}
+	}
+	err := errors.Join(nameErr, modeErr, stage.checkDirectory(), stage.dir.Sync(), stage.dir.Close())
+	stage.dir = nil
+	return err
+}
+
 // discard ignores request cancellation, unlinks only the checked generated name
 // and synchronizes the directory. A failed unlink/sync can be retried. Inode
 // checking and unlink are not atomic against another process with this UID;
@@ -339,6 +379,9 @@ func (stage *mediaStage) discard() error {
 	defer stage.mu.Unlock()
 	if stage.discarded {
 		return nil
+	}
+	if stage.dir == nil {
+		return errMediaStageClosed
 	}
 	stage.closing = true
 	var closeErr error

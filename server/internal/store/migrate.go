@@ -172,6 +172,15 @@ func (s *Store) migrate(ctx context.Context, cfg Config, all []migrations.Migrat
 			return report, fmt.Errorf("validate new thumbnail source: %w", ErrDomainState)
 		}
 	}
+	if version < 24 && len(all) >= 24 {
+		var pending int
+		if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM media_pending_objects").Scan(&pending); err != nil {
+			return report, err
+		}
+		if pending != 0 {
+			return report, fmt.Errorf("validate new pending media journal: %w", ErrDomainState)
+		}
+	}
 	finalVersion, finalLedger, err := history(ctx, tx, all)
 	if err != nil {
 		return report, err

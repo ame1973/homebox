@@ -52,12 +52,19 @@ func (library *MediaLibrary) uploadStagedMedia(ctx context.Context, token, key, 
 		return Media{}, err
 	}
 
+	preserveStages := false
 	original, err := newMediaStage(ctx, stagingDir, maxMediaStageBytes)
 	if err != nil {
 		return Media{}, err
 	}
 	defer func() {
-		finalErr = errors.Join(finalErr, original.discard())
+		var cleanup error
+		if preserveStages {
+			cleanup = original.preserve()
+		} else {
+			cleanup = original.discard()
+		}
+		finalErr = errors.Join(finalErr, cleanup)
 		if finalErr != nil {
 			result = Media{}
 		}
@@ -67,7 +74,13 @@ func (library *MediaLibrary) uploadStagedMedia(ctx context.Context, token, key, 
 		return Media{}, err
 	}
 	defer func() {
-		finalErr = errors.Join(finalErr, thumbnail.discard())
+		var cleanup error
+		if preserveStages {
+			cleanup = thumbnail.preserve()
+		} else {
+			cleanup = thumbnail.discard()
+		}
+		finalErr = errors.Join(finalErr, cleanup)
 		if finalErr != nil {
 			result = Media{}
 		}
@@ -92,14 +105,6 @@ func (library *MediaLibrary) uploadStagedMedia(ctx context.Context, token, key, 
 		thumbnailDigest != (mediaStageDigest{SHA256: preview.SHA256, Bytes: preview.Bytes}) {
 		return Media{}, ErrDomainState
 	}
-	promotedOriginal, err := original.promote(objectDir)
-	if err != nil {
-		return Media{}, err
-	}
-	promotedThumbnail, err := thumbnail.promote(objectDir)
-	if err != nil {
-		return Media{}, err
-	}
 	objects, err := openPrivateMediaDirectory(objectDir)
 	if err != nil {
 		return Media{}, err
@@ -110,18 +115,52 @@ func (library *MediaLibrary) uploadStagedMedia(ctx context.Context, token, key, 
 			result = Media{}
 		}
 	}()
+	pending, err := library.journalMediaObjects(ctx, token, []*mediaStage{original, thumbnail}, objects)
+	if len(pending) != 0 {
+		// A COMMIT error may be ambiguous, so preserve these stages even on error.
+		preserveStages = true
+	}
+	if err != nil {
+		return Media{}, err
+	}
+	// Keep these inode-identifiable stages until their journal is consumed by a
+	// committed publication or a future reference-aware recovery process.
+	if err = requireMediaDirectoryBinding(objectDir, objects); err != nil {
+		return Media{}, err
+	}
+	promotedOriginal, err := original.promoteTo(objects)
+	if err != nil {
+		return Media{}, err
+	}
+	promotedThumbnail, err := thumbnail.promoteTo(objects)
+	if err != nil {
+		return Media{}, err
+	}
 	if err = verifyMediaObject(ctx, objects, promotedOriginal.key, originalDigest); err != nil {
 		return Media{}, err
 	}
 	if err = verifyMediaObject(ctx, objects, promotedThumbnail.key, thumbnailDigest); err != nil {
 		return Media{}, err
 	}
-	return runDomainMutation(ctx, library.auth, token, key, "post_media", request, func(m *mutationTx) (Media, error) {
-		return m.publishStagedMedia(image, preview, promotedOriginal, promotedThumbnail, objects)
+	consumed := false
+	result, err = runDomainMutation(ctx, library.auth, token, key, "post_media", request, func(m *mutationTx) (Media, error) {
+		value, err := m.publishStagedMedia(image, preview, promotedOriginal, promotedThumbnail, objects, objectDir)
+		if err != nil {
+			return Media{}, err
+		}
+		if err = m.consumeMediaPending(pending); err != nil {
+			return Media{}, err
+		}
+		consumed = true
+		return value, nil
 	})
+	if err == nil && consumed {
+		preserveStages = false
+	}
+	return result, err
 }
 
-func (m *mutationTx) publishStagedMedia(image, preview mediaimage.Result, original, thumbnail promotedMedia, objects *os.File) (Media, error) {
+func (m *mutationTx) publishStagedMedia(image, preview mediaimage.Result, original, thumbnail promotedMedia, objects *os.File, objectDir string) (Media, error) {
 	if objects == nil || (image.MIMEType != "image/jpeg" && image.MIMEType != "image/png") || preview.MIMEType != "image/jpeg" ||
 		image.Width < 1 || image.Height < 1 || image.Width > mediaimage.MaxDimension || image.Height > mediaimage.MaxDimension ||
 		int64(image.Width)*int64(image.Height) > mediaimage.MaxPixels || image.Bytes < 1 || image.Bytes > maxMediaFileBytes ||
@@ -214,7 +253,10 @@ func (m *mutationTx) publishStagedMedia(image, preview mediaimage.Result, origin
 		if err = verifyMediaObject(m.ctx, objects, original.key, original.digest); err != nil {
 			return err
 		}
-		return verifyMediaObject(m.ctx, objects, thumbnail.key, thumbnail.digest)
+		if err = verifyMediaObject(m.ctx, objects, thumbnail.key, thumbnail.digest); err != nil {
+			return err
+		}
+		return requireMediaDirectoryBinding(objectDir, objects)
 	})
 	return publicMedia(want), nil
 }
