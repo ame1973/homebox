@@ -15,6 +15,8 @@
 
 ### Added
 
+- Add an internal Linux private-media staging writer with exclusive random `0600` files, bounded output, anchored directory/inode checks, actual-byte SHA-256 verification, file/directory synchronization and retryable explicit cleanup. Tests cover real sanitizer output, concurrency, cancellation, tampering, permissions and process exit without cleanup. This does not enable upload, image validation by itself, promotion, recovery, streaming or WebP.
+
 - Connect native `BarcodeDetector` support to the explicitly opened `/scan` camera. Report supported and missing formats, stop on results or errors, preserve and separately display exact returned values, require explicit selection and manual lookup, and offer only validated same-origin Location/Unit QR links. Bound visible results, ignore late replies and serialize uncancelable detections across in-app navigation; an eight-second timeout requires a page reload. Browser coverage uses an injected detector and fake camera, not native pixel decoding or physical-device acceptance. Missing-format fallback, image-file scanning and photo capture remain unfinished.
 
 - Add an explicitly opened live camera preview to `/scan`, with safe start/stop, front/back preference, supported torch controls, playback recovery and track cleanup. At that increment it did not decode barcodes, capture images or replace the manual lookup and future file fallback; fake-device browser checks are not physical-device acceptance.

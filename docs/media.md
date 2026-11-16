@@ -171,6 +171,14 @@ After complete decoding, the utility applies the eight TIFF orientation values, 
 
 Tests use generated image pixels, actual GPS-bearing EXIF, eight orientations, progressive JPEG scans, 16-bit alpha PNG, thumbnail transparency and downsampling, malformed/truncated data, CRCs, APNG, limits, cancellation and fuzzing. This is an internal byte-processing component, not an upload handler, private file store, file-integrity check, recovery protocol or proof of real-device acceptance. **WebP still needs a supported decoder and complete container/animation validation before the contracted upload can be enabled.**
 
+## Private staging groundwork
+
+The Linux store has an internal staged-file writer for future sanitized originals and thumbnails. It requires an existing private local directory, opens its final directory component without following a symlink, creates each random filename exclusively with mode `0600`, and retains a directory descriptor across path renames. Each writer takes an explicit positive output limit, capped at `64,000,000 * 8 + 16 MiB` bytes: re-encoded 16-bit PNG can be larger than the independently bounded 32 MiB raw upload. The caller must supply validated image bytes; the writer does not decode or sanitize them.
+
+A failed, canceled, empty, oversized or changed write cannot be sealed as a successful prefix. Sealing checks the generated name against its actual inode, synchronizes the file, re-reads and hashes the actual bytes against the accepted writes, then synchronizes the staging directory and its parent. Discard remains possible after cancellation and checks the generated inode before unlinking; a failed cleanup can be retried. The inode check and unlink are not atomic against another process with the same Unix UID, which already has unrestricted access to that private directory. A sealed digest is not proof that a file remains unchanged later: future promotion and streaming must revalidate the actual bytes.
+
+Tests include independent concurrent stages, a real sanitizer producing separate original/thumbnail files, changed bytes and permissions, substituted names/symlinks, a renamed staging directory, cancellation, cleanup failure and a subprocess exiting without cleanup. The subprocess test verifies survival after process exit, not power-loss durability. No HTTP handler or startup path uses this helper yet; atomic promotion, SQLite publication, deduplication, abandoned-stage recovery, integrity-checked streaming and global deletion remain unimplemented.
+
 ## Verification and remaining work
 
 ```sh
@@ -181,6 +189,8 @@ go -C server test ./internal/httpapi -run '^$' -fuzz '^FuzzMediaIdentityPageQuer
 go -C server test ./internal/httpapi -run '^$' -fuzz FuzzMediaAttachJSON -fuzztime=5s -parallel=2
 go -C server test ./internal/httpapi -run '^$' -fuzz FuzzMediaLinkPatchJSON -fuzztime=10s -parallel=2
 go -C server test -race -count=1 ./internal/mediaimage
+go -C server test -race ./internal/store -run '^TestMediaStage' -count=1
+go -C server test ./internal/store -run '^$' -fuzz '^FuzzMediaStage$' -fuzztime=10s -parallel=2
 go -C server test ./internal/mediaimage -run '^$' -fuzz '^FuzzSanitizeWithThumbnail$' -fuzztime=15s -parallel=2
 go -C server test ./internal/mediaimage -run '^$' -fuzz '^FuzzSanitize$' -fuzztime=10s -parallel=2
 go -C server test ./internal/mediaimage -run '^$' -fuzz FuzzEXIFOrientation -fuzztime=10s -parallel=2
