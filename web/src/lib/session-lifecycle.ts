@@ -1,11 +1,17 @@
 const sessionClearedEvent = 'homebox:session-cleared'
 const sessionClearedMessage = 'cleared'
 
+// Page suspension uses the same local cleanup without telling other tabs that
+// their session changed. It contains no credentials or private state.
+export function notifyPageSuspended() {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(sessionClearedEvent))
+}
+
 // The signal contains no credentials or private state. Storage is only a
 // transient fallback for browsers where BroadcastChannel is unavailable.
 export function notifySessionCleared() {
   if (typeof window === 'undefined') return
-  window.dispatchEvent(new Event(sessionClearedEvent))
+  notifyPageSuspended()
   try {
     const channel = new BroadcastChannel(sessionClearedEvent)
     try { channel.postMessage(sessionClearedMessage) } finally { channel.close() }

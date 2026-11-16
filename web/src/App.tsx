@@ -1,4 +1,6 @@
-import { lazy, Suspense, useEffect, useRef } from 'react'
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { Link, NavLink, Route, Routes, useLocation } from 'react-router'
 import { MapPin, NotebookTabs, Package, ReceiptText, ScanLine, Settings, UserRound } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -6,7 +8,8 @@ import { ThemeMenu } from '@/components/theme-menu'
 import { AppErrorBoundary } from '@/components/app-error-boundary'
 import { messages } from '@/lib/messages'
 import { clearBarcodeHandoff, retainBarcodeHandoff } from '@/lib/scan-handoff'
-import { subscribeSessionCleared } from '@/lib/session-lifecycle'
+import { notifyPageSuspended, subscribeSessionCleared } from '@/lib/session-lifecycle'
+import { RestoreGate } from '@/features/auth/restore-gate'
 
 const ConnectionPage = lazy(() => import('@/features/system/connection-page'))
 const AccountPage = lazy(() => import('@/features/auth/account-page'))
@@ -27,19 +30,52 @@ const LocationAlias = lazy(() => import('@/features/locations/locations-page').t
 
 export default function App() {
   const location = useLocation()
+  const client = useQueryClient()
   const main = useRef<HTMLElement>(null)
   const previousPath = useRef(location.pathname)
+  const restoreGuard = useRef(false)
+  const restoreFocus = useRef(false)
+  const [restoration, setRestoration] = useState<'active' | 'suspended' | 'checking'>('active')
+  const [restoreGeneration, setRestoreGeneration] = useState(0)
   useEffect(() => {
-    if (previousPath.current !== location.pathname) main.current?.focus()
+    if (restoration === 'active' && (previousPath.current !== location.pathname || restoreFocus.current)) {
+      main.current?.focus()
+      restoreFocus.current = false
+    }
     previousPath.current = location.pathname
-  }, [location.pathname])
+  }, [location.pathname, restoration])
   useEffect(() => {
-    const unsubscribe = subscribeSessionCleared(() => clearBarcodeHandoff())
+    const unsubscribe = subscribeSessionCleared(() => {
+      clearBarcodeHandoff()
+      if (restoreGuard.current) {
+        void client.cancelQueries()
+        client.clear()
+        setRestoreGeneration((value) => value + 1)
+      }
+    })
     return () => { unsubscribe(); clearBarcodeHandoff() }
-  }, [])
+  }, [client])
+  useLayoutEffect(() => {
+    const pagehide = () => {
+      const marker: unknown = location.state?.scanToken
+      if (!restoreGuard.current && location.pathname !== '/scan' && !(typeof marker === 'string' && marker.length === 36)) return
+      restoreGuard.current = true
+      // Wipe only this page's volatile state; suspension is not a logout in
+      // another tab. Commit the redacted screen before the browser freezes it.
+      notifyPageSuspended()
+      flushSync(() => { clearBarcodeHandoff(); setRestoration('suspended') })
+      void client.cancelQueries()
+      client.clear()
+    }
+    const pageshow = (event: PageTransitionEvent) => { if (restoreGuard.current && event.persisted) setRestoration('checking') }
+    window.addEventListener('pagehide', pagehide)
+    window.addEventListener('pageshow', pageshow)
+    return () => { window.removeEventListener('pagehide', pagehide); window.removeEventListener('pageshow', pageshow) }
+  }, [client, location.pathname, location.state])
   useEffect(() => {
     retainBarcodeHandoff(location.state?.scanToken, location.pathname + location.search + location.hash)
   }, [location.pathname, location.search, location.hash, location.state])
+  if (restoration !== 'active') return <RestoreGate restored={restoration === 'checking'} generation={restoreGeneration} returnPath={location.pathname + location.search} onLeave={() => { restoreGuard.current = false; restoreFocus.current = true; setRestoration('active') }} />
   return (
     <div className="safe-page mx-auto flex min-h-dvh max-w-5xl flex-col">
       <a href="#main" onClick={(event) => { event.preventDefault(); main.current?.focus() }} className="sr-only z-50 rounded-md bg-primary p-3 text-primary-foreground focus:not-sr-only focus:absolute focus:top-2">{messages.app.skip}</a>

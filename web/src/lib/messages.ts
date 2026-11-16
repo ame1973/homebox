@@ -169,6 +169,8 @@ export const messages = {
     failed: '無法完成條碼查詢', changed: '查詢期間資料已變更或分頁不一致；請重新從第一頁查詢。', checking: '正在確認登入狀態…',
     offline: '目前離線', offlineHelp: '可保留輸入；重新連線後請明確查詢，不會自動送出。',
     sessionCleared: '登入狀態已變更', sessionClearedHelp: '此畫面的條碼與結果已清除。請重新確認登入後再查詢。', signIn: '前往登入',
+    restoreTitle: '離開前的條碼輸入已清除', restoreHelp: '返回前的條碼草稿與審閱內容已清除。如果請求先前已送出，伺服器可能已完成；請先核對目前資料，不會自動重送。',
+    restoreWaiting: '正在準備重新確認登入狀態…', restoreReady: '登入狀態已確認。', restoreContinue: '繼續', restoreFailed: '無法確認登入狀態，請重新檢查或前往登入。', restorePassword: '前往更新密碼',
     invalidRoute: '此頁不接受網址中的查詢內容。請開啟沒有參數的條碼查詢頁。',
   },
   catalog: {

@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Clear volatile scan and barcode-handoff screens before browser page suspension, without broadcasting logout to other tabs. On back-forward-cache restoration, require a fresh completed-session check and warn that an already-sent request may have committed; canceling the browser leave prompt retains the draft.
+
 - On a delivered session-clear signal, lock the owned-data screen, abort its active request, discard its reviewed command and clear this window's in-memory query cache. Warn that an already-sent request may have committed and requires checking current server data; no request is automatically retried.
 
 - Escape Unicode default-ignorable code points, including combining grapheme joiners and variation selectors, in exact-text reviews and scanned-barcode JSON entry. Preserve the underlying values without claiming to detect every visually confusable character.

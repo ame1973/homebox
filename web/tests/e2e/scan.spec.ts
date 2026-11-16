@@ -436,8 +436,10 @@ test('reports the cleared code if a real session expires before barcode confirma
   await expect(page).toHaveURL(/\/items\/[^/]+\/barcodes\/new$/)
   const itemID = new URL(page.url()).pathname.split('/')[2]!
   await expect(page.getByText(text.barcodeDraftHelp)).toBeVisible()
+  const format = page.getByRole('combobox', { name: new RegExp(`^${owned.fields.symbology}`) })
+  await expect(format).toBeEnabled()
   expect((await page.request.post('/api/v1/auth/logout', { headers: await writeContext(page, application.url) })).status()).toBe(200)
-  await page.getByRole('combobox', { name: new RegExp(`^${owned.fields.symbology}`) }).selectOption('UPC_A')
+  await format.selectOption('UPC_A')
   await page.getByRole('button', { name: owned.review }).click()
   await page.getByRole('alertdialog').getByRole('button', { name: owned.confirmCreate.barcodes }).click()
   await expect(page).toHaveURL(/\/login$/)
