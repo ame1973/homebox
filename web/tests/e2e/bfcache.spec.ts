@@ -3,6 +3,7 @@ import type { Page } from '@playwright/test'
 import { messages } from '../../src/lib/messages.ts'
 import { test, expect } from './auth-fixture.ts'
 import { noOverflow, provision, watchDomainWrites, writeContext } from './domain-helpers.ts'
+import { leaveDocument, permitBFCache, returnFromBFCache } from './bfcache-helpers.ts'
 
 test.use({
   launchOptions: { channel: 'chromium', ignoreDefaultArgs: ['--disable-back-forward-cache'] },
@@ -12,26 +13,6 @@ test.use({
 const scan = messages.scan, catalog = messages.catalog, owned = messages.owned
 const raw = '012345678905'
 
-async function permitBFCache(page: Page, origin: string) {
-  const original = await page.request.get('/scan')
-  expect(original.headers()['cache-control']).toContain('no-store')
-  let privateResponses = 0
-  // Keep production headers unchanged. Override only this browser's responses
-  // to exercise browsers that can restore private no-store pages from BFCache.
-  await page.route((url) => url.origin === origin, async (route) => {
-    if (!['document', 'fetch', 'xhr'].includes(route.request().resourceType())) { await route.continue(); return }
-    const response = await route.fetch(), headers = { ...response.headers() }
-    if (headers['cache-control']?.includes('no-store')) privateResponses++
-    headers['cache-control'] = 'private, max-age=0'
-    await route.fulfill({ response, headers })
-  })
-  const cdp = await page.context().newCDPSession(page)
-  await cdp.send('Page.enable')
-  const notUsed: unknown[] = []
-  cdp.on('Page.backForwardCacheNotUsed', (event) => notUsed.push(event))
-  return { privateResponses: () => privateResponses, notUsed }
-}
-
 async function openHandoff(page: Page) {
   await page.goto('/scan')
   await page.getByRole('textbox', { name: scan.input }).fill(raw)
@@ -40,28 +21,6 @@ async function openHandoff(page: Page) {
   await page.getByRole('button', { name: scan.create }).click()
   await page.getByRole('textbox', { name: new RegExp(`^${catalog.fields.name}`) }).fill('Unfinished private Item')
   await expect(page.getByText(scan.handoffHelp).locator('..')).toContainText(raw)
-}
-
-async function leaveDocument(page: Page, dirty: boolean) {
-  await page.evaluate(() => {
-    const probe = window as Window & { __homeboxRestored?: boolean }
-    probe.__homeboxRestored = false
-    window.addEventListener('pageshow', (event) => { probe.__homeboxRestored = event.persisted })
-  })
-  let confirmedLeave = false
-  if (dirty) page.once('dialog', async (dialog) => { confirmedLeave = dialog.type() === 'beforeunload'; await dialog.accept() })
-  await page.goto('/api/v1/health/live')
-  if (dirty) expect(confirmedLeave).toBe(true)
-}
-
-async function returnFromBFCache(page: Page, diagnostics: { privateResponses: () => number; notUsed: unknown[] }) {
-  await page.goBack({ waitUntil: 'commit' })
-  const probe = await page.evaluate(() => ({
-    restored: (window as Window & { __homeboxRestored?: boolean }).__homeboxRestored === true,
-    reasons: (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming & { notRestoredReasons?: unknown })?.notRestoredReasons,
-  }))
-  expect(probe.restored, JSON.stringify({ reasons: probe.reasons, notUsed: diagnostics.notUsed })).toBe(true)
-  expect(diagnostics.privateResponses()).toBeGreaterThan(0)
 }
 
 test('clears ordinary Item drafts and real name candidates before actual BFCache restoration', async ({ page, application }) => {

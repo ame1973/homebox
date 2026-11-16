@@ -151,7 +151,11 @@ export const messages = {
   },
   scan: {
     nav: '掃描與條碼', title: '掃描與條碼查詢', intro: '輸入完整商品條碼，查看共用這個代碼的物品。商品條碼不是個體識別碼，也不會自動變更庫存。',
-    cameraUnavailable: '相機掃描與圖片辨識仍在開發；目前可先手動輸入條碼。',
+    cameraTitle: '即時相機預覽', cameraUnavailable: '相機只會在你選擇開啟後啟動；條碼辨識與拍照儲存尚未接上，可先使用下方手動查詢。',
+    cameraPermission: '瀏覽器可能要求相機權限；離開、登出或將頁面移至背景時會關閉鏡頭。裝置可能忽略前後鏡頭偏好。', cameraSession: '請先連線並確認登入，才能開啟相機。',
+    cameraStart: '開啟相機', cameraStop: '關閉相機', cameraSwitch: '切換前後鏡頭', cameraRear: '偏好後鏡頭', cameraFront: '偏好前鏡頭', cameraWaiting: '正在等待相機權限…', cameraLive: '相機已開啟', cameraVideo: '即時相機畫面',
+    cameraPlaybackError: '無法播放相機畫面；可重試播放或關閉相機。', cameraPlaybackRetry: '重試播放畫面', cameraTorchOn: '開啟手電筒', cameraTorchOff: '關閉手電筒', cameraTorchError: '無法變更手電筒狀態；請檢查裝置後重試。',
+    cameraErrors: { insecure: '此連線不是受信任的安全環境；請使用已信任的 HTTPS 或本機位址。', unsupported: '此瀏覽器不支援相機擷取。', 'permission-denied': '相機權限遭拒絕；請檢查瀏覽器或裝置的權限設定後重試。', 'not-found': '找不到可使用的相機。', busy: '相機目前無法使用，可能正被其他應用程式使用。', interrupted: '相機連線已中斷，請重新開啟。', unknown: '無法開啟相機；請檢查裝置與權限後重試。' },
     input: '條碼內容', inputHelp: '保留前導零、空白與大小寫，不會自動轉換條碼格式。原始文字輸入的換行可能由瀏覽器調整。',
     inputFormat: '輸入方式', plain: '原始文字', json: 'JSON 字串', jsonHelp: '需要保留換行或控制字元時，使用含雙引號的 JSON 字串與跳脫字元。',
     symbology: '條碼格式', allFormats: '全部格式', search: '查詢條碼', invalid: '請輸入 1–512 個有效字元；JSON 字串需包含雙引號。',

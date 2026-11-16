@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { flushSync } from 'react-dom'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { LoaderCircle, Search, WifiOff } from 'lucide-react'
@@ -23,6 +24,7 @@ import { clearSessionQueries } from '@/features/auth/use-auth-action'
 import { CatalogError } from '@/features/catalog/catalog-error'
 import { catalogDisplay } from '@/features/catalog/display'
 import { readBarcodeChoices } from './barcode-model'
+import { ScanCamera } from './scan-camera'
 
 const text = messages.scan, catalog = messages.catalog
 
@@ -57,6 +59,7 @@ export default function ScanPage() {
   const knownSession = !!auth.data && !auth.data.must_change_password && auth.isFetchedAfterMount
   const queryEnabled = online && knownSession && validRoute && !blocked && !transitioning
   const enabled = queryEnabled && !auth.isFetching && !auth.isError
+  const cameraSessionActive = knownSession && validRoute && !blocked && !transitioning && (!online || !auth.isFetching && !auth.isError)
   const page = useQuery({ queryKey: ['catalog', 'barcode-choices', scope], enabled: queryEnabled && !!scope,
     gcTime: 0, staleTime: Infinity, refetchOnMount: false, refetchOnReconnect: false, refetchOnWindowFocus: false,
     queryFn: ({ signal }) => readBarcodeChoices({ value: scope!.value, ...(scope!.symbology ? { symbology: scope!.symbology } : {}), ...(scope!.cursor ? { cursor: scope!.cursor } : {}) }, signal) })
@@ -64,8 +67,10 @@ export default function ScanPage() {
   const mandatory = !!auth.data?.must_change_password || credentialFailure?.code === 'PASSWORD_CHANGE_REQUIRED'
   const denied = mandatory || !auth.isFetching && auth.data === null || credentialFailure !== undefined
 
-  useEffect(() => subscribeSessionCleared(() => {
-    setBlocked(true); setRaw(''); setFormat('plain'); setSymbology(''); setScope(undefined); setTrail([]); setError(false)
+  useEffect(() => subscribeSessionCleared((source) => {
+    const purge = () => { setBlocked(true); setRaw(''); setFormat('plain'); setSymbology(''); setScope(undefined); setTrail([]); setError(false) }
+    if (source === 'remote') flushSync(purge)
+    else purge()
     void client.cancelQueries({ queryKey: ['catalog', 'barcode-choices'] })
     client.removeQueries({ queryKey: ['catalog', 'barcode-choices'] })
   }), [client])
@@ -124,13 +129,13 @@ export default function ScanPage() {
 
   return <div className="min-w-0 space-y-7 py-8 md:py-10">
     <header className="min-w-0 space-y-3"><h1 className="text-3xl leading-snug font-semibold md:text-4xl">{text.title}</h1><p className="max-w-prose text-base leading-relaxed text-muted-foreground">{text.intro}</p></header>
-    <Alert className="p-4"><AlertDescription className="text-base leading-relaxed">{text.cameraUnavailable}</AlertDescription></Alert>
     {!validRoute ? <Alert role="alert" className="p-4"><AlertDescription className="space-y-3 text-base"><p>{text.invalidRoute}</p><Button asChild variant="outline" className={control}><Link to="/scan">{text.title}</Link></Button></AlertDescription></Alert>
       : blocked ? <Alert role="alert" className="p-4"><AlertTitle>{text.sessionCleared}</AlertTitle><AlertDescription className="space-y-3 text-base"><p>{text.sessionClearedHelp}</p><Button asChild variant="outline" className={control}><Link to="/login" state={{ returnTo: '/scan', notice: 'expired' }}>{text.signIn}</Link></Button></AlertDescription></Alert>
         : waiting ? <p role="status" className="flex min-h-24 items-center gap-3"><LoaderCircle className="size-6 animate-spin motion-reduce:animate-none" aria-hidden="true" />{text.checking}</p>
           : auth.isError && online ? <div className="space-y-4"><CatalogError error={auth.error} /><Button type="button" variant="outline" className={control} onClick={() => { void auth.refetch() }}>{messages.auth.checkAgain}</Button></div>
             : <>
               {!online && <Alert role="status" className="p-4"><WifiOff aria-hidden="true" /><AlertTitle>{text.offline}</AlertTitle><AlertDescription className="text-base">{text.offlineHelp}</AlertDescription></Alert>}
+              <ScanCamera sessionActive={cameraSessionActive} />
               <form noValidate onSubmit={submit} className="min-w-0 max-w-3xl space-y-5 rounded-lg border p-5 sm:p-6">
                 <div className="space-y-2"><label htmlFor="scan-format" className="block text-base font-medium">{text.inputFormat}</label><NativeSelect id="scan-format" value={format} onChange={(event) => { setFormat(event.target.value === 'json' ? 'json' : 'plain'); clearResults() }} className="w-full [&_select]:min-h-12 [&_select]:text-base"><NativeSelectOption value="plain">{text.plain}</NativeSelectOption><NativeSelectOption value="json">{text.json}</NativeSelectOption></NativeSelect><p className="text-sm leading-relaxed text-muted-foreground">{format === 'json' ? text.jsonHelp : text.inputHelp}</p></div>
                 <div className="min-w-0 space-y-2"><label htmlFor="scan-value" className="block text-base font-medium">{text.input}</label><Textarea ref={inputRef} id="scan-value" value={raw} onChange={(event) => { setRaw(event.target.value); clearResults() }} rows={2} maxLength={format === 'json' ? barcodeJSONInputMax : 1024} autoComplete="off" spellCheck={false} aria-invalid={error} aria-describedby={error ? 'scan-value-error' : undefined} className="min-h-20 text-base md:text-base" />{error && <p id="scan-value-error" role="alert" className="text-sm text-destructive">{text.invalid}</p>}</div>

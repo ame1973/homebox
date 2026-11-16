@@ -49,6 +49,28 @@ async function search(value = '036000291452') {
   await userEvent.setup().click(screen.getByRole('button', { name: text.search }))
 }
 
+it('withholds the camera until a completed session and never opens it automatically', async () => {
+  let finish!: (admin: auth.Admin) => void
+  vi.mocked(auth.fetchAdmin).mockReturnValueOnce(new Promise((resolve) => { finish = resolve }))
+  const original = Object.getOwnPropertyDescriptor(navigator, 'mediaDevices'), acquire = vi.fn()
+  Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia: acquire } })
+  try {
+    mount()
+    expect(await screen.findByText(text.checking)).toBeVisible()
+    expect(screen.queryByRole('button', { name: text.cameraStart })).not.toBeInTheDocument()
+    act(() => { finish({ id: 'admin', username: 'owner', must_change_password: false, revision: 2 }) })
+    expect(await screen.findByRole('button', { name: text.cameraStart })).toBeEnabled()
+    expect(acquire).not.toHaveBeenCalled()
+    act(() => { notifySessionCleared() })
+    expect(await screen.findByText(text.sessionClearedHelp)).toBeVisible()
+    expect(screen.queryByRole('button', { name: text.cameraStart })).not.toBeInTheDocument()
+    expect(acquire).not.toHaveBeenCalled()
+  } finally {
+    if (original) Object.defineProperty(navigator, 'mediaDevices', original)
+    else Reflect.deleteProperty(navigator, 'mediaDevices')
+  }
+})
+
 it('shows actual shared Item choices, including archived and path-unaddressable owners, without writes', async () => {
   vi.mocked(model.readBarcodeChoices).mockResolvedValueOnce({ matches: [choice('barcode-1', owner), choice('barcode-2', legacy), choice('barcode-3', owner)], next_cursor: null })
   mount()

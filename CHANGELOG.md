@@ -15,6 +15,8 @@
 
 ### Added
 
+- Add an explicitly opened live camera preview to `/scan`, with safe start/stop, front/back preference, supported torch controls, playback recovery and track cleanup. It does not yet decode barcodes, capture images or replace the manual lookup and future file fallback; fake-device browser checks are not physical-device acceptance.
+
 - Check the proposed Item name against approved item-search text during creation review, including alongside a scanned-barcode check. Show explicit five-row live pages, do not equate a match with duplication, require explicit bypass on failed checks and avoid an unfiltered read for whitespace-only names.
 
 - Recheck a scanned barcode against exact-text matches in all supported formats before reviewed Item creation. Show bounded, explicitly paged live candidates; withhold inconsistent pages, require an explicit decision after failed checks, recheck manually after offline, and preserve original-key reconciliation for a possibly committed Item.
@@ -27,7 +29,7 @@
 
 - Implement protected exact product-barcode discovery with actual Barcode/Item source validation, stable independent IDs, archived and shared matches, principal/epoch/value/namespace/size-scoped live cursors, and transactional lookup-index migration. Preserve leading zeros and retained historical strings without applying new-write checksum rules to reads. Add a stateless browser adapter, strict contracts/types and real-Go browser tests; at that increment scanning, selection UI and cross-format conversion remained separate.
 
-- Add an internal browser camera-stream hook with explicit gesture-triggered rear/front requests, secure-context checks, same-page and best-effort same-origin cross-window session-purge signals, and track cleanup on background, completion, unmount or late permission results. Signals contain no private data; cross-window query/offline-cache purge is not implemented. The camera interface, capture, scanner and actual-device acceptance remain unfinished.
+- Add an internal browser camera-stream hook with explicit gesture-triggered rear/front requests, secure-context checks, same-page and best-effort same-origin cross-window session-purge signals, and track cleanup on background, completion, unmount or late permission results. Signals contain no private data; cross-window query/offline-cache purge is not implemented. At that increment the camera interface, capture, scanner and actual-device acceptance remained unfinished.
 
 - Add an internal bounded multipart reader for one raw Media file, preserving its exact bytes and normalized declared MIME without trusting the filename. Test declared and chunked file/body ceilings, extra or encoded parts, cancellation, late read failures and a test-only HTTP socket. This parser does not authorize, validate image bytes, stage files or enable the upload route; WebP decoding remains unavailable.
 
