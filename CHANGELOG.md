@@ -15,6 +15,8 @@
 
 ### Added
 
+- Add bounded, lossless photo crop/quarter-turn geometry that maps displayed selections back to the original oriented pixels without resampling. Exhaustive small pixel grids and private Chromium canvas checks cover rotations and repeated crops; this is not a photo editor or upload screen.
+
 - Add an internal server-keyed raw Media upload fingerprint binding the original key, canonical MIME and exact bounded bytes. Test private-metadata differences that sanitize to identical pixels, cancellation and real generic receipt replay after a store restart and fresh login; no upload producer or authorization is implied.
 
 - Add a stateless browser Media upload adapter for one bounded JPEG/PNG/WebP Blob, with a fixed non-personal multipart filename, caller-owned cancellation and original idempotency key, verified response/ETag checks, and no automatic retry or attachment. Browser multipart tests use a stubbed upload response; the production upload route and UI remain unimplemented.

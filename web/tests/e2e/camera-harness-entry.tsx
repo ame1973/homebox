@@ -2,6 +2,7 @@ import { createRoot } from 'react-dom/client'
 import { createQueryClient } from '../../src/lib/query'
 import { CameraHarness } from './camera-harness'
 export { captureVideoFrame } from '../../src/lib/capture-frame'
+export { cropPhotoGeometry, newPhotoGeometry, photoDisplaySize, rotatePhotoGeometry } from '../../src/features/capture/geometry'
 
 // Playwright serves this entry only from a disposable private bundle.
 export function mountCameraHarness() {

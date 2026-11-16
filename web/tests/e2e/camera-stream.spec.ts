@@ -108,6 +108,51 @@ async function showPage(page: Page) {
   })
 }
 
+test('maps reviewed crop rectangles to exact canvas pixels in four orientations', async ({ page, cameraBundle }) => {
+  await prepareCamera(page, cameraBundle)
+  const result = await page.evaluate(async () => {
+    const modulePath = '/assets/camera-harness.js', geometry = await import(modulePath)
+    const source = document.createElement('canvas')
+    source.width = 4; source.height = 3
+    const input = source.getContext('2d')
+    if (!input) throw new Error('Missing source canvas')
+    const data = input.createImageData(4, 3)
+    for (let index = 0; index < 12; index++) {
+      data.data[index * 4] = index * 17
+      data.data[index * 4 + 1] = 255 - index * 13
+      data.data[index * 4 + 2] = index * 7
+      data.data[index * 4 + 3] = 255
+    }
+    input.putImageData(data, 0, 0)
+    const draw = (value: { turns: number; crop: { x: number; y: number; width: number; height: number } }) => {
+      const dimensions = geometry.photoDisplaySize(value)
+      if (!dimensions) throw new Error('Invalid geometry')
+      const canvas = document.createElement('canvas')
+      canvas.width = dimensions.width; canvas.height = dimensions.height
+      const context = canvas.getContext('2d')
+      if (!context) throw new Error('Missing target canvas')
+      context.imageSmoothingEnabled = false
+      const crop = value.crop
+      if (value.turns === 1) context.setTransform(0, 1, -1, 0, crop.height, 0)
+      if (value.turns === 2) context.setTransform(-1, 0, 0, -1, crop.width, crop.height)
+      if (value.turns === 3) context.setTransform(0, -1, 1, 0, 0, crop.width)
+      context.drawImage(source, crop.x, crop.y, crop.width, crop.height, 0, 0, crop.width, crop.height)
+      return context
+    }
+    let current = geometry.newPhotoGeometry(4, 3)
+    const failures: number[] = []
+    for (let turns = 0; turns < 4; turns++) {
+      const before = draw(current).getImageData(1, 1, 2, 2).data
+      const selected = geometry.cropPhotoGeometry(current, { x: 1, y: 1, width: 2, height: 2 })
+      const after = draw(selected).getImageData(0, 0, 2, 2).data
+      if (!before.every((value, index) => value === after[index])) failures.push(turns)
+      current = geometry.rotatePhotoGeometry(current, 'clockwise')
+    }
+    return { failures, cameraCalls: window.__cameraProbe.calls.length }
+  })
+  expect(result).toEqual({ failures: [], cameraCalls: 0 })
+})
+
 test('uses a live fake video, switches only after stopping, and releases it on hide, pagehide and unmount', async ({ page, cameraBundle }) => {
   await prepareCamera(page, cameraBundle)
   expect(await page.evaluate(() => window.__cameraProbe.calls.length)).toBe(0)

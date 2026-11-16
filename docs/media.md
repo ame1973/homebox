@@ -179,6 +179,12 @@ The caller must verify a completed session and invoke capture from an explicit u
 
 Browser tests use a private harness to draw real Chromium fake-camera pixels, decode the resulting JPEG, and check late results through session purge, cross-window logout and actual BFCache restoration. The test harness is not a production capture screen and emulation is not physical-device or native permission-prompt acceptance. The Blob is not proof of validated image bytes or stripped metadata; a future upload must still apply the server's full sanitizer and authorization. Photo capture controls, multi-shot drafts, file fallback, crop/rotation, upload and visual search remain unimplemented.
 
+## Photo crop and rotation geometry
+
+The internal photo geometry model represents a crop as an integer rectangle in the original decoded, oriented pixel source and an independent quarter-turn display orientation. Source dimensions must not exceed 16,384 on either side or 64 million pixels; selections must be nonempty whole-pixel rectangles fully inside the currently displayed image. Rotating preserves the original crop, and a later crop is mapped back into that original coordinate space without changing, resampling or enlarging pixels. Repeated crops and rotations therefore retain exact bounds. A future renderer must reject a decoded source whose actual dimensions differ from the snapshot, and use the same decoded orientation when applying those bounds.
+
+Exhaustive small pixel-grid tests cover every crop in each orientation and repeated edits; a private Chromium test compares the calculated crop with actual canvas pixel transforms. This is geometry only: it does not decode or encode a photo, provide an editor, persist a draft, upload or perform visual search. Photo capture and editing controls remain unimplemented.
+
 ## Image processing groundwork
 
 The internal `server/internal/mediaimage` utility currently accepts JPEG and PNG bytes only. It checks the declared MIME without parameters against the actual format, applies the 32 MiB input, 16,384-per-dimension and 64-million-pixel ceilings before full decoding, and permits callers to specify stricter limits. PNG chunk framing and CRCs are checked across the entire file; APNG control/frame chunks are rejected. JPEG segment and scan framing requires one complete image with no appended data. Malformed or duplicate EXIF orientation is rejected rather than guessed. Input may already occupy memory: a future HTTP boundary must independently bound and stage the multipart stream before calling it.
@@ -230,9 +236,11 @@ npm --prefix web test -- --coverage.enabled=false src/lib/api/client.test.ts src
 npm --prefix web run test:e2e -- --project=phone tests/e2e/media-api.spec.ts
 # Run only the browser multipart serialization case with its stubbed upload response.
 npm --prefix web run test:e2e -- tests/e2e/media-api.spec.ts --project=phone -g 'sends one browser multipart file' --workers=1
-npm --prefix web test -- --coverage.enabled=false src/lib/use-camera-stream.test.tsx src/lib/capture-frame.test.ts src/features/scan/scan-camera.test.tsx src/features/auth/use-auth-action.test.tsx
+npm --prefix web test -- --coverage.enabled=false src/lib/use-camera-stream.test.tsx src/lib/capture-frame.test.ts src/features/capture/geometry.test.ts src/features/scan/scan-camera.test.tsx src/features/auth/use-auth-action.test.tsx
 make build-web
 npm --prefix web run test:e2e -- tests/e2e/camera-stream.spec.ts tests/e2e/capture-frame-bfcache.spec.ts --workers=1
+# Run only the private canvas crop-coordinate regression.
+npm --prefix web run test:e2e -- tests/e2e/camera-stream.spec.ts --project=phone -g 'maps reviewed crop rectangles' --workers=1
 npm --prefix web run test:e2e -- tests/e2e/scan-camera.spec.ts --workers=1
 npm --prefix web run test:e2e -- tests/e2e/scan-camera-bfcache.spec.ts --workers=1
 ```
