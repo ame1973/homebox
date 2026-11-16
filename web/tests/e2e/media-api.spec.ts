@@ -18,7 +18,7 @@ const test = applicationTest.extend<{}, { applicationWebDirectory: string }>({
     try {
       cpSync(fileURLToPath(new URL('../../dist', import.meta.url)), web, { recursive: true })
       // The private SDK bundle is never a production test entrypoint.
-      writeFileSync(entry, `export * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/media.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/media-writes.ts', import.meta.url)))};\nexport { fetchItem, fetchItemByIdentity } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/catalog.ts', import.meta.url)))};\nexport { createUnit, fetchUnitByIdentity, moveUnit } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/holdings.ts', import.meta.url)))};\nexport { createLocation, fetchLocation } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/locations.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/features/media/model.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/features/media/commands.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/features/media/form.ts', import.meta.url)))};\n`)
+      writeFileSync(entry, `export * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/media.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/media-writes.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/media-upload.ts', import.meta.url)))};\nexport { fetchItem, fetchItemByIdentity } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/catalog.ts', import.meta.url)))};\nexport { createUnit, fetchUnitByIdentity, moveUnit } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/holdings.ts', import.meta.url)))};\nexport { createLocation, fetchLocation } from ${JSON.stringify(fileURLToPath(new URL('../../src/lib/api/locations.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/features/media/model.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/features/media/commands.ts', import.meta.url)))};\nexport * from ${JSON.stringify(fileURLToPath(new URL('../../src/features/media/form.ts', import.meta.url)))};\n`)
       await build({ configFile: false, logLevel: 'silent', resolve: { alias: { '@': fileURLToPath(new URL('../../src', import.meta.url)) } },
         build: { outDir: sdk, minify: false, lib: { entry, formats: ['es'], fileName: 'media-sdk' } } })
       cpSync(join(sdk, 'media-sdk.js'), join(web, 'assets', 'media-sdk.js'))
@@ -96,6 +96,44 @@ async function lookupExistingMedia(page: Page, id: string) {
   await page.getByRole('button', { name: messages.media.lookupMedia }).click()
   await expect(page.getByRole('heading', { name: messages.media.selectedMedia })).toBeVisible()
 }
+
+test('sends one browser multipart file to a stubbed upload without its original name or an invented proof', async ({ page, application }) => {
+  await provision(page, application)
+  const headers = await writeContext(page, application.url)
+  const uploaded = { id: 'sdk-image', revision: 7, sha256: 'a'.repeat(64), mime_type: 'image/png', verification: 'verified', width: 10, height: 20,
+    bytes: 30, thumb_url: '/api/v1/media/sdk-image/thumbnail', thumb_sha256: 'b'.repeat(64) }
+  const captured: { headers: Record<string, string>; body: Buffer }[] = []
+  await page.route((url) => url.pathname === '/api/v1/media', async (route) => {
+    const request = route.request()
+    if (request.method() !== 'POST') { await route.continue(); return }
+    const body = request.postDataBuffer()
+    if (!body) throw new Error('Expected one multipart request body')
+    captured.push({ headers: request.headers(), body })
+    await route.fulfill({ status: 200, headers: { ETag: '"7"' }, json: uploaded })
+  })
+  await page.goto('/')
+  const result = await page.evaluate(async ({ csrfToken, idempotencyKey }) => {
+    const modulePath = '/assets/media-sdk.js', api = await import(modulePath)
+    const file = new File([new Uint8Array([0, 1, 2, 255])], 'private-personal-name.png', { type: 'image/png', lastModified: 123 })
+    return api.uploadMedia(file, { csrfToken, idempotencyKey, signal: new AbortController().signal })
+  }, { csrfToken: headers['X-CSRF-Token'], idempotencyKey: headers['Idempotency-Key'] })
+  expect(result).toEqual(uploaded)
+  expect(captured).toHaveLength(1)
+  const sent = captured[0]
+  if (!sent) throw new Error('Upload request was not observed')
+  expect(sent.headers['origin']).toBe(application.url)
+  expect(sent.headers['idempotency-key']).toBe(headers['Idempotency-Key'])
+  expect(sent.headers['x-csrf-token']).toBe(headers['X-CSRF-Token'])
+  expect(sent.headers['x-homebox-client-version']).toBe('0.1.0-dev')
+  expect(sent.headers['if-match']).toBeUndefined()
+  const boundary = /^multipart\/form-data;\s*boundary=([^;]+)$/.exec(sent.headers['content-type'] ?? '')?.[1]
+  if (!boundary) throw new Error('Missing browser multipart boundary')
+  const expected = Buffer.concat([
+    Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="media"\r\nContent-Type: image/png\r\n\r\n`),
+    Buffer.from([0, 1, 2, 255]), Buffer.from(`\r\n--${boundary}--\r\n`),
+  ])
+  expect(sent.body.equals(expected)).toBe(true)
+})
 
 test('reads genuine scoped Media pages and observes owner deletion without inventing images', async ({ page, application }) => {
   await provision(page, application)

@@ -1112,6 +1112,27 @@ const reassignedMediaLink: components['schemas']['MediaLinkWrite'] = { media_id:
 void [mediaPage, globalMediaPage, incompleteGlobalMediaPage, linkInGlobalMediaPage, filteredGlobalMediaPage, mediaOwnerInputs, mediaTransportCalls, missingExactMedia, missingExactMediaPage, unprovenExactMedia, unprovenExactMediaOwner, mixedExactMedia, mixedExactMediaAttach, missingMediaLinkIdentity, unprovenMediaLinkIdentity, mixedMediaLinkIdentity, bodylessMediaLinkIdentity, uploadedMedia, unverifiedUpload, unsupportedUpload, unknownMediaStatus, unprovenMediaOwner, ownerlessMediaLink, multipleMediaOwners,
   multipleRawMediaOwners, unprovenRawMediaOwner, unprovenMediaHeaders, embeddedMediaResource, partialMediaLink, incompleteMediaView, unsafeMediaView, partialMediaPage, missingMediaOwnerFilter, reassignedMediaLink]
 
+// Browser multipart uses a Blob rather than the generator's binary-as-string
+// representation, while preserving the exact generated headers and result.
+declare const mediaUpload: typeof import('../src/lib/api/media-upload')
+declare const browserTransport: typeof import('../src/lib/api/client').apiClient
+declare const uploadBlob: Blob
+const uploadedBlob: Promise<operations['post_media']['responses'][200]['content']['application/json']> = mediaUpload.uploadMedia(uploadBlob, writeContext)
+const uploadTransport = browserTransport.POST('/media', { params: { header: authHeaders }, body: { file: uploadBlob } })
+// @ts-expect-error A filename or JSON string is not an image Blob.
+const stringUpload = mediaUpload.uploadMedia('filename.png', writeContext)
+// @ts-expect-error Upload is not a reviewed link attachment and has no revision proof.
+const uploadWithProof = mediaUpload.uploadMedia(uploadBlob, { ...writeContext, expectedRevision: 1 })
+// @ts-expect-error Upload requires its caller-owned cancellation and original key.
+const uploadWithoutContext = mediaUpload.uploadMedia(uploadBlob)
+// @ts-expect-error The raw browser transport must not accept a string as binary.
+const stringUploadTransport = browserTransport.POST('/media', { params: { header: authHeaders }, body: { file: 'filename.png' } })
+// @ts-expect-error Upload cannot implicitly attach an image to an owner.
+const uploadWithOwner = mediaUpload.uploadMedia(uploadBlob, { ...writeContext, item_id: 'item' })
+// @ts-expect-error The upload still requires the normal protected-write headers.
+const uploadWithoutHeaders = browserTransport.POST('/media', { body: { file: uploadBlob } })
+void [uploadedBlob, uploadTransport, stringUpload, uploadWithProof, uploadWithoutContext, stringUploadTransport, uploadWithOwner, uploadWithoutHeaders]
+
 // Browser reads use explicit scope, return independent Media and link views and
 // never invent a client-side owner or allow upload/write arguments.
 declare const mediaAPI: typeof import('../src/lib/api/media')

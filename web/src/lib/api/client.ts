@@ -11,7 +11,21 @@ type PreserveNull<T> = T extends null ? $Write<null> : T extends object ? { [K i
 type RequestNulls<T> = { [K in keyof T]: K extends 'requestBody' ? PreserveNull<T[K]> : T[K] }
 type ClientPaths = { [P in keyof paths]: { [M in keyof paths[P]]: RequestNulls<paths[P][M]> } }
 
-export const apiClient = createClient<ClientPaths>({
+// The generator represents multipart format:binary as string. Use the browser's
+// Blob type for this one request without changing generated types or the wire.
+type UploadOperation = ClientPaths['/media']['post']
+type UploadBody = UploadOperation['requestBody']
+type UploadContent = UploadBody['content']
+type BrowserUpload = Omit<UploadOperation, 'requestBody'> & {
+  requestBody: Omit<UploadBody, 'content'> & {
+    content: Omit<UploadContent, 'multipart/form-data'> & {
+      'multipart/form-data': Omit<UploadContent['multipart/form-data'], 'file'> & { file: Blob }
+    }
+  }
+}
+type BrowserPaths = Omit<ClientPaths, '/media'> & { '/media': Omit<ClientPaths['/media'], 'post'> & { post: BrowserUpload } }
+
+export const apiClient = createClient<BrowserPaths>({
   baseUrl: new URL('/api/v1', window.location.origin).href,
   credentials: 'same-origin', cache: 'no-store', redirect: 'error',
 })
