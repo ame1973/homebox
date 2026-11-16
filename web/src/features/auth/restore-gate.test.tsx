@@ -71,6 +71,28 @@ it.each([
   expect(onLeave).toHaveBeenCalledOnce()
 })
 
+it.each([
+  { admin: null, error: new ApiError('AUTHENTICATION_REQUIRED', { status: 401 }), label: messages.scan.signIn, target: '/login', state: { notice: 'expired', returnTo: '/items/new' } },
+  { admin: { ...owner, must_change_password: true }, error: undefined, label: messages.scan.restorePassword, target: '/settings/account', state: { returnTo: '/items/new' } },
+  { admin: null, error: new ApiError('NETWORK_ERROR'), label: messages.scan.signIn, target: '/login', state: { returnTo: '/items' } },
+])('uses Item-specific restoration guidance and safe navigation on $target', async ({ admin, error, label, target, state }) => {
+  if (error) vi.mocked(auth.fetchAdmin).mockRejectedValueOnce(error)
+  else vi.mocked(auth.fetchAdmin).mockResolvedValueOnce(admin!)
+  const client = createQueryClient(), onLeave = vi.fn()
+  function Destination() { const location = useLocation(); return <p>{JSON.stringify(location.state)}</p> }
+  const router = createMemoryRouter([{ path: '/', element: <RestoreGate kind="item" restored generation={0} returnPath="/items/new" onLeave={onLeave} /> },
+    { path: '/login', element: <Destination /> }, { path: '/settings/account', element: <Destination /> }])
+  const view = render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>)
+  disposers.push(() => { view.unmount(); router.dispose(); client.clear() })
+  expect(screen.getByRole('heading', { name: messages.catalog.restorePageTitle })).toHaveFocus()
+  expect(screen.getByText(messages.catalog.restorePageHelp)).toBeVisible()
+  expect(screen.queryByText(messages.scan.restoreHelp)).not.toBeInTheDocument()
+  await userEvent.setup().click(await screen.findByRole('link', { name: label }))
+  expect(router.state.location.pathname).toBe(target)
+  expect(router.state.location.state).toEqual(state)
+  expect(onLeave).toHaveBeenCalledOnce()
+})
+
 it('ignores a stale session response after a newer generation replaces it', async () => {
   let reject!: (cause: ApiError) => void, oldSignal!: AbortSignal
   vi.mocked(auth.fetchAdmin).mockImplementationOnce((signal) => { oldSignal = signal; return new Promise((_resolve, fail) => { reject = fail }) }).mockResolvedValueOnce(owner)

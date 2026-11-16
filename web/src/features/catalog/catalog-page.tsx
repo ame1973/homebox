@@ -34,9 +34,7 @@ import type { CatalogCommand, CatalogResult } from './commands'
 const text = messages.catalog
 type Mode = 'list' | 'detail' | 'create' | 'edit'
 export default function CatalogPage(props: { mode: Mode }) {
-  const route = useLocation()
-  const scanToken: unknown = route.state?.scanToken
-  return props.mode === 'create' && typeof scanToken === 'string' && scanToken.length === 36
+  return props.mode === 'create'
     ? <SessionClearBoundary><CatalogPageContent {...props} /></SessionClearBoundary>
     : <CatalogPageContent {...props} />
 }
@@ -99,7 +97,7 @@ function CatalogPageContent({ mode }: { mode: Mode }) {
     const target = command.kind === 'delete' ? listReturn : command.kind === 'create' && 'id' in result ? catalogRoute(result.id) : command.kind !== 'create' ? catalogRoute(command.subject.id) : listReturn
     navigate(target, { replace: true, state: { catalogNotice: 'confirmed', catalogList: listReturn, catalogCursors: trail } })
   }
-  const operation = useCatalogMutation(confirmed, sessionLost, scanHandoffRequested)
+  const operation = useCatalogMutation(confirmed, sessionLost, mode === 'create')
   const errors = [categories.error, ...(mode === 'list' ? [locations.error, list.error] : needRecord ? [record.error] : [])]
   const credentialFailure = errors.find((error) => error instanceof ApiError && (error.status === 401 || error.code === 'PASSWORD_CHANGE_REQUIRED'))
   const mandatory = !!auth.data?.must_change_password || credentialFailure instanceof ApiError && credentialFailure.code === 'PASSWORD_CHANGE_REQUIRED'

@@ -4,9 +4,9 @@
 
 ### Changed
 
-- Clear volatile scan and barcode-handoff screens before browser page suspension, without broadcasting logout to other tabs. On back-forward-cache restoration, require a fresh completed-session check and warn that an already-sent request may have committed; canceling the browser leave prompt retains the draft.
+- Clear volatile scan, Item creation and barcode-handoff screens before browser page suspension, without broadcasting logout to other tabs. On back-forward-cache restoration, require a fresh completed-session check and warn that an already-sent request may have committed; canceling the browser leave prompt retains the draft.
 
-- On a delivered session-clear signal, lock barcode-handoff Item creation and owned-data screens, abort active requests, discard reviewed commands and clear this window's in-memory query cache. Warn that an already-sent request may have committed and requires checking current server data; no request is automatically retried.
+- On a delivered session-clear signal, lock Item creation and owned-data screens, abort active requests, discard reviewed commands and clear this window's in-memory query cache. Warn that an already-sent request may have committed and requires checking current server data; no request is automatically retried.
 
 - Escape Unicode default-ignorable code points, including combining grapheme joiners and variation selectors, in exact-text reviews and scanned-barcode JSON entry. Preserve the underlying values without claiming to detect every visually confusable character.
 
@@ -14,6 +14,8 @@
 - Reuse transaction-scoped SQLite statement plans while rebuilding purchase search evidence. Each lookup still re-reads and validates actual source and correction history; no financial or search results are cached.
 
 ### Added
+
+- Check the proposed Item name against approved item-search text during creation review, including alongside a scanned-barcode check. Show explicit five-row live pages, do not equate a match with duplication, require explicit bypass on failed checks and avoid an unfiltered read for whitespace-only names.
 
 - Recheck a scanned barcode against exact-text matches in all supported formats before reviewed Item creation. Show bounded, explicitly paged live candidates; withhold inconsistent pages, require an explicit decision after failed checks, recheck manually after offline, and preserve original-key reconciliation for a possibly committed Item.
 

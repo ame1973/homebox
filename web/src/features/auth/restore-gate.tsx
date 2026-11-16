@@ -9,8 +9,8 @@ import { messages } from '@/lib/messages'
 const text = messages.scan
 const control = 'min-h-12 h-auto max-w-full whitespace-normal py-3 text-base leading-normal'
 
-export function RestoreGate({ restored, generation, returnPath, onLeave }: {
-  restored: boolean; generation: number; returnPath: string; onLeave: () => void
+export function RestoreGate({ kind = 'scan', restored, generation, returnPath, onLeave }: {
+  kind?: 'scan' | 'item'; restored: boolean; generation: number; returnPath: string; onLeave: () => void
 }) {
   const heading = useRef<HTMLHeadingElement>(null)
   const auth = useQuery({ queryKey: ['auth', 'bfcache-check', generation, returnPath], enabled: restored,
@@ -31,14 +31,16 @@ export function RestoreGate({ restored, generation, returnPath, onLeave }: {
   const mandatory = auth.data?.kind === 'mandatory'
   const expired = auth.data?.kind === 'expired'
   const returnTo = auth.data?.returnTo ?? '/items'
+  const scan = kind === 'scan'
+  const scanNotice = scan ? { notice: 'scanHandoffLost' } : {}
   return <main id="main" className="safe-page mx-auto min-h-dvh max-w-3xl space-y-6 py-8">
     <div className="flex justify-end"><ThemeMenu /></div>
-    <h1 ref={heading} tabIndex={-1} className="rounded-sm text-3xl font-semibold focus-visible:outline-2 focus-visible:outline-ring">{text.restoreTitle}</h1>
-    <Alert className="p-4"><AlertDescription className="text-base leading-relaxed">{text.restoreHelp}</AlertDescription></Alert>
+    <h1 ref={heading} tabIndex={-1} className="rounded-sm text-3xl font-semibold focus-visible:outline-2 focus-visible:outline-ring">{scan ? text.restoreTitle : messages.catalog.restorePageTitle}</h1>
+    <Alert className="p-4"><AlertDescription className="text-base leading-relaxed">{scan ? text.restoreHelp : messages.catalog.restorePageHelp}</AlertDescription></Alert>
     {!restored || auth.isPending || auth.isFetching ? <p role="status">{restored ? messages.auth.checking : text.restoreWaiting}</p>
-      : mandatory ? <div className="space-y-4"><Alert role="alert" className="p-4"><AlertTitle>{messages.auth.mandatory}</AlertTitle><AlertDescription className="text-base">{messages.auth.mandatoryHelp}</AlertDescription></Alert><Button asChild className={control}><Link to="/settings/account" state={{ notice: 'scanHandoffLost', returnTo }} onClick={onLeave}>{text.restorePassword}</Link></Button></div>
-        : expired ? <div className="space-y-4"><Alert role="alert" className="p-4"><AlertDescription className="text-base">{messages.auth.expired}</AlertDescription></Alert><Button asChild className={control}><Link to="/login" state={{ notice: 'scanHandoffLost', returnTo }} onClick={onLeave}>{text.signIn}</Link></Button></div>
-          : auth.isError ? <div className="space-y-4"><Alert role="alert" className="p-4"><AlertDescription className="text-base">{text.restoreFailed}</AlertDescription></Alert><div className="flex flex-wrap gap-2"><Button type="button" variant="outline" className={control} onClick={() => { void auth.refetch() }}>{messages.auth.checkAgain}</Button><Button asChild variant="outline" className={control}><Link to="/login" state={{ notice: 'scanHandoffLost', returnTo }} onClick={onLeave}>{text.signIn}</Link></Button></div></div>
+      : mandatory ? <div className="space-y-4"><Alert role="alert" className="p-4"><AlertTitle>{messages.auth.mandatory}</AlertTitle><AlertDescription className="text-base">{messages.auth.mandatoryHelp}</AlertDescription></Alert><Button asChild className={control}><Link to="/settings/account" state={{ ...scanNotice, returnTo }} onClick={onLeave}>{text.restorePassword}</Link></Button></div>
+        : expired ? <div className="space-y-4"><Alert role="alert" className="p-4"><AlertDescription className="text-base">{messages.auth.expired}</AlertDescription></Alert><Button asChild className={control}><Link to="/login" state={{ notice: scan ? 'scanHandoffLost' : 'expired', returnTo }} onClick={onLeave}>{text.signIn}</Link></Button></div>
+          : auth.isError ? <div className="space-y-4"><Alert role="alert" className="p-4"><AlertDescription className="text-base">{text.restoreFailed}</AlertDescription></Alert><div className="flex flex-wrap gap-2"><Button type="button" variant="outline" className={control} onClick={() => { void auth.refetch() }}>{messages.auth.checkAgain}</Button><Button asChild variant="outline" className={control}><Link to="/login" state={{ ...scanNotice, returnTo }} onClick={onLeave}>{text.signIn}</Link></Button></div></div>
             : <div className="space-y-4"><p role="status">{text.restoreReady}</p><Button type="button" className={control} onClick={onLeave}>{text.restoreContinue}</Button></div>}
   </main>
 }

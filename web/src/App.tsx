@@ -36,6 +36,7 @@ export default function App() {
   const restoreGuard = useRef(false)
   const restoreFocus = useRef(false)
   const [restoration, setRestoration] = useState<'active' | 'suspended' | 'checking'>('active')
+  const [restoreKind, setRestoreKind] = useState<'scan' | 'item'>('scan')
   const [restoreGeneration, setRestoreGeneration] = useState(0)
   useEffect(() => {
     if (restoration === 'active' && (previousPath.current !== location.pathname || restoreFocus.current)) {
@@ -58,12 +59,18 @@ export default function App() {
   useLayoutEffect(() => {
     const pagehide = () => {
       const marker: unknown = location.state?.scanToken
-      if (!restoreGuard.current && location.pathname !== '/scan' && !(typeof marker === 'string' && marker.length === 36)) return
+      const scanMarker = typeof marker === 'string' && marker.length === 36
+      const guarded = restoreGuard.current
+      if (!guarded && location.pathname !== '/scan' && location.pathname !== '/items/new' && !scanMarker) return
       restoreGuard.current = true
       // Wipe only this page's volatile state; suspension is not a logout in
       // another tab. Commit the redacted screen before the browser freezes it.
       notifyPageSuspended()
-      flushSync(() => { clearBarcodeHandoff(); setRestoration('suspended') })
+      flushSync(() => {
+        clearBarcodeHandoff()
+        if (!guarded) setRestoreKind(location.pathname === '/items/new' && !scanMarker ? 'item' : 'scan')
+        setRestoration('suspended')
+      })
       void client.cancelQueries()
       client.clear()
     }
@@ -75,7 +82,7 @@ export default function App() {
   useEffect(() => {
     retainBarcodeHandoff(location.state?.scanToken, location.pathname + location.search + location.hash)
   }, [location.pathname, location.search, location.hash, location.state])
-  if (restoration !== 'active') return <RestoreGate restored={restoration === 'checking'} generation={restoreGeneration} returnPath={location.pathname + location.search} onLeave={() => { restoreGuard.current = false; restoreFocus.current = true; setRestoration('active') }} />
+  if (restoration !== 'active') return <RestoreGate kind={restoreKind} restored={restoration === 'checking'} generation={restoreGeneration} returnPath={location.pathname + location.search} onLeave={() => { restoreGuard.current = false; restoreFocus.current = true; setRestoration('active') }} />
   return (
     <div className="safe-page mx-auto flex min-h-dvh max-w-5xl flex-col">
       <a href="#main" onClick={(event) => { event.preventDefault(); main.current?.focus() }} className="sr-only z-50 rounded-md bg-primary p-3 text-primary-foreground focus:not-sr-only focus:absolute focus:top-2">{messages.app.skip}</a>

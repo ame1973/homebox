@@ -64,6 +64,137 @@ async function returnFromBFCache(page: Page, diagnostics: { privateResponses: ()
   expect(diagnostics.privateResponses()).toBeGreaterThan(0)
 }
 
+test('clears ordinary Item drafts and real name candidates before actual BFCache restoration', async ({ page, application }) => {
+  await provision(page, application)
+  const candidate = await page.request.post('/api/v1/items', { headers: await writeContext(page, application.url), data: { name: 'Private existing ordinary Item' } })
+  expect(candidate.status()).toBe(200)
+  const diagnostics = await permitBFCache(page, application.url), writes = watchDomainWrites(page, ['/api/v1/items'])
+  let searches = 0
+  page.on('request', (request) => { const url = new URL(request.url()); if (url.pathname === '/api/v1/items' && request.method() === 'GET' && url.searchParams.has('q')) searches++ })
+  await page.goto('/items/new')
+  const name = page.getByRole('textbox', { name: new RegExp(`^${catalog.fields.name}`) })
+  await name.fill('Private existing')
+  await page.getByRole('button', { name: catalog.review }).click()
+  await expect(page.getByRole('alertdialog').getByRole('region', { name: catalog.relatedTitle })).toContainText('Private existing ordinary Item')
+  expect(searches).toBe(1)
+  await leaveDocument(page, true)
+  await returnFromBFCache(page, diagnostics)
+  await expect(page.getByRole('heading', { name: catalog.restorePageTitle })).toBeFocused()
+  await expect(page.getByText(catalog.restorePageHelp)).toBeVisible()
+  await expect(page.getByText(scan.restoreReady)).toBeVisible()
+  await expect(page.getByRole('alertdialog')).toHaveCount(0)
+  await expect(page.locator('body')).not.toContainText('Private existing')
+  await page.getByRole('button', { name: scan.restoreContinue }).click()
+  await expect(name).toHaveValue('')
+  await expect(page.getByRole('button', { name: catalog.review })).toBeEnabled()
+  expect(searches).toBe(1)
+  expect(writes).toEqual([])
+})
+
+test('keeps an ordinary Item review when the user cancels leaving the document', async ({ page, application }) => {
+  await provision(page, application)
+  await permitBFCache(page, application.url)
+  const writes = watchDomainWrites(page, ['/api/v1/items'])
+  await page.goto('/items/new')
+  await page.getByRole('textbox', { name: new RegExp(`^${catalog.fields.name}`) }).fill('Private ordinary draft')
+  await page.getByRole('button', { name: catalog.review }).click()
+  const dialog = page.getByRole('alertdialog')
+  await expect(dialog.getByText(catalog.relatedEmpty)).toBeVisible()
+  let rejectedLeave = false
+  page.once('dialog', async (prompt) => { rejectedLeave = prompt.type() === 'beforeunload'; await prompt.dismiss() })
+  await expect(page.goto('/api/v1/health/live', { timeout: 5_000 })).rejects.toThrow()
+  expect(rejectedLeave).toBe(true)
+  await expect(page).toHaveURL(/\/items\/new$/)
+  await expect(dialog).toContainText('Private ordinary draft')
+  expect(writes).toEqual([])
+})
+
+test('does not reveal ordinary Item input after the real session expires while cached', async ({ page, application }) => {
+  await provision(page, application)
+  const diagnostics = await permitBFCache(page, application.url), writes = watchDomainWrites(page, ['/api/v1/items'])
+  await page.goto('/items/new')
+  await page.getByRole('textbox', { name: new RegExp(`^${catalog.fields.name}`) }).fill('Private expired ordinary Item')
+  await page.getByRole('button', { name: catalog.review }).click()
+  await expect(page.getByRole('alertdialog').getByText(catalog.relatedEmpty)).toBeVisible()
+  await leaveDocument(page, true)
+  expect((await page.request.post('/api/v1/auth/logout', { headers: await writeContext(page, application.url) })).status()).toBe(200)
+  await returnFromBFCache(page, diagnostics)
+  await expect(page.getByRole('heading', { name: catalog.restorePageTitle })).toBeVisible()
+  await expect(page.getByText(messages.auth.expired)).toBeVisible()
+  await expect(page.locator('body')).not.toContainText('Private expired ordinary Item')
+  await page.getByRole('link', { name: scan.signIn }).click()
+  await expect(page).toHaveURL(/\/login$/)
+  const state = JSON.stringify(await page.evaluate(() => history.state))
+  expect(state).toContain('/items/new')
+  expect(state).not.toContain('Private expired ordinary Item')
+  expect(state).not.toContain('scanHandoffLost')
+  expect(writes).toEqual([])
+})
+
+test('never replays a committed ordinary Item after its reply is held across suspension', async ({ page, application }) => {
+  await provision(page, application)
+  const diagnostics = await permitBFCache(page, application.url), writes = watchDomainWrites(page, ['/api/v1/items'])
+  const name = 'Private ordinary Item committed'
+  await page.goto('/items/new')
+  const input = page.getByRole('textbox', { name: new RegExp(`^${catalog.fields.name}`) })
+  await input.fill(name)
+  let release!: () => void, committed!: () => void, delivered!: () => void
+  const held = new Promise<void>((resolve) => { release = resolve })
+  const received = new Promise<void>((resolve) => { committed = resolve })
+  const finished = new Promise<void>((resolve) => { delivered = resolve })
+  await page.route((url) => url.pathname === '/api/v1/items', async (route) => {
+    if (route.request().method() !== 'POST') { await route.fallback(); return }
+    const response = await route.fetch()
+    expect(response.status()).toBe(200)
+    committed()
+    await held
+    try { await route.fulfill({ response }) } catch { /* Suspension can abort the pending browser write. */ }
+    finally { delivered() }
+  })
+  try {
+    await page.getByRole('button', { name: catalog.review }).click()
+    const dialog = page.getByRole('alertdialog')
+    await expect(dialog.getByText(catalog.relatedEmpty)).toBeVisible()
+    await dialog.getByRole('button', { name: catalog.confirmCreate }).click()
+    await received
+    await leaveDocument(page, true)
+    await returnFromBFCache(page, diagnostics)
+    await expect(page.getByRole('heading', { name: catalog.restorePageTitle })).toBeVisible()
+    await expect(page.locator('body')).not.toContainText(name)
+    release()
+    await finished
+    await expect(page.getByText(scan.restoreReady)).toBeVisible()
+    const actual = await page.request.get(`/api/v1/items?q=${encodeURIComponent(name)}`)
+    expect(actual.status()).toBe(200)
+    expect((await actual.json()).data).toEqual([expect.objectContaining({ name })])
+    expect(writes).toHaveLength(1)
+    await page.getByRole('button', { name: scan.restoreContinue }).click()
+    await expect(input).toHaveValue('')
+    await expect(page.getByRole('button', { name: catalog.review })).toBeEnabled()
+    expect(writes).toHaveLength(1)
+  } finally { release() }
+})
+
+test('keeps the ordinary Item restoration gate accessible at 320px and 200% text', async ({ page, application }) => {
+  await provision(page, application)
+  const diagnostics = await permitBFCache(page, application.url)
+  await page.setViewportSize({ width: 320, height: 568 })
+  await page.goto('/items/new')
+  await page.locator('html').evaluate((element) => { element.style.fontSize = '200%' })
+  await page.getByRole('textbox', { name: new RegExp(`^${catalog.fields.name}`) }).fill('Private accessible Item')
+  await leaveDocument(page, true)
+  await returnFromBFCache(page, diagnostics)
+  await expect(page.getByText(scan.restoreReady)).toBeVisible()
+  await expect(page.getByRole('heading', { name: catalog.restorePageTitle })).toBeFocused()
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme }); await expect(page.locator('html')).toHaveAttribute('data-theme', colorScheme)
+    expect(await page.evaluate(() => innerWidth)).toBe(320)
+    await noOverflow(page)
+    expect(await page.getByRole('button', { name: scan.restoreContinue }).evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
+    expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze()).violations).toEqual([])
+  }
+})
+
 test('clears an unfinished Item handoff and rechecks the session after actual BFCache restoration', async ({ page, application }) => {
   await provision(page, application)
   const diagnostics = await permitBFCache(page, application.url), writes = watchDomainWrites(page, ['/api/v1/items', '/api/v1/barcodes'])
@@ -93,12 +224,17 @@ test('keeps the reviewed draft when the user cancels leaving the document', asyn
   await page.getByRole('button', { name: catalog.review }).click()
   const review = page.getByRole('alertdialog')
   await expect(review).toContainText(raw)
+  await expect(review.getByRole('region', { name: catalog.relatedTitle }).getByText(catalog.relatedEmpty)).toBeVisible()
+  await expect(review.getByRole('region', { name: scan.reviewCandidates }).getByText(scan.reviewCandidatesEmpty)).toBeVisible()
+  await expect(review.getByRole('button', { name: catalog.confirmCreate })).toBeEnabled()
   let rejectedLeave = false
   page.once('dialog', async (dialog) => { rejectedLeave = dialog.type() === 'beforeunload'; await dialog.dismiss() })
   await expect(page.goto('/api/v1/health/live', { timeout: 5_000 })).rejects.toThrow()
   expect(rejectedLeave).toBe(true)
   await expect(page).toHaveURL(/\/items\/new$/)
   await expect(review).toContainText(raw)
+  await expect(review.getByRole('region', { name: catalog.relatedTitle }).getByText(catalog.relatedEmpty)).toBeVisible()
+  await expect(review.getByRole('region', { name: scan.reviewCandidates }).getByText(scan.reviewCandidatesEmpty)).toBeVisible()
   expect(writes).toEqual([])
 })
 
