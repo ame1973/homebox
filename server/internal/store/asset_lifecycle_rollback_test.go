@@ -22,6 +22,7 @@ func TestAssetLifecycleEveryActualStatementFailureRollsBackPhysicalAndFinancialS
 		}
 		for _, failure := range failures {
 			t.Run(kind+"/"+failure.table+"/"+failure.verb, func(t *testing.T) {
+				t.Parallel()
 				fixture, asset := manualAssetFixture(t, 0)
 				s := fixture.store
 				service := assetReader(t, fixture)
@@ -44,6 +45,7 @@ func TestAssetLifecycleIgnoredOrRewrittenSourceAndContextCannotClaimSuccess(t *t
 	for _, kind := range []string{"retire", "dispose"} {
 		for _, failure := range []string{"ignored Unit", "ignored profile", "ignored Item", "ignored context", "rewritten Unit", "rewritten profile", "removed original Unit counter", "removed original Asset counter"} {
 			t.Run(kind+"/"+failure, func(t *testing.T) {
+				t.Parallel()
 				fixture, asset := manualAssetFixture(t, 0)
 				s := fixture.store
 				switch failure {
@@ -87,6 +89,7 @@ func TestAssetLifecycleNewDisposalCounterAndAggregateLimitsNeverPartiallyPublish
 				continue
 			}
 			t.Run(kind+"/"+failure, func(t *testing.T) {
+				t.Parallel()
 				fixture, asset := manualAssetFixture(t, 0)
 				s := fixture.store
 				assetProof, unitProof, want := asset.Revision, fixture.unit.Revision, ErrRevisionOverflow
@@ -131,6 +134,7 @@ func TestAssetLifecycleFinalAuthorizationCancellationAndDeferredCommitWithholdEv
 	for _, kind := range []string{"retire", "dispose"} {
 		for _, failure := range []string{"mandatory", "revoked", "epoch", "canceled", "late expiry", "deferred commit", "missing audit"} {
 			t.Run(kind+"/"+failure, func(t *testing.T) {
+				t.Parallel()
 				fixture, asset := manualAssetFixture(t, 0)
 				s := fixture.store
 				ctx := t.Context()
@@ -283,6 +287,7 @@ func TestAssetLifecycleLateAuthorityAndFinalDisposalCorruptionCannotPassSourceCh
 		}
 		for _, failure := range failures {
 			t.Run(kind+"/"+failure, func(t *testing.T) {
+				t.Parallel()
 				fixture, asset := manualAssetFixture(t, 0)
 				s := fixture.store
 				if failure == "Unit counter reseeded during insertion" {

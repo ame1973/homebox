@@ -10,6 +10,7 @@ import (
 func TestInventoryActiveDestinationsRejectArchivedLeavesAndAncestorsWithoutPartialTransfer(t *testing.T) {
 	for _, archived := range []string{"target", "root"} {
 		t.Run(archived, func(t *testing.T) {
+			t.Parallel()
 			fixture, inventory := inventoryFixture(t)
 			execSQL(t, fixture.store.db, "UPDATE locations SET status='archived' WHERE id=?", archived)
 			before := domainState(t, fixture.store)
@@ -64,6 +65,7 @@ func TestInventoryRejectsMissingOrUnsafeActualRowOwnerAndEveryAncestorAuthority(
 	} {
 		for _, unsafe := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/%s/unsafe=%t", key.kind, key.id, unsafe), func(t *testing.T) {
+				t.Parallel()
 				fixture, inventory := inventoryFixture(t)
 				identity := key.id
 				if key.kind == "stock" {
@@ -91,6 +93,7 @@ func TestInventoryRejectsMissingOrUnsafeActualRowOwnerAndEveryAncestorAuthority(
 func TestInventoryMissingDeletedOrCyclicLocationPathsAreNotSilentlyShortened(t *testing.T) {
 	for _, failure := range []string{"deleted leaf", "deleted ancestor", "cycle", "invalid ancestor"} {
 		t.Run(failure, func(t *testing.T) {
+			t.Parallel()
 			fixture, inventory := inventoryFixture(t)
 			want := ErrDomainState
 			switch failure {
@@ -139,6 +142,7 @@ func TestInventoryEveryStatementFailureRollsBackBothLegsHistoryProjectionsAndOri
 		{"sync_changes", "INSERT"}, {"data_revision", "UPDATE"}, {"api_idempotency", "INSERT"}, {"mutation_events", "INSERT"}, {"sessions", "UPDATE"},
 	} {
 		t.Run(failure.table+failure.event, func(t *testing.T) {
+			t.Parallel()
 			fixture, inventory := inventoryFixture(t)
 			now := fixture.auth.now().Add(time.Minute)
 			fixture.auth.now = func() time.Time { return now }
@@ -163,6 +167,7 @@ func TestInventoryEveryStatementFailureRollsBackBothLegsHistoryProjectionsAndOri
 func TestInventoryLateAuthorizationAndDeferredMovementAuditAssociationWithholdSuccess(t *testing.T) {
 	for _, failure := range []string{"revocation", "epoch", "audit association", "deferred guard"} {
 		t.Run(failure, func(t *testing.T) {
+			t.Parallel()
 			fixture, inventory := inventoryFixture(t)
 			statement := "CREATE TRIGGER fail_stock_late AFTER INSERT ON mutation_events BEGIN UPDATE sessions SET revoked_at='2026-01-01T00:00:00Z'; END"
 			switch failure {
@@ -192,6 +197,7 @@ func TestInventoryLateAuthorizationAndDeferredMovementAuditAssociationWithholdSu
 func TestInventoryExhaustedStockItemAncestorCatalogAndSequenceCountersRollBackEverything(t *testing.T) {
 	for _, scope := range []string{"item", "source stock", "target stock", "counter-only target", "source", "target", "root", "catalog", "sequence", "event", "event reuse", "missing event"} {
 		t.Run(scope, func(t *testing.T) {
+			t.Parallel()
 			fixture, inventory := inventoryFixture(t)
 			s := fixture.store
 			input := StockTransfer{ItemID: fixture.quantity.ID, SourceLocationID: "source", TargetLocationID: "target", QuantityBase: 10}

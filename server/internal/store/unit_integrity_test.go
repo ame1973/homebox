@@ -18,6 +18,7 @@ func TestUnitEveryStatementAndOwnedCascadeFailureRollsBackSourceSearchHistoryAnd
 		{"patch", "api_idempotency", "INSERT"}, {"patch", "mutation_events", "INSERT"}, {"patch", "sessions", "UPDATE"}, {"delete", "media_links", "DELETE"},
 	} {
 		t.Run(failure.kind+failure.table+failure.event, func(t *testing.T) {
+			t.Parallel()
 			fixture, inventory := inventoryFixture(t)
 			var command unitCallTest
 			for _, candidate := range unitCallsTest(fixture) {
@@ -53,6 +54,7 @@ func TestUnitLateAuthorizationAndDeferredCommitFailuresWithholdEveryOperation(t 
 	for _, kind := range []string{"create", "patch", "move", "status", "delete"} {
 		for _, failure := range []string{"revocation", "epoch", "deferred audit"} {
 			t.Run(kind+failure, func(t *testing.T) {
+				t.Parallel()
 				fixture, inventory := inventoryFixture(t)
 				var command unitCallTest
 				for _, candidate := range unitCallsTest(fixture) {
@@ -84,6 +86,7 @@ func TestUnitLateAuthorizationAndDeferredCommitFailuresWithholdEveryOperation(t 
 func TestUnitCountersSequencesAndFreshIdentityCollisionsNeverReseedOrPartiallyCommit(t *testing.T) {
 	for _, scope := range []string{"unit", "item", "source", "target", "root", "search", "media link", "catalog", "sequence", "new Unit reuse", "new event reuse", "event exhaustion", "missing event"} {
 		t.Run(scope, func(t *testing.T) {
+			t.Parallel()
 			fixture, inventory := inventoryFixture(t)
 			command := unitCallTest{kind: "move", subject: fixture.unit.ID, proof: fixture.unit.Revision, target: "target"}
 			want := ErrRevisionOverflow
@@ -133,6 +136,7 @@ func TestUnitCountersSequencesAndFreshIdentityCollisionsNeverReseedOrPartiallyCo
 func TestUnitMissingOriginalAuthorityAndInvalidAncestryCannotBecomeRevisionOneOrANewRoot(t *testing.T) {
 	for _, scope := range []string{"unit", "item", "source", "target", "root", "cycle", "deleted ancestor", "unsafe ancestor"} {
 		t.Run(scope, func(t *testing.T) {
+			t.Parallel()
 			fixture, inventory := inventoryFixture(t)
 			if scope == "cycle" {
 				execSQL(t, fixture.store.db, "UPDATE locations SET parent_id='target' WHERE id='root'")

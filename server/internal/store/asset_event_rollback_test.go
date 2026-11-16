@@ -16,6 +16,7 @@ func TestAssetEventsEveryActualStatementFailureRollsBackCompleteSourceAndPublica
 			{"data_revision", "UPDATE"}, {"api_idempotency", "INSERT"}, {"mutation_events", "INSERT"}, {"sessions", "UPDATE"},
 		} {
 			t.Run(kind+"/"+failure.table+"/"+failure.verb, func(t *testing.T) {
+				t.Parallel()
 				fixture, asset := manualAssetFixture(t, 0)
 				s := fixture.store
 				service := assetReader(t, fixture)
@@ -38,6 +39,7 @@ func TestAssetEventsIgnoredOrRewrittenWritesCannotClaimFinancialSuccess(t *testi
 	for _, kind := range []string{"usage", "cost"} {
 		for _, failure := range []string{"source", "profile timestamp", "Item timestamp", "current", "outbox", "receipt", "audit", "session", "rewritten event", "corrupt final event", "late missing Unit counter"} {
 			t.Run(kind+"/"+failure, func(t *testing.T) {
+				t.Parallel()
 				fixture, asset := manualAssetFixture(t, 0)
 				s := fixture.store
 				service := assetReader(t, fixture)
@@ -85,6 +87,7 @@ func TestAssetEventsNewIdentitiesAndAggregateLimitsNeverReseedOrPartiallyPublish
 	for _, kind := range []string{"usage", "cost"} {
 		for _, failure := range []string{"counter-only new identity", "Asset maximum", "Item maximum", "catalog maximum", "sequence maximum", "missing Asset counter", "missing Unit counter", "missing Item counter"} {
 			t.Run(kind+"/"+failure, func(t *testing.T) {
+				t.Parallel()
 				fixture, asset := manualAssetFixture(t, 0)
 				s := fixture.store
 				service := assetReader(t, fixture)
@@ -127,6 +130,7 @@ func TestAssetEventsFinalAuthorizationCancellationAndDeferredCommitWithholdEvery
 	for _, kind := range []string{"usage", "cost"} {
 		for _, failure := range []string{"mandatory", "revoked", "epoch", "canceled", "late expiry", "deferred commit"} {
 			t.Run(kind+"/"+failure, func(t *testing.T) {
+				t.Parallel()
 				fixture, asset := manualAssetFixture(t, 0)
 				s := fixture.store
 				service := assetReader(t, fixture)
