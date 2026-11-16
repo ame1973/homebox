@@ -226,7 +226,8 @@ export const messages = {
     selectedTags: '已選標籤數：', selectTags: '選擇此物品的完整標籤集合', clearSelection: '清除選取（尚未儲存）', selectedLabelChanged: '選取的標籤名稱或版本已變動',
     recheckTags: '重新檢查選取標籤', unavailableTag: '原選標籤目前不可用，請明確取消選取', tagLimit: '新的集合最多 100 個標籤。請明確減少選取；不會截斷既有集合。',
     beforeTags: '原有標籤集合', afterTags: '這次標籤集合', emptyTags: '沒有標籤', manageTags: '管理全域標籤',
-    offline: '目前離線，不能送出附屬資料變更', leaveTitle: '要離開尚未完成的附屬資料操作嗎？',
+    offline: '目前離線，不能送出附屬資料變更', sessionCleared: '登入狀態已變更', sessionClearedHelp: '此頁的未送出輸入與審閱內容已清除。請重新登入後再開啟資料。',
+    sessionClearedUncertain: '如果先前已送出請求，伺服器可能已完成；重新登入後請先核對目前資料，不會自動重送。', leaveTitle: '要離開尚未完成的附屬資料操作嗎？',
     leaveHelp: '輸入與原請求只留在此畫面。中止等候不代表伺服器已取消；離開後仍需核對目前資料。', stay: '留在此頁', leave: '放棄此畫面並離開',
   },
   holdings: {

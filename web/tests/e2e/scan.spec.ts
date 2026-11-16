@@ -326,10 +326,87 @@ test('clears an idle prefilled barcode editor after logout in another tab', asyn
     await other.goto('/settings/account')
     await other.getByRole('button', { name: messages.auth.logout, exact: true }).click()
     await other.getByRole('alertdialog').getByRole('button', { name: messages.auth.logout, exact: true }).click()
-    await expect(page.getByText(text.barcodeDraftLost)).toBeVisible()
-    await expect(raw).toHaveValue('')
+    await expect(page.getByText(owned.sessionClearedHelp)).toBeVisible()
+    await expect(page.getByText(owned.sessionClearedUncertain)).toBeVisible()
+    await expect(raw).toHaveCount(0)
+    await expect(page.locator('body')).not.toContainText(scanned)
     expect(writes.filter((request) => request.method === 'POST')).toHaveLength(1)
   } finally { await other.close() }
+})
+
+for (const transport of ['storage', 'broadcast'] as const) test(`purges an open barcode review on cross-tab logout using ${transport} only`, async ({ page, context, application }) => {
+  await page.addInitScript((selected) => {
+    if (selected === 'storage') Object.defineProperty(window, 'BroadcastChannel', { configurable: true, value: undefined })
+    else window.addEventListener = new Proxy(window.addEventListener, { apply(target, receiver, args: unknown[]) {
+      return args[0] === 'storage' ? undefined : Reflect.apply(target, receiver, args)
+    } })
+  }, transport)
+  await provision(page, application)
+  const scanned = '012345678905', owned = messages.owned
+  const writes = watchDomainWrites(page, ['/api/v1/items', '/api/v1/barcodes'])
+  await openScan(page); await search(page, scanned)
+  await page.getByRole('button', { name: text.create }).click()
+  await page.getByRole('textbox', { name: new RegExp(`^${catalog.fields.name}`) }).fill('Item before reviewed logout')
+  await page.getByRole('button', { name: catalog.review }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: catalog.confirmCreate }).click()
+  await expect(page).toHaveURL(/\/items\/[^/]+\/barcodes\/new$/)
+  await page.getByRole('combobox', { name: new RegExp(`^${owned.fields.symbology}`) }).selectOption('UPC_A')
+  await page.getByRole('button', { name: owned.review }).click()
+  await expect(page.getByRole('alertdialog')).toContainText(scanned)
+  const other = await context.newPage()
+  try {
+    await other.goto('/settings/account')
+    await other.getByRole('button', { name: messages.auth.logout, exact: true }).click()
+    await other.getByRole('alertdialog').getByRole('button', { name: messages.auth.logout, exact: true }).click()
+    await expect(page.getByText(owned.sessionClearedHelp)).toBeVisible()
+    await expect(page.getByRole('alertdialog')).toHaveCount(0)
+    await expect(page.locator('body')).not.toContainText(scanned)
+    expect(writes.filter((request) => request.method === 'POST')).toHaveLength(1)
+  } finally { await other.close() }
+})
+
+test('clears a committed barcode with a held reply on cross-tab logout and requires reconciliation', async ({ page, context, application }) => {
+  const password = await provision(page, application), scanned = '012345678905', owned = messages.owned
+  const writes = watchDomainWrites(page, ['/api/v1/items', '/api/v1/barcodes'])
+  await openScan(page); await search(page, scanned)
+  await page.getByRole('button', { name: text.create }).click()
+  await page.getByRole('textbox', { name: new RegExp(`^${catalog.fields.name}`) }).fill('Item before held reply')
+  await page.getByRole('button', { name: catalog.review }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: catalog.confirmCreate }).click()
+  await expect(page).toHaveURL(/\/items\/[^/]+\/barcodes\/new$/)
+  const itemID = new URL(page.url()).pathname.split('/')[2]!
+  await page.getByRole('combobox', { name: new RegExp(`^${owned.fields.symbology}`) }).selectOption('UPC_A')
+  let release!: () => void, committed!: () => void
+  const held = new Promise<void>((resolve) => { release = resolve })
+  const received = new Promise<void>((resolve) => { committed = resolve })
+  await page.route((url) => url.pathname === `/api/v1/items/${itemID}/barcodes`, async (route) => {
+    if (route.request().method() !== 'POST') { await route.continue(); return }
+    const response = await route.fetch()
+    expect(response.status()).toBe(200)
+    committed()
+    await held
+    try { await route.fulfill({ response }) } catch { /* The browser may already have aborted the request. */ }
+  })
+  const other = await context.newPage()
+  try {
+    await page.getByRole('button', { name: owned.review }).click()
+    await page.getByRole('alertdialog').getByRole('button', { name: owned.confirmCreate.barcodes }).click()
+    await received
+    await other.goto('/settings/account')
+    await other.getByRole('button', { name: messages.auth.logout, exact: true }).click()
+    await other.getByRole('alertdialog').getByRole('button', { name: messages.auth.logout, exact: true }).click()
+    await expect(page.getByText(owned.sessionClearedUncertain)).toBeVisible()
+    await expect(page.getByRole('alertdialog')).toHaveCount(0)
+    await expect(page.locator('body')).not.toContainText(scanned)
+    release()
+    await expect(page).toHaveURL(new RegExp(`/items/${itemID}/barcodes/new$`))
+    expect(writes.filter((request) => request.method === 'POST')).toHaveLength(2)
+    expect((await page.request.post('/api/v1/auth/login', { headers: { Origin: application.url }, data: { username: 'owner', password } })).status()).toBe(200)
+    const current = await page.request.get(`/api/v1/items/${itemID}/barcodes`)
+    expect(current.status()).toBe(200)
+    expect((await current.json()).data).toEqual([expect.objectContaining({ raw_value: scanned, symbology: 'UPC_A' })])
+    expect(writes.filter((request) => request.method === 'POST')).toHaveLength(2)
+  } finally { release(); await other.close() }
 })
 
 test('reports the cleared code if a real session expires before Item creation', async ({ page, application }) => {

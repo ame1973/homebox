@@ -4,6 +4,8 @@
 
 ### Changed
 
+- On a delivered session-clear signal, lock the owned-data screen, abort its active request, discard its reviewed command and clear this window's in-memory query cache. Warn that an already-sent request may have committed and requires checking current server data; no request is automatically retried.
+
 - Escape Unicode default-ignorable code points, including combining grapheme joiners and variation selectors, in exact-text reviews and scanned-barcode JSON entry. Preserve the underlying values without claiming to detect every visually confusable character.
 
 - Refine the pre-release barcode-search response with a required nullable live continuation, bounded exact query and independent match fields. Remove the inappropriate collection ETag; clients must handle multiple shared matches and cannot use them as physical Unit proofs.

@@ -2,12 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ApiError } from '@/lib/api/client'
 import { fetchCSRF } from '@/lib/api/auth'
+import { subscribeSessionCleared } from './session-lifecycle'
 import { uncertainMutationFailure, type ReviewedCommand } from './reviewed-command'
 
 export function useReviewedMutation<Input, Command extends ReviewedCommand, Result>(
   freeze: (input: Input) => Command, send: (command: Command, csrf: string, signal: AbortSignal) => Promise<Result>,
   queryKeys: readonly (readonly unknown[])[] | ((command: Command) => readonly (readonly unknown[])[]),
-  onConfirmed: (command: Command, result: Result) => void, onSessionLost: (mandatory: boolean) => void,
+  onConfirmed: (command: Command, result: Result) => void, onSessionLost: (mandatory: boolean) => void, purgeOnSessionClear = false,
 ) {
   const client = useQueryClient()
   const [command, setCommand] = useState<Command>()
@@ -29,15 +30,28 @@ export function useReviewedMutation<Input, Command extends ReviewedCommand, Resu
     mounted.current = true
     const interrupt = () => { active.current?.abort() }
     const visibility = () => { if (document.visibilityState === 'hidden') interrupt() }
+    const unsubscribe = purgeOnSessionClear ? subscribeSessionCleared(() => {
+      active.current?.abort()
+      active.current = null
+      commandRef.current = undefined
+      reviewTrigger.current = null
+      leaveAllowed.current = true
+      suspended.current = false
+      setCommand(undefined); setPhase('idle'); setOpen(false); setError(undefined); setConfirmed(false)
+    }) : undefined
     window.addEventListener('offline', interrupt)
     document.addEventListener('visibilitychange', visibility)
     return () => {
       mounted.current = false
+      unsubscribe?.()
       window.removeEventListener('offline', interrupt)
       document.removeEventListener('visibilitychange', visibility)
       active.current?.abort()
+      active.current = null
+      commandRef.current = undefined
+      reviewTrigger.current = null
     }
-  }, [])
+  }, [purgeOnSessionClear])
 
   function review(input: Input) {
     if (active.current || phase === 'uncertain') return

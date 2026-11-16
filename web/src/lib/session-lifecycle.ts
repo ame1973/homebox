@@ -17,19 +17,20 @@ export function notifySessionCleared() {
   } catch { /* Same-page and BroadcastChannel delivery remain available. */ }
 }
 
-export function subscribeSessionCleared(listener: () => void) {
-  window.addEventListener(sessionClearedEvent, listener)
+export function subscribeSessionCleared(listener: (source: 'local' | 'remote') => void) {
+  const local = () => listener('local')
+  window.addEventListener(sessionClearedEvent, local)
   let channel: BroadcastChannel | undefined
   try {
     channel = new BroadcastChannel(sessionClearedEvent)
-    channel.onmessage = (event) => { if (event.data === sessionClearedMessage) listener() }
+    channel.onmessage = (event) => { if (event.data === sessionClearedMessage) listener('remote') }
   } catch { channel?.close(); channel = undefined }
   const storage = (event: StorageEvent) => {
-    if (event.key === sessionClearedEvent && event.newValue === sessionClearedMessage) listener()
+    if (event.key === sessionClearedEvent && event.newValue === sessionClearedMessage) listener('remote')
   }
   window.addEventListener('storage', storage)
   return () => {
-    window.removeEventListener(sessionClearedEvent, listener)
+    window.removeEventListener(sessionClearedEvent, local)
     window.removeEventListener('storage', storage)
     channel?.close()
   }
