@@ -78,6 +78,7 @@ it('reads actual bounded metadata pages and offers real routes without fake coun
   expect(await screen.findByRole('link', { name: /Original/ })).toHaveAttribute('href', '/items/item')
   expect(screen.getByText(`${text.pageCount}1`)).toBeVisible()
   expect(screen.getByRole('link', { name: text.create })).toHaveAttribute('href', '/items/new')
+  expect(screen.getByText(text.future)).toHaveTextContent('瀏覽器支援的相機辨識')
   expect(api.fetchItemsPage).toHaveBeenCalledWith({}, expect.any(AbortSignal))
   expect(taxonomy.fetchCategoriesPage).toHaveBeenCalledWith({ limit: 100 }, expect.any(AbortSignal))
   expect(locations.fetchLocationsPage).toHaveBeenCalledWith({ limit: 100 }, expect.any(AbortSignal))

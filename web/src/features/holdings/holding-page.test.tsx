@@ -107,6 +107,7 @@ it('completes all 205 Unit pages and retains imported new identifiers and scoped
   expect(api.fetchItemUnitsPage).toHaveBeenCalledTimes(3)
   expect(screen.getByRole('link', { name: messages.catalog.back })).toHaveAttribute('href', '/items?status=archived')
   expect(screen.getByRole('link', { name: text.createUnit })).toHaveAttribute('href', '/items/item/units/new')
+  expect(screen.getByText(text.future)).toHaveTextContent('依瀏覽器支援使用相機辨識')
   fill(text.search, 'AST-204')
   expect(screen.getByRole('link', { name: '"AST-204"' })).toHaveAttribute('href', '/units/unit-204')
   expect(auth.fetchCSRF).not.toHaveBeenCalled()

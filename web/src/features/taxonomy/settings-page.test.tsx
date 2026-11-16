@@ -74,6 +74,7 @@ it('provides authenticated settings navigation and actual client version without
   expect(api.fetchTagsPage).not.toHaveBeenCalled()
   await userEvent.setup().click(within(screen.getByRole('navigation', { name: messages.settings.navigation })).getByRole('link', { name: messages.settings.categories }))
   expect(await screen.findByRole('link', { name: '「Parent」' })).toBeVisible()
+  expect(screen.getByText(text.future)).toHaveTextContent('不會自動建立物品或變更庫存數量')
   expect(api.fetchCategoriesPage).toHaveBeenCalledWith({ limit: 100 }, expect.any(AbortSignal))
   expect(auth.fetchCSRF).not.toHaveBeenCalled()
 })

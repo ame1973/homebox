@@ -67,7 +67,9 @@ it('shows the actual complete owner collection in sort order without pretending 
   expect(rows).toHaveLength(2); expect(rows[0]).toHaveTextContent('first'); expect(rows[1]).toHaveTextContent('second')
   expect(within(rows[0]!).getByText(text.cover, { exact: true })).toBeVisible()
   expect(within(rows[0]!).getByText(text.unverified, { exact: true })).toBeVisible()
-  expect(screen.getByText(text.storageUnavailable)).toBeVisible(); expect(screen.queryByRole('img')).not.toBeInTheDocument()
+  expect(screen.getByText(text.storageUnavailable)).toBeVisible()
+  expect(screen.getByText(text.storageUnavailable)).toHaveTextContent('拍照儲存')
+  expect(screen.queryByRole('img')).not.toBeInTheDocument()
   expect(auth.fetchCSRF).not.toHaveBeenCalled(); expect(sendMediaCommand).not.toHaveBeenCalled()
 })
 
