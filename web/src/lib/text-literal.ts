@@ -1,8 +1,8 @@
-// JSON.stringify escapes C0 controls but leaves C1 and Unicode format controls
-// invisible. Escape those as UTF-16 code units while retaining exact round trips.
+// JSON.stringify escapes C0 controls but leaves C1, format controls and other
+// default-ignorable code points invisible. Escape them as UTF-16 code units.
 function hiddenCharacter(character: string): boolean {
   const code = character.codePointAt(0)!
-  return code >= 0x7f && code <= 0x9f || code === 0x2028 || code === 0x2029 || /\p{Cf}/u.test(character)
+  return code >= 0x7f && code <= 0x9f || code === 0x2028 || code === 0x2029 || /[\p{Cf}\p{Default_Ignorable_Code_Point}]/u.test(character)
 }
 
 export function needsTextLiteral(value: string): boolean {

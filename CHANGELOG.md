@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Escape Unicode default-ignorable code points, including combining grapheme joiners and variation selectors, in exact-text reviews and scanned-barcode JSON entry. Preserve the underlying values without claiming to detect every visually confusable character.
+
 - Refine the pre-release barcode-search response with a required nullable live continuation, bounded exact query and independent match fields. Remove the inappropriate collection ETag; clients must handle multiple shared matches and cannot use them as physical Unit proofs.
 - Reuse transaction-scoped SQLite statement plans while rebuilding purchase search evidence. Each lookup still re-reads and validates actual source and correction history; no financial or search results are cached.
 

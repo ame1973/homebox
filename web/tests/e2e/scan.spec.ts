@@ -211,9 +211,9 @@ test('preserves escaped control characters and requires an explicit format after
   expect((await response.json()).data).toEqual([expect.objectContaining({ raw_value: scanned, normalized_value: scanned })])
 })
 
-test('shows invisible format controls as escapes and saves the exact reviewed barcode', async ({ page, application }) => {
+test('shows default-ignorable marks as escapes and saves the exact reviewed barcode', async ({ page, application }) => {
   await provision(page, application)
-  const scanned = `a\u0085${String.fromCodePoint(0x202e)}b${String.fromCodePoint(0xe0001)}`, literal = '"a\\u0085\\u202eb\\udb40\\udc01"', owned = messages.owned
+  const scanned = `000${String.fromCodePoint(0x034f)}123${String.fromCodePoint(0xfe0f, 0xe0100)}\u0085${String.fromCodePoint(0x202e)}b${String.fromCodePoint(0xe0001)}`, literal = '"000\\u034f123\\ufe0f\\udb40\\udd00\\u0085\\u202eb\\udb40\\udc01"', owned = messages.owned
   const writes = watchDomainWrites(page, ['/api/v1/items', '/api/v1/barcodes'])
   await openScan(page)
   await page.getByRole('combobox', { name: text.inputFormat }).selectOption('json')
