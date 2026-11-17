@@ -11,11 +11,14 @@ import (
 	"net/http"
 	"net/netip"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"homebox/internal/httpapi"
 	"homebox/internal/store"
+
+	"golang.org/x/sys/unix"
 )
 
 func serve(ctx context.Context, args []string, stdout, stderr io.Writer) (finalErr error) {
@@ -64,6 +67,9 @@ func serve(ctx context.Context, args []string, stdout, stderr io.Writer) (finalE
 		return err
 	}
 	defer func() { finalErr = errors.Join(finalErr, root.Close()) }()
+	if err = requirePrivateWebSeparation(root, *webDir, *database, *keyFile); err != nil {
+		return err
+	}
 	listener, err := net.Listen("tcp", *address)
 	if err != nil {
 		return err
@@ -147,4 +153,114 @@ func serve(ctx context.Context, args []string, stdout, stderr io.Writer) (finalE
 		}
 		return err
 	}
+}
+
+var errPrivateWebOverlap = errors.New("private application data overlaps the public frontend directory or has unsafe links")
+
+func pathWithin(parent, child string) bool {
+	relative, err := filepath.Rel(parent, child)
+	return err != nil || relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
+}
+
+// optionalResolvedPath preserves an absent leaf but rejects dangling links.
+func optionalResolvedPath(path string) (string, error) {
+	resolved, err := filepath.EvalSymlinks(path)
+	if err == nil {
+		return resolved, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		if _, statErr := os.Lstat(path); errors.Is(statErr, os.ErrNotExist) {
+			return path, nil
+		}
+	}
+	return "", err
+}
+
+func requireSinglePrivateLink(path string, required bool) error {
+	var info unix.Stat_t
+	err := unix.Lstat(path, &info)
+	if errors.Is(err, unix.ENOENT) && !required {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if info.Mode&unix.S_IFMT != unix.S_IFREG || info.Nlink != 1 {
+		return errPrivateWebOverlap
+	}
+	return nil
+}
+
+// requirePrivateWebSeparation rejects configured private-path overlaps and
+// hard-linked SQLite and TLS key files. Operators must still keep other secrets,
+// media/backup hard links and separately mounted aliases out of the web root.
+func requirePrivateWebSeparation(root *os.Root, webDir, database, keyFile string) error {
+	web, err := filepath.Abs(webDir)
+	if err != nil {
+		return err
+	}
+	web, err = filepath.EvalSymlinks(web)
+	if err != nil {
+		return err
+	}
+	opened, err := root.Stat(".")
+	if err != nil {
+		return err
+	}
+	named, err := os.Stat(web)
+	if err != nil || !os.SameFile(opened, named) {
+		return errors.Join(errPrivateWebOverlap, err)
+	}
+	database, err = filepath.Abs(database)
+	if err != nil {
+		return err
+	}
+	parent, err := filepath.EvalSymlinks(filepath.Dir(database))
+	if err != nil {
+		return err
+	}
+	database = filepath.Join(parent, filepath.Base(database))
+	if pathWithin(web, database) {
+		return errPrivateWebOverlap
+	}
+	for _, suffix := range []string{"", "-wal", "-shm", "-journal", ".lock"} {
+		if err = requireSinglePrivateLink(database+suffix, suffix == ""); err != nil {
+			return err
+		}
+	}
+	for _, private := range []string{database + ".media", filepath.Join(parent, "migration-backups")} {
+		resolved, err := optionalResolvedPath(private)
+		if err != nil {
+			return err
+		}
+		if pathWithin(web, private) || pathWithin(private, web) || pathWithin(web, resolved) || pathWithin(resolved, web) {
+			return errPrivateWebOverlap
+		}
+	}
+	if keyFile != "" {
+		key, err := filepath.Abs(keyFile)
+		if err != nil {
+			return err
+		}
+		keyParent, err := filepath.EvalSymlinks(filepath.Dir(key))
+		if err != nil {
+			return err
+		}
+		key = filepath.Join(keyParent, filepath.Base(key))
+		resolved, err := filepath.EvalSymlinks(key)
+		if err != nil {
+			return err
+		}
+		if pathWithin(web, key) || pathWithin(web, resolved) {
+			return errPrivateWebOverlap
+		}
+		if err = requireSinglePrivateLink(resolved, true); err != nil {
+			return err
+		}
+	}
+	named, err = os.Stat(web)
+	if err != nil || !os.SameFile(opened, named) {
+		return errors.Join(errPrivateWebOverlap, err)
+	}
+	return nil
 }

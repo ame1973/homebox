@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Refuse to start when configured SQLite, private Media, default migration-backup or TLS-key paths overlap the public frontend. Reject database, existing sidecar/lock and TLS-key files with multiple hard links, and check the frontend root's actual identity. Keep other secrets, custom backups and mounted aliases out of the frontend separately; this is not a runtime filesystem audit.
+
 - Clear volatile scan, Item creation and barcode-handoff screens before browser page suspension, without broadcasting logout to other tabs. On back-forward-cache restoration, require a fresh completed-session check and warn that an already-sent request may have committed; canceling the browser leave prompt retains the draft.
 
 - On a delivered session-clear signal, lock Item creation and owned-data screens, abort active requests, discard reviewed commands and clear this window's in-memory query cache. Warn that an already-sent request may have committed and requires checking current server data; no request is automatically retried.
