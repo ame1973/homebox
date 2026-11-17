@@ -23,6 +23,8 @@
 
 ### Added
 
+- Model a volatile album of up to ten in-memory camera captures with a 64-MiB encoded-source budget, explicit cover choice, ordering, retake, raw descriptions and original-pixel crop/rotation. This does not provide a capture screen, persistent offline drafts, file import or upload.
+
 - Link a sealed anonymous Media inode only inside a mutation that revalidates its previously committed journal, actual bytes and directory identities, and rechecks the retained journal after audit/session writes. Preserve partially linked stages for explicit recovery and test real process exit after linking and promotion. The private upload transaction uses this helper; it is not an HTTP route.
 
 - Journal the exact inode and intended name of a sealed, still-anonymous Media stage without linking it. Explicit recovery can reconcile a missing stage after producer exit when actual reference checks permit it; an unrelated same-digest object is never claimed. The private upload now links only after that journal commits.
