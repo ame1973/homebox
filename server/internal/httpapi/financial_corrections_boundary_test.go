@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"homebox/internal/store"
 )
@@ -240,7 +241,9 @@ func TestDisposalCorrectionHTTPRechecksOriginalSubjectAndAssetButNotPhysicalOrIt
 			input := store.DisposalCorrectionWrite{AssetRevision: f.asset.Revision, Action: "replace", Replacement: &store.DisposalFinancialWrite{Kind: "sold", DisposedAt: "2026-11-07T00:00:00Z", RealizedProceedsMinor: 0, Currency: "JPY"}, Reason: "Exact reviewed correction"}
 			path := "/api/v1/units/" + f.unit.ID + "/disposal-corrections"
 			r := domainRequest(http.MethodPost, path, marshalCorrection(t, input), f.cookie, f.csrf, "reviewed-disposal-before-body", fmt.Sprintf(`"%d"`, record.Revision))
+			bodyRead := false
 			r.Body = io.NopCloser(&beforeRead{Reader: r.Body, before: func() {
+				bodyRead = true
 				var err error
 				switch scope {
 				case "subject":
@@ -262,7 +265,17 @@ func TestDisposalCorrectionHTTPRechecksOriginalSubjectAndAssetButNotPhysicalOrIt
 					t.Fatal(err)
 				}
 			}})
+			started := time.Now()
 			reply := respond(f.handler, r)
+			ended := time.Now()
+			expectedStatus := http.StatusOK
+			if scope == "subject" || scope == "Asset" {
+				expectedStatus = http.StatusConflict
+			}
+			if reply.Code != expectedStatus {
+				t.Logf("body-time source mutation ran: %t", bodyRead)
+				logSessionFailure(t, f.databasePath, f.cookie, started, ended)
+			}
 			if scope == "subject" || scope == "Asset" {
 				expectError(t, reply, 409, "REVISION_CONFLICT")
 			} else if value := assetHTTPReply[store.DisposalCorrection](t, reply, 8); value.After.Current == nil || value.After.Current.RealizedProceedsMinor != 0 {
