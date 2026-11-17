@@ -211,9 +211,9 @@ Automated browser tests use a synthetic live-video stream to verify all four rot
 
 ## Photo crop and rotation geometry
 
-The internal photo geometry model represents a crop as an integer rectangle in the original decoded, oriented pixel source and an independent quarter-turn display orientation. Source dimensions must not exceed 16,384 on either side or 64 million pixels; selections must be nonempty whole-pixel rectangles fully inside the currently displayed image. Rotating preserves the original crop, and a later crop is mapped back into that original coordinate space without changing, resampling or enlarging pixels. Repeated crops and rotations therefore retain exact bounds. A future renderer must reject a decoded source whose actual dimensions differ from the snapshot, and use the same decoded orientation when applying those bounds.
+The internal photo geometry model represents a crop as an integer rectangle in the original decoded, oriented pixel source and an independent quarter-turn display orientation. Source dimensions must not exceed 16,384 on either side or 64 million pixels; selections must be nonempty whole-pixel rectangles fully inside the currently displayed image. Rotating preserves the original crop, and a later crop is mapped back into that original coordinate space without changing, resampling or enlarging pixels. Repeated crops and rotations therefore retain exact bounds. The in-memory capture renderer above rejects a decoded source whose actual dimensions differ from the snapshot and uses the captured canvas orientation.
 
-Exhaustive small pixel-grid tests cover every crop in each orientation and repeated edits; a private Chromium test compares the calculated crop with actual canvas pixel transforms. This is geometry only: it does not decode or encode a photo, provide an editor, persist a draft, upload or perform visual search. Photo capture and editing controls remain unimplemented.
+Exhaustive small pixel-grid tests cover every crop in each orientation and repeated edits; a private Chromium test compares the calculated crop with actual canvas pixel transforms. The geometry model itself does not decode or encode a photo, provide an editor, persist a draft, upload or perform visual search. Photo capture and editing controls remain unimplemented.
 
 ## Image processing groundwork
 
