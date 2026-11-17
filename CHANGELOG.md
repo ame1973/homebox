@@ -21,6 +21,8 @@
 
 ### Added
 
+- Journal the exact inode and intended name of a sealed, still-anonymous Media stage without linking it. Explicit recovery can reconcile a missing stage after producer exit when actual reference checks permit it; an unrelated same-digest object is never claimed. Linking after journal commit and use by the upload transaction remain unfinished.
+
 - Add a separate internal Linux anonymous Media stage that remains unnamed through sealing, rejects unavailable filesystems rather than silently creating a named stage, and never unlinks a conflicting name or unexpected hard link. Subprocess tests exercise exit before and after seal; the current upload transaction does not yet use this primitive, and durable journal integration remains unfinished.
 
 - Process one explicitly requested, validated batch of up to 100 pending Media recovery rows under the same storage lock. Each object commits separately; stop on the first error, report only acknowledged completions and require an explicit retry. This is an internal primitive, not automatic startup recovery or an HTTP endpoint.

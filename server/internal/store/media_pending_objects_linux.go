@@ -74,10 +74,20 @@ func journalStage(stage *mediaStage, objects mediaDirectoryIdentity) (pendingMed
 		return pendingMediaObject{}, err
 	}
 	var source unix.Stat_t
-	if err = unix.Fstatat(int(stage.dir.Fd()), stage.name, &source, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+	var links uint64 = 1
+	if stage.anonymous {
+		if stage.file == nil {
+			return pendingMediaObject{}, errMediaStageChanged
+		}
+		links = 0
+		err = unix.Fstat(int(stage.file.Fd()), &source)
+	} else {
+		err = unix.Fstatat(int(stage.dir.Fd()), stage.name, &source, unix.AT_SYMLINK_NOFOLLOW)
+	}
+	if err != nil {
 		return pendingMediaObject{}, err
 	}
-	if source.Mode&unix.S_IFMT != unix.S_IFREG || source.Mode&0o7777 != 0o600 || source.Nlink != 1 ||
+	if source.Mode&unix.S_IFMT != unix.S_IFREG || source.Mode&0o7777 != 0o600 || uint64(source.Nlink) != links ||
 		uint64(source.Dev) != stage.device || source.Ino != stage.inode {
 		return pendingMediaObject{}, ErrUnsafePath
 	}
