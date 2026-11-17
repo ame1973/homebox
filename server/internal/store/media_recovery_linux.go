@@ -376,6 +376,10 @@ func (storage *mediaStorage) recoverPendingMediaBatch(ctx context.Context, limit
 	}
 	storage.mu.Lock()
 	defer storage.mu.Unlock()
+	return storage.recoverPendingMediaBatchLocked(ctx, limit)
+}
+
+func (storage *mediaStorage) recoverPendingMediaBatchLocked(ctx context.Context, limit int) (completed int, more bool, finalErr error) {
 	ids, next, err := storage.pendingMediaRecoveryPageLocked(ctx, "", limit)
 	if err != nil {
 		return 0, false, err

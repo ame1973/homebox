@@ -23,6 +23,8 @@
 
 ### Added
 
+- Combine the non-destructive staging audit and one explicit recovery batch under the same storage lock. Unknown staging entries block all cleanup before any unlink; later recovery failures retain the acknowledged-prefix and explicit-retry semantics. This is not an automatic startup service or HTTP endpoint.
+
 - Inspect a bounded private Media staging directory against current journaled names and inode metadata under the storage lock. Unknown, substituted, stale or unsafe entries fail closed without deletion or a partial count. This is an explicit internal audit, not file-integrity verification, automatic recovery or an HTTP endpoint.
 
 - Model a volatile album of up to ten in-memory camera captures with a 64-MiB encoded-source budget, explicit cover choice, ordering, retake, raw descriptions and original-pixel crop/rotation. This does not provide a capture screen, persistent offline drafts, file import or upload.

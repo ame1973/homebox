@@ -30,6 +30,10 @@ func (storage *mediaStorage) auditMediaStaging(ctx context.Context, limit int) (
 	}
 	storage.mu.Lock()
 	defer storage.mu.Unlock()
+	return storage.auditMediaStagingLocked(ctx, limit)
+}
+
+func (storage *mediaStorage) auditMediaStagingLocked(ctx context.Context, limit int) (count int, finalErr error) {
 	if storage.closed {
 		return 0, errMediaStorageClosed
 	}
