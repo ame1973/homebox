@@ -10,7 +10,7 @@ const text = messages.scan
 const control = 'min-h-12 h-auto max-w-full whitespace-normal py-3 text-base leading-normal'
 
 export function RestoreGate({ kind = 'scan', restored, generation, returnPath, onLeave }: {
-  kind?: 'scan' | 'item' | 'capture'; restored: boolean; generation: number; returnPath: string; onLeave: () => void
+  kind?: 'scan' | 'item' | 'capture' | 'recovery'; restored: boolean; generation: number; returnPath: string; onLeave: () => void
 }) {
   const heading = useRef<HTMLHeadingElement>(null)
   const auth = useQuery({ queryKey: ['auth', 'bfcache-check', generation, returnPath], enabled: restored,
@@ -32,8 +32,8 @@ export function RestoreGate({ kind = 'scan', restored, generation, returnPath, o
   const expired = auth.data?.kind === 'expired'
   const returnTo = auth.data?.returnTo ?? '/items'
   const scan = kind === 'scan'
-  const title = scan ? text.restoreTitle : kind === 'capture' ? messages.capture.restoreTitle : messages.catalog.restorePageTitle
-  const help = scan ? text.restoreHelp : kind === 'capture' ? messages.capture.restoreHelp : messages.catalog.restorePageHelp
+  const title = scan ? text.restoreTitle : kind === 'capture' ? messages.capture.restoreTitle : kind === 'recovery' ? messages.mediaRecovery.restoreTitle : messages.catalog.restorePageTitle
+  const help = scan ? text.restoreHelp : kind === 'capture' ? messages.capture.restoreHelp : kind === 'recovery' ? messages.mediaRecovery.restoreHelp : messages.catalog.restorePageHelp
   const scanNotice = scan ? { notice: 'scanHandoffLost' } : {}
   return <main id="main" className="safe-page mx-auto min-h-dvh max-w-3xl space-y-6 py-8">
     <div className="flex justify-end"><ThemeMenu /></div>

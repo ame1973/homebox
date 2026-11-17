@@ -25,6 +25,8 @@
 
 ### Added
 
+- Add a read-only Media recovery status screen with bounded localized guidance, safe session/BFCache cleanup and an explicit status refresh. It does not retry recovery, delete files or claim file integrity.
+
 - Expose a protected, bodyless `GET /api/v1/system/media-recovery` and a stateless browser adapter for bounded live recovery status. Session authority is rechecked after body reading; the status is not cached, versioned, a file-integrity proof or permission to retry. The current server does not start the Media service yet, so its status is unavailable.
 
 - Read a bounded Media recovery snapshot through the completed-session transaction, including a safe unavailable state when no service is running. Revalidate the session after activity, keep private file names out of status, and coordinate the read with Media shutdown. This is an internal Go operation, not an HTTP or retry endpoint.
