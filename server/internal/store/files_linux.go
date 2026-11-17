@@ -39,6 +39,22 @@ func privateDir(path string) (string, error) {
 	return resolved, nil
 }
 
+type privateFileIdentity struct {
+	device uint64
+	inode  uint64
+}
+
+func openedPrivateFileIdentity(file *os.File) (privateFileIdentity, error) {
+	var info unix.Stat_t
+	if err := unix.Fstat(int(file.Fd()), &info); err != nil {
+		return privateFileIdentity{}, err
+	}
+	if info.Mode&unix.S_IFMT != unix.S_IFREG || info.Ino == 0 {
+		return privateFileIdentity{}, ErrUnsafePath
+	}
+	return privateFileIdentity{device: uint64(info.Dev), inode: info.Ino}, nil
+}
+
 func privateFile(path string, create bool) (*os.File, error) {
 	flags := os.O_RDWR | unix.O_NOFOLLOW | unix.O_CLOEXEC
 	if create {

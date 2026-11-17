@@ -71,6 +71,7 @@ type Health struct {
 type Store struct {
 	db          *sql.DB
 	path        string
+	fileID      privateFileIdentity
 	lock        *os.File
 	report      MigrationReport
 	closeOnce   sync.Once
@@ -112,9 +113,11 @@ func Open(ctx context.Context, cfg Config) (_ *Store, finalErr error) {
 		}
 		return nil, err
 	}
-	if err = file.Close(); err != nil {
+	identity, identityErr := openedPrivateFileIdentity(file)
+	if err = errors.Join(identityErr, file.Close()); err != nil {
 		return nil, err
 	}
+	s.fileID = identity
 	if err = validateSidecars(path, false); err != nil {
 		return nil, err
 	}

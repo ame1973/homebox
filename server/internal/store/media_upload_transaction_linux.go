@@ -40,15 +40,22 @@ func (library *MediaLibrary) uploadStagedMediaGuarded(ctx context.Context, token
 	if library == nil || library.auth == nil || library.auth.store == nil {
 		return Media{}, ErrDomainInput
 	}
+	var databaseCheck func() error
+	if guard != nil {
+		databaseCheck = library.auth.store.requireMediaDatabaseIdentity
+		if err := databaseCheck(); err != nil {
+			return Media{}, err
+		}
+	}
 	fingerprint, err := library.auth.mediaUploadFingerprint(ctx, key, mime, raw)
 	if err != nil {
 		return Media{}, err
 	}
 	request := mediaUploadReceiptRequest{RawFileMAC: fingerprint}
 	// An original-key replay must precede current image policy and file reads.
-	replay, err := runDomainMutation(ctx, library.auth, token, key, "post_media", request, func(*mutationTx) (Media, error) {
+	replay, err := runDomainMutationWithFinalCheck(ctx, library.auth, token, key, "post_media", request, func(*mutationTx) (Media, error) {
 		return Media{}, errPrepareMediaUpload
-	})
+	}, databaseCheck)
 	if err == nil {
 		return replay, nil
 	}
@@ -152,20 +159,30 @@ func (library *MediaLibrary) uploadStagedMediaGuarded(ctx context.Context, token
 		return Media{}, err
 	}
 	consumed := false
-	result, err = runDomainMutation(ctx, library.auth, token, key, "post_media", request, func(m *mutationTx) (Media, error) {
+	var publicationTx *sql.Tx
+	var publicationCheck func() error
+	if guard != nil {
+		publicationCheck = func() error {
+			if publicationTx == nil {
+				return databaseCheck()
+			}
+			return guard(publicationTx)
+		}
+	}
+	result, err = runDomainMutationWithFinalCheck(ctx, library.auth, token, key, "post_media", request, func(m *mutationTx) (Media, error) {
 		value, err := m.publishStagedMedia(image, preview, promotedOriginal, promotedThumbnail, objects, objectDir)
 		if err != nil {
 			return Media{}, err
 		}
 		if guard != nil {
-			m.finalChecks = append(m.finalChecks, func() error { return guard(m.tx) })
+			publicationTx = m.tx
 		}
 		if err = m.consumeMediaPending(pending); err != nil {
 			return Media{}, err
 		}
 		consumed = true
 		return value, nil
-	})
+	}, publicationCheck)
 	if err == nil && consumed {
 		preserveStages = false
 	}

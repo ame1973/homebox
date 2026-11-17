@@ -106,6 +106,14 @@ func requireEmptyUploadStages(t *testing.T, staging string) {
 func requirePendingUploadStages(t *testing.T, s *Store, staging string, expected int) {
 	t.Helper()
 	entries, err := os.ReadDir(staging)
+	if err == nil && len(entries) == expected+1 && entries[0].Name() == mediaOwnerName {
+		instance := scalar[string](t, s.db, "SELECT server_instance_id FROM sync_state")
+		owner, readErr := os.ReadFile(filepath.Join(staging, mediaOwnerName))
+		if readErr != nil || string(owner) != string(mediaOwnerBytes(instance, s.path, s.fileID, "staging")) {
+			t.Fatal("staging owner marker is invalid", readErr)
+		}
+		entries = entries[1:]
+	}
 	if err != nil || len(entries) != expected {
 		t.Fatal("unexpected retained stages", entries, err)
 	}

@@ -6,9 +6,11 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -64,11 +66,29 @@ func mediaInstance(ctx context.Context, query queryer) (string, error) {
 	return instance, err
 }
 
+func (s *Store) requireMediaDatabaseIdentity() error {
+	if s == nil || s.path == "" || s.fileID.inode == 0 {
+		return ErrUnsafePath
+	}
+	var info unix.Stat_t
+	if err := unix.Lstat(s.path, &info); err != nil {
+		return errors.Join(ErrUnsafePath, err)
+	}
+	if info.Mode&unix.S_IFMT != unix.S_IFREG || info.Mode&0o7077 != 0 || info.Nlink != 1 ||
+		uint64(info.Dev) != s.fileID.device || info.Ino != s.fileID.inode {
+		return ErrUnsafePath
+	}
+	return nil
+}
+
 func (s *Store) openMediaStorage(ctx context.Context) (_ *mediaStorage, finalErr error) {
 	if s == nil || s.db == nil || s.lock == nil || s.path == "" || ctx == nil {
 		return nil, ErrDomainInput
 	}
 	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := s.requireMediaDatabaseIdentity(); err != nil {
 		return nil, err
 	}
 	instance, err := mediaInstance(ctx, s.db)
@@ -93,15 +113,21 @@ func (s *Store) openMediaStorage(ctx context.Context) (_ *mediaStorage, finalErr
 	if err != nil {
 		return nil, err
 	}
-	if err = ensureMediaOwner(ctx, root, instance); err != nil {
+	if err = ensureMediaOwner(ctx, root, mediaOwnerBytes(instance, s.path, s.fileID, "root"), true); err != nil {
 		return nil, err
 	}
 	storage.staging, err = openMediaSubdirectory(root, "staging")
 	if err != nil {
 		return nil, err
 	}
+	if err = ensureMediaOwner(ctx, storage.staging, mediaOwnerBytes(instance, s.path, s.fileID, "staging"), false); err != nil {
+		return nil, err
+	}
 	storage.objects, err = openMediaSubdirectory(root, "objects")
 	if err != nil {
+		return nil, err
+	}
+	if err = ensureMediaOwner(ctx, storage.objects, mediaOwnerBytes(instance, s.path, s.fileID, "objects"), false); err != nil {
 		return nil, err
 	}
 	stagingID, err := mediaDirectoryID(storage.staging)
@@ -173,7 +199,10 @@ func verifyMediaLock(root, file *os.File) error {
 	return checkPrivateMediaDirectory(root)
 }
 
-func mediaOwnerBytes(instance string) []byte { return []byte("homebox-media-v1\n" + instance + "\n") }
+func mediaOwnerBytes(instance, database string, identity privateFileIdentity, role string) []byte {
+	pathDigest := sha256.Sum256([]byte(database))
+	return fmt.Appendf(nil, "homebox-media-v2\n%s\n%d:%d\n%x\n%s\n", instance, identity.device, identity.inode, pathDigest, role)
+}
 
 func validMediaOwnerPartial(name string) bool {
 	const prefix, suffix = ".owner-", ".partial"
@@ -219,8 +248,7 @@ func readMediaOwnerFile(root *os.File, name string, expected []byte, prefix bool
 	return checkPrivateMediaDirectory(root)
 }
 
-func ensureMediaOwner(ctx context.Context, root *os.File, instance string) error {
-	expected := mediaOwnerBytes(instance)
+func ensureMediaOwner(ctx context.Context, root *os.File, expected []byte, allowLock bool) error {
 	err := readMediaOwnerFile(root, mediaOwnerName, expected, false)
 	if err == nil {
 		return nil
@@ -242,7 +270,7 @@ func ensureMediaOwner(ctx context.Context, root *os.File, instance string) error
 			if err = ctx.Err(); err != nil {
 				return err
 			}
-			if entry.Name() == mediaLockName {
+			if allowLock && entry.Name() == mediaLockName {
 				continue
 			}
 			if !validMediaOwnerPartial(entry.Name()) {
@@ -389,6 +417,9 @@ func (storage *mediaStorage) validateLocked(ctx context.Context, query queryer) 
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if err := storage.store.requireMediaDatabaseIdentity(); err != nil {
+		return err
+	}
 	for _, entry := range []struct {
 		path string
 		dir  *os.File
@@ -400,8 +431,14 @@ func (storage *mediaStorage) validateLocked(ctx context.Context, query queryer) 
 	if err := verifyMediaLock(storage.root, storage.lock); err != nil {
 		return err
 	}
-	if err := readMediaOwnerFile(storage.root, mediaOwnerName, mediaOwnerBytes(storage.instance), false); err != nil {
-		return errors.Join(ErrUnsafePath, err)
+	for _, scope := range []struct {
+		role string
+		dir  *os.File
+	}{{"root", storage.root}, {"staging", storage.staging}, {"objects", storage.objects}} {
+		expected := mediaOwnerBytes(storage.instance, storage.store.path, storage.store.fileID, scope.role)
+		if err := readMediaOwnerFile(scope.dir, mediaOwnerName, expected, false); err != nil {
+			return errors.Join(ErrUnsafePath, err)
+		}
 	}
 	current, err := mediaInstance(ctx, query)
 	if err != nil {
@@ -409,6 +446,9 @@ func (storage *mediaStorage) validateLocked(ctx context.Context, query queryer) 
 	}
 	if current != storage.instance {
 		return ErrDomainState
+	}
+	if err = storage.store.requireMediaDatabaseIdentity(); err != nil {
+		return err
 	}
 	return ctx.Err()
 }

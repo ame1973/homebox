@@ -60,6 +60,11 @@ type domainReply struct {
 // bind the administrator and dataset epoch, not a particular login session. An
 // active, completed session is still required before reading any frozen reply.
 func runDomainMutation[T domainResult](ctx context.Context, a *Auth, token, key, operation string, request any, apply func(*mutationTx) (T, error)) (T, error) {
+	return runDomainMutationWithFinalCheck(ctx, a, token, key, operation, request, apply, nil)
+}
+
+// The optional check also runs for a frozen reply after session activity.
+func runDomainMutationWithFinalCheck[T domainResult](ctx context.Context, a *Auth, token, key, operation string, request any, apply func(*mutationTx) (T, error), check func() error) (T, error) {
 	var zero T
 	if !authString(key, 8, 128) {
 		return zero, ErrDomainInput
@@ -162,6 +167,9 @@ func runDomainMutation[T domainResult](ctx context.Context, a *Auth, token, key,
 		}
 		finalChecks = m.finalChecks
 	}
+	if check != nil {
+		finalChecks = append(finalChecks, check)
+	}
 	if err = finishDomainSession(ctx, a, tx, token, session); err != nil {
 		return zero, err
 	}
@@ -198,6 +206,11 @@ func runDomainMutation[T domainResult](ctx context.Context, a *Auth, token, key,
 	}
 	if finalReply != reply {
 		return zero, ErrDomainState
+	}
+	if check != nil {
+		if err = check(); err != nil {
+			return zero, err
+		}
 	}
 	if err = tx.Commit(); err != nil {
 		return zero, err

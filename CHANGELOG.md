@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Bind private Media ownership markers separately for the root, staging and object directories to the opened database's file identity, resolved path and instance. Reject ordinary database clones, hard links, substituted databases and foreign or swapped child directories without deleting files. Check the database during original-key replay and recheck full ownership after the final session read for new publication. Preserve legacy instance-only markers without silently rebinding; recovery, explicit rebind and HTTP upload remain unfinished.
+
 - Refuse to start when configured SQLite, private Media, default migration-backup or TLS-key paths overlap the public frontend. Reject database, existing sidecar/lock and TLS-key files with multiple hard links, and check the frontend root's actual identity. Keep other secrets, custom backups and mounted aliases out of the frontend separately; this is not a runtime filesystem audit.
 
 - Clear volatile scan, Item creation and barcode-handoff screens before browser page suspension, without broadcasting logout to other tabs. On back-forward-cache restoration, require a fresh completed-session check and warn that an already-sent request may have committed; canceling the browser leave prompt retains the draft.
