@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Keep the exact pending original/thumbnail journal rows and sealed stages through successful private Media publication, rather than removing their recovery proof before post-commit cleanup. Explicit reference-aware recovery can reconcile a committed source after producer exit or a partial stage unlink. Successful uploads retain these private records until cleanup; automatic scheduling and pre-journal unknown-stage recovery remain unfinished.
+
 - Bind private Media ownership markers separately for the root, staging and object directories to the opened database's file identity, resolved path and instance. Reject ordinary database clones, hard links, substituted databases and foreign or swapped child directories without deleting files. Check the database during original-key replay and recheck full ownership after the final session read for new publication. Preserve legacy instance-only markers without silently rebinding; recovery, explicit rebind and HTTP upload remain unfinished.
 
 - Refuse to start when configured SQLite, private Media, default migration-backup or TLS-key paths overlap the public frontend. Reject database, existing sidecar/lock and TLS-key files with multiple hard links, and check the frontend root's actual identity. Keep other secrets, custom backups and mounted aliases out of the frontend separately; this is not a runtime filesystem audit.
@@ -31,7 +33,7 @@
 
 - Add an internal Linux Media storage owner with a private database-instance marker, cooperative exclusive lock, anchored directory revalidation and guarded staged uploads. Reconcile original-key receipts before checking current files, and reject late ownership changes before publication. Copied markers and shared mounts do not establish safe deletion authority; recovery, HTTP admission and the upload route remain unimplemented.
 
-- Journal each sealed Media stage's sanitized digest, exact inode, directory identities and dataset epoch before promotion. Consume matching rows atomically with publication, preserve stages after failures or uncertain commits, and reject substituted object directories. Pending rows do not prove ownership of existing objects; automatic recovery and the HTTP upload remain unimplemented.
+- Journal each sealed Media stage's sanitized digest, exact inode, directory identities and dataset epoch before promotion. At that increment matching rows were consumed atomically with publication, while stages were preserved after failures or uncertain commits; substituted object directories were rejected. Pending rows do not prove ownership of existing objects; automatic recovery and the HTTP upload remain unimplemented.
 
 - Connect real JPEG/PNG sanitization, private stages, verified content-addressed objects and atomic Media/thumbnail SQLite publication in an internal upload transaction. Preserve exact original-key reconciliation, reject legacy storage collisions and recheck actual source, membership and files after audit/session writes. At that increment HTTP admission, crash recovery, streams and WebP remained unimplemented.
 

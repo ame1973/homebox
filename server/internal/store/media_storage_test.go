@@ -772,9 +772,10 @@ func TestMediaStorageUploadsWithBoundOwnershipAndRetainsOriginalReplay(t *testin
 		t.Fatal("owned storage did not publish the private transaction", first, err)
 	}
 	actual, err := loadMedia(t.Context(), s.db, first.ID)
-	if err != nil || actual.thumbnail == nil || scalar[int](t, s.db, "SELECT COUNT(*) FROM media_pending_objects") != 0 {
-		t.Fatal("owned upload omitted source or retained completed pending rows", actual, err)
+	if err != nil || actual.thumbnail == nil || scalar[int](t, s.db, "SELECT COUNT(*) FROM media_pending_objects") != 2 {
+		t.Fatal("owned upload omitted source or durable cleanup proofs", actual, err)
 	}
+	requirePendingUploadStages(t, s, filepath.Join(storage.path, "staging"), 2)
 	if _, err = os.Stat(filepath.Join(storage.path, "objects", actual.storageKey)); err != nil {
 		t.Fatal("uploaded original is not in the owned object directory", err)
 	}

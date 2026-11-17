@@ -174,7 +174,7 @@ func TestStagedMediaUploadPublishesActualSanitizedSourceAndReplays(t *testing.T)
 	if _, err = jpeg.Decode(bytes.NewReader(thumb)); err != nil {
 		t.Fatal("thumbnail is not an actual JPEG", err)
 	}
-	requireEmptyUploadStages(t, staging)
+	requirePendingUploadStages(t, s, staging, 2)
 	for _, query := range []string{
 		"SELECT response_json FROM api_idempotency WHERE operation='post_media'",
 		"SELECT result_json FROM mutation_events WHERE operation='post_media'",
@@ -185,8 +185,8 @@ func TestStagedMediaUploadPublishesActualSanitizedSourceAndReplays(t *testing.T)
 		}
 	}
 	if scalar[int](t, s.db, "SELECT COUNT(*) FROM auth_keyed_receipt_secret") != 1 || scalar[int](t, s.db, "SELECT COUNT(*) FROM media_links") != 0 ||
-		scalar[int](t, s.db, "SELECT COUNT(*) FROM media_pending_objects") != 0 {
-		t.Fatal("upload omitted the key pin, retained committed pending rows or silently attached an owner")
+		scalar[int](t, s.db, "SELECT COUNT(*) FROM media_pending_objects") != 2 {
+		t.Fatal("upload omitted the key pin or cleanup proofs, or silently attached an owner")
 	}
 	_, freshToken := login(t, auth)
 	replay, err := library.uploadStagedMedia(t.Context(), freshToken, "original-upload-key", "image/png", raw, "/missing-staging", "/missing-objects")
@@ -208,7 +208,7 @@ func TestStagedMediaUploadPublishesActualSanitizedSourceAndReplays(t *testing.T)
 		scalar[int](t, s.db, "SELECT COUNT(*) FROM media_thumbnails") != 1 || scalar[int](t, s.db, "SELECT COUNT(*) FROM mutation_events WHERE operation='post_media'") != 2 {
 		t.Fatal("deduplication silently republished or created a second Media", replay, changed)
 	}
-	requireEmptyUploadStages(t, staging)
+	requirePendingUploadStages(t, s, staging, 4)
 }
 
 func TestStagedMediaUploadSanitizesOrientedJPEGAndThumbnail(t *testing.T) {
@@ -232,7 +232,7 @@ func TestStagedMediaUploadSanitizesOrientedJPEGAndThumbnail(t *testing.T) {
 			t.Fatal("actual JPEG output lost oriented dimensions", key, err)
 		}
 	}
-	requireEmptyUploadStages(t, staging)
+	requirePendingUploadStages(t, s, staging, 2)
 }
 
 func mustDecodeMediaSHA(t *testing.T, digest string) [sha256.Size]byte {
@@ -351,8 +351,12 @@ func TestStagedMediaUploadRollsBackEveryDurableDatabaseBoundary(t *testing.T) {
 		{"ignored thumbnail", `CREATE TRIGGER upload_failure BEFORE INSERT ON media_thumbnails BEGIN SELECT RAISE(IGNORE); END`},
 		{"ignored projection", `CREATE TRIGGER upload_failure BEFORE INSERT ON current_projections WHEN NEW.entity_type='media' BEGIN SELECT RAISE(IGNORE); END`},
 		{"ignored outbox", `CREATE TRIGGER upload_failure BEFORE INSERT ON sync_changes WHEN NEW.entity_type='media' BEGIN SELECT RAISE(IGNORE); END`},
-		{"ignored pending consume", `CREATE TRIGGER upload_failure BEFORE DELETE ON media_pending_objects BEGIN SELECT RAISE(IGNORE); END`},
-		{"reinserted pending", `CREATE TRIGGER upload_failure AFTER DELETE ON media_pending_objects BEGIN INSERT INTO media_pending_objects VALUES(OLD.id,OLD.dataset_epoch,OLD.sha256,OLD.bytes,OLD.created_at,OLD.stage_name,OLD.stage_device,OLD.stage_inode,OLD.staging_device,OLD.staging_inode,OLD.object_device,OLD.object_inode); END`},
+		{"late removed pending", `CREATE TRIGGER upload_failure AFTER INSERT ON mutation_events WHEN NEW.operation='post_media' BEGIN DELETE FROM media_pending_objects WHERE id=(SELECT MIN(id) FROM media_pending_objects); END`},
+		{"late changed pending", `CREATE TRIGGER upload_failure AFTER INSERT ON mutation_events WHEN NEW.operation='post_media' BEGIN
+ INSERT INTO pending_shadow SELECT * FROM media_pending_objects WHERE id=(SELECT MIN(id) FROM media_pending_objects);
+ DELETE FROM media_pending_objects WHERE id=(SELECT id FROM pending_shadow);
+ INSERT INTO media_pending_objects SELECT id,dataset_epoch,sha256,bytes+1,created_at,stage_name,stage_device,stage_inode,staging_device,staging_inode,object_device,object_inode FROM pending_shadow;
+ END`},
 		{"ignored audit", `CREATE TRIGGER upload_failure BEFORE INSERT ON mutation_events WHEN NEW.operation='post_media' BEGIN SELECT RAISE(IGNORE); END`},
 		{"revoked session", `CREATE TRIGGER upload_failure AFTER INSERT ON media BEGIN UPDATE sessions SET revoked_at='2026-01-01T00:00:00Z'; END`},
 		{"changed epoch", `CREATE TRIGGER upload_failure AFTER INSERT ON media BEGIN UPDATE sync_state SET dataset_epoch=lower(hex(randomblob(16))) WHERE singleton=1; END`},
@@ -363,6 +367,9 @@ func TestStagedMediaUploadRollsBackEveryDurableDatabaseBoundary(t *testing.T) {
 			t.Parallel()
 			s, _, library, token, staging, objects := privateUploadFixture(t)
 			raw := privateUploadPNG(t, "private-marker")
+			if test.name == "late changed pending" {
+				execSQL(t, s.db, "CREATE TABLE pending_shadow AS SELECT * FROM media_pending_objects WHERE 0")
+			}
 			execSQL(t, s.db, test.trigger)
 			before := domainState(t, s)
 			if result, err := library.uploadStagedMedia(t.Context(), token, "rollback-upload-key", "image/png", raw, staging, objects); err == nil || result != (Media{}) {
@@ -383,10 +390,10 @@ func TestStagedMediaUploadRollsBackEveryDurableDatabaseBoundary(t *testing.T) {
 			if retry, err := library.uploadStagedMedia(t.Context(), token, "rollback-upload-key", "image/png", raw, staging, objects); err != nil || retry.Revision != 1 {
 				t.Fatal("explicit retry could not reuse safe orphaned objects", retry, err)
 			}
-			if scalar[int](t, s.db, "SELECT COUNT(*) FROM media_pending_objects") != 2 {
-				t.Fatal("retry silently discarded the earlier pending records")
+			if scalar[int](t, s.db, "SELECT COUNT(*) FROM media_pending_objects") != 4 {
+				t.Fatal("retry did not preserve both the earlier and newly published pending records")
 			}
-			requirePendingUploadStages(t, s, staging, 2)
+			requirePendingUploadStages(t, s, staging, 4)
 		})
 	}
 }
@@ -485,8 +492,8 @@ func TestStagedMediaUploadConcurrentKeysDeduplicate(t *testing.T) {
 				t.Fatal("concurrent deduplication produced duplicate source or missed an acknowledgement")
 			}
 			remaining := scalar[int](t, s.db, "SELECT COUNT(*) FROM media_pending_objects")
-			if remaining != 0 && (test.name != "same key" || remaining != 2) {
-				t.Fatal("unexpected pending rows after concurrent publication", remaining)
+			if remaining != 4 && (test.name != "same key" || remaining != 2) {
+				t.Fatal("concurrent publication lost recoverable stage proofs", remaining)
 			}
 			requirePendingUploadStages(t, s, staging, remaining)
 		})

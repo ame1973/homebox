@@ -143,8 +143,8 @@ func (library *MediaLibrary) uploadStagedMediaGuarded(ctx context.Context, token
 	if err != nil {
 		return Media{}, err
 	}
-	// Keep these inode-identifiable stages until their journal is consumed by a
-	// committed publication or a future reference-aware recovery process.
+	// Keep these inode-identifiable stages through publication and until a
+	// separate reference-aware recovery process completes durable cleanup.
 	if err = requireMediaDirectoryBinding(objectDir, objects); err != nil {
 		return Media{}, err
 	}
@@ -162,7 +162,6 @@ func (library *MediaLibrary) uploadStagedMediaGuarded(ctx context.Context, token
 	if err = verifyMediaObject(ctx, objects, promotedThumbnail.key, thumbnailDigest); err != nil {
 		return Media{}, err
 	}
-	consumed := false
 	var publicationTx *sql.Tx
 	var publicationCheck func() error
 	if guard != nil {
@@ -181,15 +180,11 @@ func (library *MediaLibrary) uploadStagedMediaGuarded(ctx context.Context, token
 		if guard != nil {
 			publicationTx = m.tx
 		}
-		if err = m.consumeMediaPending(pending); err != nil {
+		if err = m.retainMediaPending(pending); err != nil {
 			return Media{}, err
 		}
-		consumed = true
 		return value, nil
 	}, publicationCheck)
-	if err == nil && consumed {
-		preserveStages = false
-	}
 	return result, err
 }
 

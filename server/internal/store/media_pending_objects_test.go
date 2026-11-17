@@ -221,17 +221,17 @@ func TestMediaPendingJournalRechecksExpiryAfterFileIdentityValidation(t *testing
 	}
 }
 
-func consumeTestPending(t *testing.T, auth *Auth, token, key string, pending []pendingMediaObject) (ActionAck, error) {
+func retainTestPending(t *testing.T, auth *Auth, token, key string, pending []pendingMediaObject) (ActionAck, error) {
 	t.Helper()
-	return runDomainMutation(t.Context(), auth, token, key, "test_consume_pending", struct{}{}, func(m *mutationTx) (ActionAck, error) {
-		if err := m.consumeMediaPending(pending); err != nil {
+	return runDomainMutation(t.Context(), auth, token, key, "test_retain_pending", struct{}{}, func(m *mutationTx) (ActionAck, error) {
+		if err := m.retainMediaPending(pending); err != nil {
 			return ActionAck{}, err
 		}
 		return ActionAck{OK: true, OperationID: m.eventID, Revision: 1}, nil
 	})
 }
 
-func TestMediaPendingConsumeRequiresExactEpochAndOriginalRows(t *testing.T) {
+func TestMediaPendingRetentionRequiresExactEpochAndOriginalRows(t *testing.T) {
 	s, auth, library, token, staging, objectPath := privateUploadFixture(t)
 	stages, objects := pendingTestStages(t, staging, objectPath)
 	pending, err := library.journalMediaObjects(t.Context(), token, stages, objects)
@@ -252,28 +252,34 @@ func TestMediaPendingConsumeRequiresExactEpochAndOriginalRows(t *testing.T) {
 		altered := append([]pendingMediaObject(nil), pending...)
 		change(altered)
 		before := domainState(t, s)
-		if ack, err := consumeTestPending(t, auth, token, "bad-pending-consume", altered); !errors.Is(err, ErrDomainState) || ack != (ActionAck{}) {
-			t.Fatal("changed pending state was consumed", ack, err)
+		if ack, err := retainTestPending(t, auth, token, "bad-pending-retain", altered); !errors.Is(err, ErrDomainState) || ack != (ActionAck{}) {
+			t.Fatal("changed pending state was retained as a valid proof", ack, err)
 		}
 		requireDomainState(t, s, before)
 		if scalar[int](t, s.db, "SELECT COUNT(*) FROM media_pending_objects") != 2 {
-			t.Fatal("invalid consume removed a pending prefix")
+			t.Fatal("invalid retention removed a pending prefix")
 		}
 	}
-	first, err := consumeTestPending(t, auth, token, "good-pending-consume", pending)
-	if err != nil || !first.OK || scalar[int](t, s.db, "SELECT COUNT(*) FROM media_pending_objects") != 0 {
-		t.Fatal("actual pending set did not commit with the domain mutation", first, err)
+	first, err := retainTestPending(t, auth, token, "good-pending-retain", pending)
+	if err != nil || !first.OK || scalar[int](t, s.db, "SELECT COUNT(*) FROM media_pending_objects") != 2 {
+		t.Fatal("actual pending set was not retained with the domain mutation", first, err)
 	}
-	replay, err := consumeTestPending(t, auth, token, "good-pending-consume", pending)
+	// Original-key acknowledgement is independent of later journal cleanup.
+	execSQL(t, s.db, "DELETE FROM media_pending_objects")
+	replay, err := retainTestPending(t, auth, token, "good-pending-retain", pending)
 	if err != nil || replay != first || scalar[int](t, s.db, "SELECT COUNT(*) FROM media_pending_objects") != 0 {
-		t.Fatal("original-key replay incorrectly required the consumed pending rows", replay, err)
+		t.Fatal("original-key replay incorrectly required already cleaned pending rows", replay, err)
 	}
 }
 
-func TestMediaPendingConsumeRollsBackIgnoredDeleteAndLateReinsertion(t *testing.T) {
+func TestMediaPendingRetentionRollsBackLateRemovalAndReplacement(t *testing.T) {
 	for _, test := range []struct{ name, trigger string }{
-		{"ignored delete", `CREATE TRIGGER pending_failure BEFORE DELETE ON media_pending_objects BEGIN SELECT RAISE(IGNORE); END`},
-		{"late reinsert", `CREATE TRIGGER pending_failure AFTER INSERT ON mutation_events WHEN NEW.operation='test_consume_pending' BEGIN INSERT INTO media_pending_objects SELECT * FROM pending_shadow; END`},
+		{"late delete", `CREATE TRIGGER pending_failure AFTER INSERT ON mutation_events WHEN NEW.operation='test_retain_pending' BEGIN DELETE FROM media_pending_objects WHERE id=(SELECT MIN(id) FROM media_pending_objects); END`},
+		{"late replacement", `CREATE TRIGGER pending_failure AFTER INSERT ON mutation_events WHEN NEW.operation='test_retain_pending' BEGIN
+ INSERT INTO pending_shadow SELECT * FROM media_pending_objects WHERE id=(SELECT MIN(id) FROM media_pending_objects);
+ DELETE FROM media_pending_objects WHERE id=(SELECT id FROM pending_shadow);
+ INSERT INTO media_pending_objects SELECT id,dataset_epoch,sha256,bytes+1,created_at,stage_name,stage_device,stage_inode,staging_device,staging_inode,object_device,object_inode FROM pending_shadow;
+ END`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -283,17 +289,17 @@ func TestMediaPendingConsumeRollsBackIgnoredDeleteAndLateReinsertion(t *testing.
 			if err != nil {
 				t.Fatal(err)
 			}
-			if test.name == "late reinsert" {
-				execSQL(t, s.db, "CREATE TABLE pending_shadow AS SELECT * FROM media_pending_objects")
+			if test.name == "late replacement" {
+				execSQL(t, s.db, "CREATE TABLE pending_shadow AS SELECT * FROM media_pending_objects WHERE 0")
 			}
 			execSQL(t, s.db, test.trigger)
 			before := domainState(t, s)
-			if ack, err := consumeTestPending(t, auth, token, "pending-failure-key", pending); err == nil || ack != (ActionAck{}) {
-				t.Fatal("a failed pending consume returned an acknowledgement", ack, err)
+			if ack, err := retainTestPending(t, auth, token, "pending-failure-key", pending); err == nil || ack != (ActionAck{}) {
+				t.Fatal("a changed pending proof returned an acknowledgement", ack, err)
 			}
 			requireDomainState(t, s, before)
 			if scalar[int](t, s.db, "SELECT COUNT(*) FROM media_pending_objects") != 2 {
-				t.Fatal("pending consume failure lost an original row")
+				t.Fatal("pending retention failure lost an original row")
 			}
 		})
 	}

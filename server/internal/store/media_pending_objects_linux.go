@@ -228,51 +228,40 @@ func requireMediaPendingRow(ctx context.Context, tx *sql.Tx, expected pendingMed
 	return err
 }
 
-// consumeMediaPending runs inside the source publication transaction. The
-// retained original rows are checked before deletion and again after audit and
-// session activity so a late trigger cannot silently leave a different claim.
-func (m *mutationTx) consumeMediaPending(input []pendingMediaObject) error {
+func requireMediaPendingPair(ctx context.Context, tx *sql.Tx, input []pendingMediaObject) error {
 	if len(input) != 2 || input[0].ID == input[1].ID ||
 		input[0].StageDevice == input[1].StageDevice && input[0].StageInode == input[1].StageInode ||
 		input[0].StagingDevice != input[1].StagingDevice || input[0].StagingInode != input[1].StagingInode ||
 		input[0].ObjectDevice != input[1].ObjectDevice || input[0].ObjectInode != input[1].ObjectInode {
 		return ErrDomainState
 	}
-	pending := append([]pendingMediaObject(nil), input...)
-	epoch := pending[0].Epoch
+	epoch := input[0].Epoch
 	if !authString(epoch, 1, 128) {
 		return ErrDomainState
 	}
-	if err := requireMediaPendingEpoch(m.ctx, m.tx, epoch); err != nil {
+	if err := requireMediaPendingEpoch(ctx, tx, epoch); err != nil {
 		return err
 	}
-	for _, value := range pending {
+	for _, value := range input {
 		if !validPendingMediaObject(value) || value.Epoch != epoch {
 			return ErrDomainState
 		}
-		if err := requireMediaPendingRow(m.ctx, m.tx, value); err != nil {
+		if err := requireMediaPendingRow(ctx, tx, value); err != nil {
 			return err
 		}
 	}
-	for _, value := range pending {
-		if err := requireDomainRow(m.tx.ExecContext(m.ctx, "DELETE FROM media_pending_objects WHERE id=?", value.ID)); err != nil {
-			return err
-		}
+	return nil
+}
+
+// retainMediaPending binds publication to the exact sealed stages before and
+// after audit/session writes. Their journal remains until explicit recovery.
+func (m *mutationTx) retainMediaPending(input []pendingMediaObject) error {
+	pending := append([]pendingMediaObject(nil), input...)
+	if err := requireMediaPendingPair(m.ctx, m.tx, pending); err != nil {
+		return err
 	}
 	m.finalChecks = append(m.finalChecks, func() error {
-		if err := requireMediaPendingEpoch(m.ctx, m.tx, epoch); err != nil {
-			return err
-		}
-		for _, value := range pending {
-			var exists bool
-			if err := m.tx.QueryRowContext(m.ctx, "SELECT EXISTS(SELECT 1 FROM media_pending_objects WHERE id=?)", value.ID).Scan(&exists); err != nil {
-				return err
-			}
-			if exists {
-				return ErrDomainState
-			}
-		}
-		return nil
+		return requireMediaPendingPair(m.ctx, m.tx, pending)
 	})
 	return nil
 }

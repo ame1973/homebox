@@ -85,7 +85,7 @@ func TestStagedMediaUploadSanitizesWebPAndReconcilesExactRawRequests(t *testing.
 	if _, err = jpeg.Decode(bytes.NewReader(thumb)); err != nil {
 		t.Fatal("WebP thumbnail is not a JPEG", err)
 	}
-	requireEmptyUploadStages(t, staging)
+	requirePendingUploadStages(t, s, staging, 2)
 	replay, err := library.uploadStagedMedia(t.Context(), token, "webp-original-key", "image/webp", firstRaw, staging, objects)
 	if err != nil || !reflect.DeepEqual(first, replay) {
 		t.Fatal("exact WebP request could not reconcile its original key", replay, err)
@@ -97,8 +97,8 @@ func TestStagedMediaUploadSanitizesWebPAndReconcilesExactRawRequests(t *testing.
 	if err != nil || !reflect.DeepEqual(first, second) || scalar[int](t, s.db, "SELECT COUNT(*) FROM media") != 1 {
 		t.Fatal("same sanitized pixels were not deduplicated independently of raw request identity", second, err)
 	}
-	requireEmptyUploadStages(t, staging)
-	if scalar[int](t, s.db, "SELECT COUNT(*) FROM media_pending_objects") != 0 || scalar[int](t, s.db, "SELECT COUNT(*) FROM media_links") != 0 {
-		t.Fatal("WebP publication retained pending rows or silently attached an owner")
+	requirePendingUploadStages(t, s, staging, 4)
+	if scalar[int](t, s.db, "SELECT COUNT(*) FROM media_pending_objects") != 4 || scalar[int](t, s.db, "SELECT COUNT(*) FROM media_links") != 0 {
+		t.Fatal("WebP publication lost recovery proofs or silently attached an owner")
 	}
 }
