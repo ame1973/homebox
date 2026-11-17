@@ -25,7 +25,7 @@ func anonymousTestStage(t *testing.T, dir string, limit int64) *mediaStage {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		if err := stage.discard(); err != nil {
+		if err := stage.discard(); err != nil && !errors.Is(err, errMediaStageClosed) {
 			t.Errorf("discard anonymous stage: %v", err)
 		}
 	})

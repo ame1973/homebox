@@ -21,6 +21,8 @@
 
 ### Added
 
+- Link a sealed anonymous Media inode only inside a mutation that revalidates its previously committed journal, actual bytes and directory identities, and rechecks the retained journal after audit/session writes. Preserve partially linked stages for explicit recovery and test real process exit after linking and promotion. This internal helper is not yet wired to the upload transaction.
+
 - Journal the exact inode and intended name of a sealed, still-anonymous Media stage without linking it. Explicit recovery can reconcile a missing stage after producer exit when actual reference checks permit it; an unrelated same-digest object is never claimed. Linking after journal commit and use by the upload transaction remain unfinished.
 
 - Add a separate internal Linux anonymous Media stage that remains unnamed through sealing, rejects unavailable filesystems rather than silently creating a named stage, and never unlinks a conflicting name or unexpected hard link. Subprocess tests exercise exit before and after seal; the current upload transaction does not yet use this primitive, and durable journal integration remains unfinished.

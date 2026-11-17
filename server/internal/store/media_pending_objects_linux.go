@@ -66,6 +66,10 @@ func journalStage(stage *mediaStage, objects mediaDirectoryIdentity) (pendingMed
 	}
 	stage.mu.Lock()
 	defer stage.mu.Unlock()
+	return journalStageLocked(stage, objects)
+}
+
+func journalStageLocked(stage *mediaStage, objects mediaDirectoryIdentity) (pendingMediaObject, error) {
 	if err := stage.checkPromotion(); err != nil {
 		return pendingMediaObject{}, err
 	}
