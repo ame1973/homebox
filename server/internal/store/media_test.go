@@ -312,6 +312,7 @@ func TestMediaEmptyLocationDeletionRejectsLinksIntroducedAfterItsInitialRead(t *
 }
 
 func TestMediaOwnerDeletionChecksAllSiblingLinksBeyondOnePage(t *testing.T) {
+	t.Parallel()
 	fixture := newMediaCascadeFixture(t, "location")
 	s := fixture.store
 	for index := range 205 {

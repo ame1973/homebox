@@ -146,6 +146,7 @@ func TestAssetEventsValidateCompleteSourceAndEverySafePublishedTotal(t *testing.
 }
 
 func TestAssetEventsCompleteLargeSignedHistoryWithoutInt64OrCachedAuthority(t *testing.T) {
+	t.Parallel()
 	fixture, asset := manualAssetFixture(t, 0)
 	s := fixture.store
 	tx, err := s.db.BeginTx(t.Context(), nil)

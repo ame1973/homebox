@@ -307,6 +307,7 @@ func TestMediaLinkPatchConcurrentRequestsRespectItsOriginalIndependentProof(t *t
 }
 
 func TestMediaLinkPatchRollsBackLateTamperingForChangedAndEqualIntents(t *testing.T) {
+	t.Parallel()
 	for _, failure := range []struct {
 		name, setup string
 		want        error
@@ -334,6 +335,7 @@ func TestMediaLinkPatchRollsBackLateTamperingForChangedAndEqualIntents(t *testin
 				continue
 			}
 			t.Run(fmt.Sprintf("%s/equal=%t", failure.name, equal), func(t *testing.T) {
+				t.Parallel()
 				fixture, library, _ := mediaLibraryFixture(t, "item")
 				caption := "New reviewed caption"
 				if equal {
@@ -381,9 +383,11 @@ func TestMediaLinkPatchEqualIntentRechecksUnitAndLocationAuthority(t *testing.T)
 }
 
 func TestMediaLinkPatchValidatesMembershipBeyondOnePage(t *testing.T) {
+	t.Parallel()
 	for _, scope := range []string{"media", "owner"} {
 		for _, equal := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/equal=%t", scope, equal), func(t *testing.T) {
+				t.Parallel()
 				fixture, library, _ := mediaLibraryFixture(t, "location")
 				if scope == "media" {
 					seedMediaLinkBatch(t, fixture.store, "item_id", "shared-a", fixture.siblingID, "media-patch-sibling-", 205)

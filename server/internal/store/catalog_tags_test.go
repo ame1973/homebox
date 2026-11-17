@@ -165,6 +165,7 @@ func TestCatalogTagsNoopOriginalFieldOrderAndInputCopyRemainExplicit(t *testing.
 }
 
 func TestCatalogTagsLargeLegacyMembershipIsNotTruncatedAndUnicodePairsStayCanonical(t *testing.T) {
+	t.Parallel()
 	s, catalog, auth, token := catalogFixture(t)
 	_, tags := catalogTags(t, auth, token, 205)
 	item := createCatalogItem(t, catalog, token, ItemCreate{Name: "LegacyOwner"})

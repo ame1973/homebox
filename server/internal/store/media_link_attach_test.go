@@ -386,6 +386,7 @@ func TestMediaAttachRevalidatesSessionAndReplaysAfterFreshLogin(t *testing.T) {
 }
 
 func TestMediaAttachRollsBackLateTamperingAndRetriesOriginalKey(t *testing.T) {
+	t.Parallel()
 	failures := []struct {
 		name, trigger string
 		want          error
@@ -411,6 +412,7 @@ func TestMediaAttachRollsBackLateTamperingAndRetriesOriginalKey(t *testing.T) {
 	for _, ownerType := range []string{"item", "unit", "location"} {
 		for _, failure := range failures {
 			t.Run(ownerType+"/"+failure.name, func(t *testing.T) {
+				t.Parallel()
 				fixture, library, input := mediaLibraryFixture(t, ownerType)
 				execSQL(t, fixture.store.db, failure.trigger)
 				before := domainState(t, fixture.store)
@@ -432,9 +434,11 @@ func TestMediaAttachRollsBackLateTamperingAndRetriesOriginalKey(t *testing.T) {
 }
 
 func TestMediaAttachRejectsIgnoredOwnerWritesAndLateOwnerTampering(t *testing.T) {
+	t.Parallel()
 	for _, ownerType := range []string{"item", "unit", "location"} {
 		for _, failure := range []string{"ignored timestamp", "late owner source", "late owner projection"} {
 			t.Run(ownerType+"/"+failure, func(t *testing.T) {
+				t.Parallel()
 				fixture, library, input := mediaLibraryFixture(t, ownerType)
 				var table, idField, kind string
 				switch ownerType {
@@ -474,8 +478,10 @@ func TestMediaAttachRejectsIgnoredOwnerWritesAndLateOwnerTampering(t *testing.T)
 }
 
 func TestMediaAttachValidatesMembershipBeyondOnePage(t *testing.T) {
+	t.Parallel()
 	for _, scope := range []string{"media", "owner"} {
 		t.Run(scope, func(t *testing.T) {
+			t.Parallel()
 			fixture, library, input := mediaLibraryFixture(t, "location")
 			if scope == "media" {
 				seedMediaLinkBatch(t, fixture.store, "item_id", "shared-a", fixture.siblingID, "media-attach-sibling-", 205)

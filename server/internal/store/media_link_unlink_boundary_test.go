@@ -179,6 +179,7 @@ func TestMediaLinkUnlinkConcurrentRequestsRespectItsOriginalProof(t *testing.T) 
 }
 
 func TestMediaLinkUnlinkRollsBackLateTamperingAndRetriesOriginalKey(t *testing.T) {
+	t.Parallel()
 	for _, failure := range []struct {
 		name, setup string
 		want        error
@@ -208,6 +209,7 @@ func TestMediaLinkUnlinkRollsBackLateTamperingAndRetriesOriginalKey(t *testing.T
 		{"deferred commit", `CREATE TABLE media_unlink_guard(id TEXT REFERENCES admin_accounts(id) DEFERRABLE INITIALLY DEFERRED) STRICT; CREATE TRIGGER fail_unlink AFTER INSERT ON mutation_events WHEN NEW.operation='delete_media_links_id' BEGIN INSERT INTO media_unlink_guard VALUES('missing'); END`, nil},
 	} {
 		t.Run(failure.name, func(t *testing.T) {
+			t.Parallel()
 			fixture, library, _ := mediaLibraryFixture(t, "item")
 			execSQL(t, fixture.store.db, failure.setup)
 			before := domainState(t, fixture.store)
@@ -228,8 +230,10 @@ func TestMediaLinkUnlinkRollsBackLateTamperingAndRetriesOriginalKey(t *testing.T
 }
 
 func TestMediaLinkUnlinkValidatesMembershipBeyondOnePage(t *testing.T) {
+	t.Parallel()
 	for _, scope := range []string{"media", "owner"} {
 		t.Run(scope, func(t *testing.T) {
+			t.Parallel()
 			fixture, library, _ := mediaLibraryFixture(t, "location")
 			if scope == "media" {
 				seedMediaLinkBatch(t, fixture.store, "item_id", "shared-a", fixture.siblingID, "media-unlink-sibling-", 205)
