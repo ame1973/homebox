@@ -21,6 +21,7 @@ const PurchasePage = lazy(() => import('@/features/purchases/purchase-page'))
 const AssetPage = lazy(() => import('@/features/assets/asset-page'))
 const MediaPage = lazy(() => import('@/features/media/media-page'))
 const ScanPage = lazy(() => import('@/features/scan/scan-page'))
+const CapturePage = lazy(() => import('@/features/capture/capture-page'))
 const DisposalCorrectionPage = lazy(() => import('@/features/financial-corrections/disposal-page'))
 const PurchaseCorrectionHistoryPage = lazy(() => import('@/features/financial-corrections/purchase-history-page'))
 const PurchaseCorrectionPage = lazy(() => import('@/features/financial-corrections/purchase-page'))
@@ -36,7 +37,7 @@ export default function App() {
   const restoreGuard = useRef(false)
   const restoreFocus = useRef(false)
   const [restoration, setRestoration] = useState<'active' | 'suspended' | 'checking'>('active')
-  const [restoreKind, setRestoreKind] = useState<'scan' | 'item'>('scan')
+  const [restoreKind, setRestoreKind] = useState<'scan' | 'item' | 'capture'>('scan')
   const [restoreGeneration, setRestoreGeneration] = useState(0)
   useEffect(() => {
     if (restoration === 'active' && (previousPath.current !== location.pathname || restoreFocus.current)) {
@@ -61,14 +62,14 @@ export default function App() {
       const marker: unknown = location.state?.scanToken
       const scanMarker = typeof marker === 'string' && marker.length === 36
       const guarded = restoreGuard.current
-      if (!guarded && location.pathname !== '/scan' && location.pathname !== '/items/new' && !scanMarker) return
+      if (!guarded && location.pathname !== '/scan' && location.pathname !== '/items/new' && location.pathname !== '/photos/capture' && !scanMarker) return
       restoreGuard.current = true
       // Wipe only this page's volatile state; suspension is not a logout in
       // another tab. Commit the redacted screen before the browser freezes it.
       notifyPageSuspended()
       flushSync(() => {
         clearBarcodeHandoff()
-        if (!guarded) setRestoreKind(location.pathname === '/items/new' && !scanMarker ? 'item' : 'scan')
+        if (!guarded) setRestoreKind(location.pathname === '/photos/capture' ? 'capture' : location.pathname === '/items/new' && !scanMarker ? 'item' : 'scan')
         setRestoration('suspended')
       })
       void client.cancelQueries()
@@ -141,6 +142,7 @@ export default function App() {
               <Route path="/units/:id/status" element={<HoldingPage key={location.key} mode="status-unit" />} />
               {(['receive', 'consume', 'transfer', 'adjust'] as const).map((action) => <Route key={action} path={`/items/:id/stock/${action}`} element={<HoldingPage key={location.key} mode="stock" action={action} />} />)}
               <Route path="/photos" element={<MediaPage key={location.key} mode="list" />} />
+              <Route path="/photos/capture" element={<CapturePage key={location.key} />} />
               <Route path="/photos/attach" element={<MediaPage key={location.key} mode="attach" />} />
               <Route path="/photos/edit" element={<MediaPage key={location.key} mode="edit" />} />
               <Route path="/purchases" element={<PurchasePage key={location.key} mode="list" />} />

@@ -13,7 +13,7 @@ import { catalogNavigationState, catalogRoute } from '@/lib/catalog-navigation'
 import { assetNavigationState } from '@/lib/asset-navigation'
 import { unitRoute } from '@/lib/holding-navigation'
 import { locationReturnPath, locationRoute } from '@/lib/location-navigation'
-import { mediaAttachRoute, mediaEditRoute, mediaEditScope, mediaOwnerRoute, mediaOwnerScope, mediaReturnPath, type MediaRouteScope } from '@/lib/media-navigation'
+import { mediaAttachRoute, mediaCaptureRoute, mediaEditRoute, mediaEditScope, mediaOwnerRoute, mediaOwnerScope, mediaReturnPath, type MediaRouteScope } from '@/lib/media-navigation'
 import { messages } from '@/lib/messages'
 import { useOnline } from '@/lib/use-online'
 import { clearSessionQueries } from '@/features/auth/use-auth-action'
@@ -140,7 +140,8 @@ export default function MediaPage({ mode }: { mode: 'list' | 'edit' | 'attach' }
               : mode === 'attach' ? <MediaAttachEditor current={current} membership={currentMembership} selectedID={selectedMediaID} onLookup={lookupMedia} onSessionLost={pickerSessionLost} operation={operation} online={online} canLookup={canLookup} canWrite={canWrite} loading={membership.isFetching} />
               : <div className="grid min-w-0 items-start gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(15rem,1fr)]">
               <section className="min-w-0 space-y-4" aria-labelledby="media-list-title"><div className="flex flex-wrap items-baseline justify-between gap-2"><h2 id="media-list-title" className="text-xl font-semibold">{text.list}</h2><p className="text-sm text-muted-foreground">{text.total}{links.length}</p></div>
-                {scope && canWrite && operation.phase !== 'pending' && operation.phase !== 'uncertain' ? <Button asChild variant="outline" className={control}><Link to={mediaAttachRoute(scope)} state={navigationState}>{text.attach}</Link></Button> : <Button type="button" variant="outline" disabled className={control}>{text.attach}</Button>}
+                <div className="flex flex-wrap gap-2">{scope && canWrite && operation.phase !== 'pending' && operation.phase !== 'uncertain' ? <Button asChild variant="outline" className={control}><Link to={mediaAttachRoute(scope)} state={navigationState}>{text.attach}</Link></Button> : <Button type="button" variant="outline" disabled className={control}>{text.attach}</Button>}
+                  {scope && authorized && auth.isFetchedAfterMount && !transitioning && !denied && (!online || !auth.isFetching && !auth.isError) ? <Button asChild variant="outline" className={control}><Link to={mediaCaptureRoute(scope)}>{text.capture}</Link></Button> : <Button type="button" variant="outline" disabled className={control}>{text.capture}</Button>}</div>
                 {links.length === 0 ? <div className="space-y-2 border-y py-6"><h3 className="text-lg font-semibold">{text.empty}</h3><p className="text-base text-muted-foreground">{text.emptyHelp}</p></div>
                   : <ul aria-label={text.list} className="divide-y border-y">{links.map((link) => {
                     const editable = !!scope && canWrite && operation.phase !== 'pending' && operation.phase !== 'uncertain'

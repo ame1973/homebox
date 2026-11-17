@@ -23,6 +23,8 @@
 
 ### Added
 
+- Add an owner-scoped, volatile photo-capture screen with real gesture-started camera, original-pixel crop/rotation preview, up to ten photos, ordering, explicit cover and description. Warn that photos are not saved or uploaded; clear them and stop camera tracks on suspension or delivered session loss. File selection, persistent drafts, upload and physical-device acceptance remain unfinished.
+
 - Add an explicitly started, Store-owned Media file service that notifies the recovery worker after successful, failed or canceled upload attempts. The Store waits for admitted uploads and the worker before closing Media storage and SQLite. Recovery failure remains latched until explicit retry; uploads can still publish while blocked and leave pending cleanup. This service is not yet wired to HTTP or server startup.
 
 - Add an internal, single-owner Media recovery worker that starts an audited pass when explicitly created, processes ten rows per batch, coalesces later notifications and latches failures until explicit retry. It exposes only bounded failure categories and must stop before its storage owner closes. It is not yet connected to server startup, upload HTTP or an operator interface.
@@ -31,7 +33,7 @@
 
 - Inspect a bounded private Media staging directory against current journaled names and inode metadata under the storage lock. Unknown, substituted, stale or unsafe entries fail closed without deletion or a partial count. This is an explicit internal audit, not file-integrity verification, automatic recovery or an HTTP endpoint.
 
-- Model a volatile album of up to ten in-memory camera captures with a 64-MiB encoded-source budget, explicit cover choice, ordering, retake, raw descriptions and original-pixel crop/rotation. This does not provide a capture screen, persistent offline drafts, file import or upload.
+- Model a volatile album of up to ten in-memory camera captures with a 64-MiB encoded-source budget, explicit cover choice, ordering, retake, raw descriptions and original-pixel crop/rotation. The model alone does not provide a capture screen, persistent offline drafts, file import or upload.
 
 - Link a sealed anonymous Media inode only inside a mutation that revalidates its previously committed journal, actual bytes and directory identities, and rechecks the retained journal after audit/session writes. Preserve partially linked stages for explicit recovery and test real process exit after linking and promotion. The private upload transaction uses this helper; it is not an HTTP route.
 

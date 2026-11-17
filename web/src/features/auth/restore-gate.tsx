@@ -10,7 +10,7 @@ const text = messages.scan
 const control = 'min-h-12 h-auto max-w-full whitespace-normal py-3 text-base leading-normal'
 
 export function RestoreGate({ kind = 'scan', restored, generation, returnPath, onLeave }: {
-  kind?: 'scan' | 'item'; restored: boolean; generation: number; returnPath: string; onLeave: () => void
+  kind?: 'scan' | 'item' | 'capture'; restored: boolean; generation: number; returnPath: string; onLeave: () => void
 }) {
   const heading = useRef<HTMLHeadingElement>(null)
   const auth = useQuery({ queryKey: ['auth', 'bfcache-check', generation, returnPath], enabled: restored,
@@ -32,11 +32,13 @@ export function RestoreGate({ kind = 'scan', restored, generation, returnPath, o
   const expired = auth.data?.kind === 'expired'
   const returnTo = auth.data?.returnTo ?? '/items'
   const scan = kind === 'scan'
+  const title = scan ? text.restoreTitle : kind === 'capture' ? messages.capture.restoreTitle : messages.catalog.restorePageTitle
+  const help = scan ? text.restoreHelp : kind === 'capture' ? messages.capture.restoreHelp : messages.catalog.restorePageHelp
   const scanNotice = scan ? { notice: 'scanHandoffLost' } : {}
   return <main id="main" className="safe-page mx-auto min-h-dvh max-w-3xl space-y-6 py-8">
     <div className="flex justify-end"><ThemeMenu /></div>
-    <h1 ref={heading} tabIndex={-1} className="rounded-sm text-3xl font-semibold focus-visible:outline-2 focus-visible:outline-ring">{scan ? text.restoreTitle : messages.catalog.restorePageTitle}</h1>
-    <Alert className="p-4"><AlertDescription className="text-base leading-relaxed">{scan ? text.restoreHelp : messages.catalog.restorePageHelp}</AlertDescription></Alert>
+    <h1 ref={heading} tabIndex={-1} className="rounded-sm text-3xl font-semibold focus-visible:outline-2 focus-visible:outline-ring">{title}</h1>
+    <Alert className="p-4"><AlertDescription className="text-base leading-relaxed">{help}</AlertDescription></Alert>
     {!restored || auth.isPending || auth.isFetching ? <p role="status">{restored ? messages.auth.checking : text.restoreWaiting}</p>
       : mandatory ? <div className="space-y-4"><Alert role="alert" className="p-4"><AlertTitle>{messages.auth.mandatory}</AlertTitle><AlertDescription className="text-base">{messages.auth.mandatoryHelp}</AlertDescription></Alert><Button asChild className={control}><Link to="/settings/account" state={{ ...scanNotice, returnTo }} onClick={onLeave}>{text.restorePassword}</Link></Button></div>
         : expired ? <div className="space-y-4"><Alert role="alert" className="p-4"><AlertDescription className="text-base">{messages.auth.expired}</AlertDescription></Alert><Button asChild className={control}><Link to="/login" state={{ notice: scan ? 'scanHandoffLost' : 'expired', returnTo }} onClick={onLeave}>{text.signIn}</Link></Button></div>

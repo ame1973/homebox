@@ -19,6 +19,11 @@ export function mediaAttachRoute(scope: MediaRouteScope): string {
   return `/photos/attach?${new URLSearchParams({ owner_type: checked.kind, owner_id: checked.id })}`
 }
 
+export function mediaCaptureRoute(scope: MediaRouteScope): string {
+  const checked = input(scopeSchema, scope)
+  return `/photos/capture?${new URLSearchParams({ owner_type: checked.kind, owner_id: checked.id })}`
+}
+
 export function mediaEditRoute(scope: MediaEditScope): string {
   const checked = input(editScopeSchema, scope)
   return `/photos/edit?${new URLSearchParams({ owner_type: checked.kind, owner_id: checked.id, link_id: checked.linkID })}`
@@ -53,9 +58,9 @@ export function mediaReturnPath(value: unknown): string | undefined {
   try {
     const url = new URL(value, 'https://homebox.invalid')
     if (url.origin !== 'https://homebox.invalid' || url.pathname + url.search !== value) return undefined
-    if (url.pathname === '/photos' || url.pathname === '/photos/attach') {
+    if (url.pathname === '/photos' || url.pathname === '/photos/attach' || url.pathname === '/photos/capture') {
       const scope = mediaOwnerScope(url.search)
-      return scope ? url.pathname === '/photos' ? mediaOwnerRoute(scope) : mediaAttachRoute(scope) : undefined
+      return scope ? url.pathname === '/photos' ? mediaOwnerRoute(scope) : url.pathname === '/photos/attach' ? mediaAttachRoute(scope) : mediaCaptureRoute(scope) : undefined
     }
     if (url.pathname === '/photos/edit') {
       const scope = mediaEditScope(url.search)

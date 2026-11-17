@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest'
 import { applicationReturnPath } from './settings-navigation'
-import { mediaAttachRoute, mediaEditRoute, mediaEditScope, mediaOwnerRoute, mediaOwnerScope, mediaReturnPath } from './media-navigation'
+import { mediaAttachRoute, mediaCaptureRoute, mediaEditRoute, mediaEditScope, mediaOwnerRoute, mediaOwnerScope, mediaReturnPath } from './media-navigation'
 
 const examples = [
   { kind: 'item', id: 'new' }, { kind: 'unit', id: 'unit/\0😀' }, { kind: 'location', id: 'tree' },
@@ -53,6 +53,23 @@ it('normalizes attachment return identities without retaining a selected Media o
   for (const invalid of ['/photos/attach', '/photos/attach?owner_type=item', '/photos/attach?owner_type=item&owner_id=x&media_id=photo',
     '/photos/attach?owner_type=item&owner_id=x&description=private', '/photos/attach?owner_type=item&owner_id=x&owner_id=y',
     '/photos/attach?owner_type=item&owner_id=%FF', '/photos/attach?owner_type=item&owner_id=x#fragment']) {
+    expect(mediaReturnPath(invalid)).toBeUndefined()
+    expect(applicationReturnPath(invalid)).toBeUndefined()
+  }
+})
+
+it.each(examples)('round-trips the exact $kind owner through capture and login without any draft data', (scope) => {
+  const path = mediaCaptureRoute(scope)
+  expect(path.startsWith('/photos/capture?')).toBe(true)
+  expect(mediaOwnerScope(path.slice('/photos/capture'.length))).toEqual(scope)
+  expect(mediaReturnPath(path)).toBe(path)
+  expect(applicationReturnPath(path)).toBe(path)
+})
+
+it('rejects capture returns with an image, description or unvalidated owner', () => {
+  for (const invalid of ['/photos/capture', '/photos/capture?owner_type=item', '/photos/capture?owner_type=item&owner_id=x&photo=private',
+    '/photos/capture?owner_type=item&owner_id=x&description=private', '/photos/capture?owner_type=item&owner_id=x&owner_id=y',
+    '/photos/capture?owner_type=item&owner_id=%FF', '/photos/capture?owner_type=item&owner_id=x#fragment']) {
     expect(mediaReturnPath(invalid)).toBeUndefined()
     expect(applicationReturnPath(invalid)).toBeUndefined()
   }
