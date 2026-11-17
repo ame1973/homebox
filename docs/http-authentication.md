@@ -15,6 +15,8 @@ make setup-web build-web build
 
 Startup prints `listening`, `public_origin`, `version`, and `build_id`, never credentials. Open exactly the printed origin; `localhost` and `127.0.0.1` are different browser origins. The default is `http://127.0.0.1:8080`. Authentication over HTTP is limited to an actual loopback socket peer and a configured loopback IP or `localhost`, without proxy trust. Only this development mode omits the cookie's Secure attribute. Forged forwarding headers do not turn a LAN client into a loopback client.
 
+On `SIGTERM` or interrupt, the server stops admitting requests and allows ten seconds for graceful HTTP shutdown. If that deadline expires it closes active connections, then still waits for all previously admitted handlers to return before closing SQLite. A handler stuck in an uninterruptible operation can extend that final wait; configure process-supervisor timeouts accordingly. A client disconnected during a write must reconcile its original request key rather than assume that cancellation rolled back a commit.
+
 Open `/setup` for first-time provisioning, `/login` to sign in, and `/settings/account` for password change or logout. These routes have the same capabilities on phone, tablet, and desktop. Read the bootstrap token only through a trusted private channel; never put it in a URL, shell history, issue, screenshot, or log. Its 30-minute expiry and no-overwrite delivery behavior are described in [Security](security.md). Setup creates the account but never pretends to sign it in.
 
 ## Direct HTTPS

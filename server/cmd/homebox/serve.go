@@ -115,8 +115,9 @@ func serve(ctx context.Context, args []string, stdout, stderr io.Writer) (finalE
 	if err != nil {
 		return err
 	}
+	drain := newDrainingHandler(handler)
 	server := &http.Server{
-		Handler:           handler,
+		Handler:           drain,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,
@@ -124,7 +125,11 @@ func serve(ctx context.Context, args []string, stdout, stderr io.Writer) (finalE
 		MaxHeaderBytes:    64 << 10,
 		TLSConfig:         &tls.Config{MinVersion: tls.VersionTLS12, Certificates: certificates},
 	}
-	defer server.Close()
+	defer func() {
+		drain.stop()
+		_ = server.Close()
+		drain.wait()
+	}()
 	if err = json.NewEncoder(stdout).Encode(map[string]string{
 		"listening": listener.Addr().String(), "public_origin": *origin, "version": version, "build_id": buildID,
 	}); err != nil {
@@ -142,6 +147,7 @@ func serve(ctx context.Context, args []string, stdout, stderr io.Writer) (finalE
 	case err = <-result:
 		return err
 	case <-ctx.Done():
+		drain.stop()
 		shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err = server.Shutdown(shutdown); err != nil {
