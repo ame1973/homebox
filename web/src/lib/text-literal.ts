@@ -1,3 +1,15 @@
+// Match JSON Schema/Go code-point lengths without normalization or silent lone
+// UTF-16 surrogate repair. Callers still own semantic field validation.
+export function validText(value: string, minimum: number, maximum: number): boolean {
+  if (value.length > maximum * 2) return false
+  let length = 0
+  for (const character of value) {
+    if (character.length === 1 && character.charCodeAt(0) >= 0xD800 && character.charCodeAt(0) <= 0xDFFF) return false
+    length++
+  }
+  return length >= minimum && length <= maximum
+}
+
 // JSON.stringify escapes C0 controls but leaves C1, format controls and other
 // default-ignorable code points invisible. Escape them as UTF-16 code units.
 function hiddenCharacter(character: string): boolean {

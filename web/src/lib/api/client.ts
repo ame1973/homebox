@@ -59,17 +59,7 @@ export async function fetchHealth(signal: AbortSignal): Promise<components['sche
   return healthSchema.parse(data)
 }
 
-// Match JSON Schema/Go code-point lengths without normalization or silent lone
-// UTF-16 surrogate repair. The caller still owns semantic field validation.
-export function validText(value: string, minimum: number, maximum: number): boolean {
-  if (value.length > maximum * 2) return false
-  let length = 0
-  for (const character of value) {
-    if (character.length === 1 && character.charCodeAt(0) >= 0xD800 && character.charCodeAt(0) <= 0xDFFF) return false
-    length++
-  }
-  return length >= minimum && length <= maximum
-}
+export { validText } from '../text-literal'
 
 const serverCodes = z.enum([
   'AUTHENTICATION_REQUIRED', 'CSRF_REJECTED', 'PASSWORD_CHANGE_REQUIRED', 'CREDENTIALS_REJECTED',

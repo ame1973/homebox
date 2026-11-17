@@ -1,4 +1,4 @@
-import { validText } from './api/client'
+import { validText } from './text-literal'
 
 const nativeFormats = {
   qr_code: 'QR_CODE', ean_13: 'EAN_13', ean_8: 'EAN_8', upc_a: 'UPC_A', upc_e: 'UPC_E', code_128: 'CODE_128',

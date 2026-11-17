@@ -2,6 +2,8 @@
 
 This is the same-origin React/TypeScript application served by the Go executable. It provides real server liveness, administrator setup/login/forced-password-change/logout, responsive location hierarchy/detail/editor/move/archive/restore/delete, reviewed category/tag settings, and catalog metadata list/detail/create/edit/archive/restore/delete plus owned barcode/alias/attribute/Tag maintenance, reviewed physical Unit/Stock workflows and responsive purchase list/detail/create/correction/allocation/Item-associated screens and reviewed allocation-correction history/void/replacement, and reviewed Asset profile/history/lifecycle/current-posted cost screens, plus actual Item/Unit/Location Media-link lists and explicit edit/unlink review. It does not simulate inventory or expose unimplemented contents/image-file/history/QR actions. The service worker, offline replica, persistent drafts, camera, privileged reauthentication consumers, and remaining domain flows are still being built.
 
+The internal ZXing pixel decoder is groundwork, not yet connected to the live camera. It tests separate EAN-13/UPC-A interpretations, bounded inputs and an independently checked UPC-E reader; it does not imply real-device acceptance. The bundled dependency licenses are included in [`public/licenses/`](public/licenses/).
+
 ## Install and run
 
 Use Linux/WSL2, Node 24.14.1 (see `../.node-version`), npm 11.14.1, and the Go version in `../server/go.mod`. From the repository root:
