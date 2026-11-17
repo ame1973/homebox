@@ -17,6 +17,8 @@ declare global { interface Window { __nativeScanProbe: NativeScanProbe } }
 // The camera itself remains Chromium's real fake-device MediaStream.
 export async function installNativeProbe(page: Page) {
   await page.addInitScript(() => {
+    // These cases isolate the native lifecycle; separate tests use the real fallback worker.
+    Object.defineProperty(window, 'Worker', { configurable: true, value: undefined })
     const probe: NativeScanProbe = { calls: 0, requested: [], frames: [], tracks: [], queue: [], hold: false, fail: false }
     window.__nativeScanProbe = probe
     const devices = navigator.mediaDevices

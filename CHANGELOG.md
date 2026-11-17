@@ -19,11 +19,19 @@
 
 ### Added
 
+- Use a bounded, terminable local ZXing worker for QR/EAN/UPC/Code 128 formats missing from the browser-native scanner. Show actual native and fallback coverage, retain independent EAN-13/UPC-A interpretations and require explicit result selection and lookup. Real-Go/Chromium tests exercise synthetic fake-camera pixels and session/BFCache cleanup; image-file scanning and physical-device acceptance remain unfinished.
+
+- Serve only the three named bundled ZXing and transitive-dependency license notices from the Go application, without exposing arbitrary text files or directory listings. Verify the served bytes against the installed dependency licenses.
+
+- Decode and sanitize static lossy/lossless WebP, including transparency and EXIF orientation, through the private Media image processor and staged transaction. Validate complete RIFF framing, reject animation and ambiguous metadata, strip GPS and re-encode decoded pixels as PNG; thumbnails remain separate JPEGs. Raw request fingerprints still bind the original WebP bytes and MIME. This does not enable the production upload handler or prove physical-device acceptance.
+
+- Add private, explicitly paged per-object Media recovery for journaled stages. Recheck database/epoch/directory ownership, actual stage/object inode and bytes, all Media original/thumbnail claims, projections/counters and other pending rows. Delete only a proven unreferenced hard-linked object, preserve shared or unproven files, synchronize attempted unlinks and allow explicit reconciliation after interrupted cleanup. This is not a startup coordinator, unjournaled-stage cleanup, HTTP route or power-loss acceptance.
+
 - Add an internal Linux Media storage owner with a private database-instance marker, cooperative exclusive lock, anchored directory revalidation and guarded staged uploads. Reconcile original-key receipts before checking current files, and reject late ownership changes before publication. Copied markers and shared mounts do not establish safe deletion authority; recovery, HTTP admission and the upload route remain unimplemented.
 
 - Journal each sealed Media stage's sanitized digest, exact inode, directory identities and dataset epoch before promotion. Consume matching rows atomically with publication, preserve stages after failures or uncertain commits, and reject substituted object directories. Pending rows do not prove ownership of existing objects; automatic recovery and the HTTP upload remain unimplemented.
 
-- Connect real JPEG/PNG sanitization, private stages, verified content-addressed objects and atomic Media/thumbnail SQLite publication in an internal upload transaction. Preserve exact original-key reconciliation, reject legacy storage collisions and recheck actual source, membership and files after audit/session writes. HTTP admission, crash recovery, streams and WebP remain unimplemented.
+- Connect real JPEG/PNG sanitization, private stages, verified content-addressed objects and atomic Media/thumbnail SQLite publication in an internal upload transaction. Preserve exact original-key reconciliation, reject legacy storage collisions and recheck actual source, membership and files after audit/session writes. At that increment HTTP admission, crash recovery, streams and WebP remained unimplemented.
 
 - Retain bounded private JPEG-thumbnail source metadata independently from Media, with verified-parent and immutable-owner guards, shared digest lookup, source validation and late link/owner-deletion rollback. Migration preserves older claims and frozen bytes without inventing thumbnails; actual upload, files and streams remain unimplemented.
 
@@ -41,7 +49,7 @@
 
 - Add an internal Linux private-media staging writer with exclusive random `0600` files, bounded output, anchored directory/inode checks, actual-byte SHA-256 verification, file/directory synchronization and retryable explicit cleanup. Tests cover real sanitizer output, concurrency, cancellation, tampering, permissions and process exit without cleanup. At that increment this did not enable upload, image validation by itself, promotion, recovery, streaming or WebP.
 
-- Connect native `BarcodeDetector` support to the explicitly opened `/scan` camera. Report supported and missing formats, stop on results or errors, preserve and separately display exact returned values, require explicit selection and manual lookup, and offer only validated same-origin Location/Unit QR links. Bound visible results, ignore late replies and serialize uncancelable detections across in-app navigation; an eight-second timeout requires a page reload. Browser coverage uses an injected detector and fake camera, not native pixel decoding or physical-device acceptance. Missing-format fallback, image-file scanning and photo capture remain unfinished.
+- Connect native `BarcodeDetector` support to the explicitly opened `/scan` camera. Report supported and missing formats, stop on results or errors, preserve and separately display exact returned values, require explicit selection and manual lookup, and offer only validated same-origin Location/Unit QR links. Bound visible results, ignore late replies and serialize uncancelable detections across in-app navigation; an eight-second timeout requires a page reload. Browser coverage uses an injected detector and fake camera, not native pixel decoding or physical-device acceptance. At that increment missing-format fallback, image-file scanning and photo capture remained unfinished.
 
 - Add an explicitly opened live camera preview to `/scan`, with safe start/stop, front/back preference, supported torch controls, playback recovery and track cleanup. At that increment it did not decode barcodes, capture images or replace the manual lookup and future file fallback; fake-device browser checks are not physical-device acceptance.
 
@@ -59,7 +67,7 @@
 
 - Add an internal browser camera-stream hook with explicit gesture-triggered rear/front requests, secure-context checks, same-page and best-effort same-origin cross-window session-purge signals, and track cleanup on background, completion, unmount or late permission results. Signals contain no private data; cross-window query/offline-cache purge is not implemented. At that increment the camera interface, capture, scanner and actual-device acceptance remained unfinished.
 
-- Add an internal bounded multipart reader for one raw Media file, preserving its exact bytes and normalized declared MIME without trusting the filename. Test declared and chunked file/body ceilings, extra or encoded parts, cancellation, late read failures and a test-only HTTP socket. This parser does not authorize, validate image bytes, stage files or enable the upload route; WebP decoding remains unavailable.
+- Add an internal bounded multipart reader for one raw Media file, preserving its exact bytes and normalized declared MIME without trusting the filename. Test declared and chunked file/body ceilings, extra or encoded parts, cancellation, late read failures and a test-only HTTP socket. This parser does not authorize, validate image bytes, stage files or enable the upload route; WebP decoding was unavailable at that increment.
 
 - Add a paged existing-Media picker to the attachment screen for Item, Unit and Location owners. Preserve exact retained IDs, withhold duplicate or cyclic live pages, and re-read both complete scopes before foreground review instead of using discovery metadata as proof. Actual-Go browser tests cover concurrent changes, session loss, explicit original-key reconciliation and accessible enlarged layouts. The picker does not upload or request image bytes; file storage, streams, gallery and camera remain unfinished.
 

@@ -6,14 +6,13 @@ import { Button } from '@/components/ui/button'
 import { mutationControl as control } from '@/components/mutation-review'
 import { validText } from '@/lib/api/client'
 import { messages } from '@/lib/messages'
-import { type ScanFormat, type ScannedCode } from '@/lib/scan-native'
+import { requiredScanFormats, type ScannedCode } from '@/lib/scan-native'
 import { parseHomeboxQR } from '@/lib/scan-qr'
 import { quoteExactText } from '@/lib/text-literal'
 import { useCameraStream } from '@/lib/use-camera-stream'
 import { useNativeScan } from './use-native-scan'
 
 const text = messages.scan
-const requiredFormats: readonly ScanFormat[] = ['QR_CODE', 'EAN_13', 'EAN_8', 'UPC_A', 'UPC_E', 'CODE_128']
 type TorchState = Readonly<{ track: MediaStreamTrack; enabled: boolean; pending: boolean; failed: boolean }>
 
 export function ScanCamera({ sessionActive, onUseCode }: { sessionActive: boolean; onUseCode: (code: ScannedCode) => void }) {
@@ -79,8 +78,12 @@ export function ScanCamera({ sessionActive, onUseCode }: { sessionActive: boolea
     <p className="text-sm leading-relaxed text-muted-foreground">{text.cameraPermission}</p>
     {scanner.status === 'checking' ? <p role="status" className="text-sm">{text.nativeChecking}</p>
       : scanner.status === 'unavailable' ? <div className="space-y-2"><p role="status" className="text-sm leading-relaxed">{text.nativeUnavailable}</p><Button type="button" variant="outline" disabled={scanner.failure === 'timeout'} className={control} onClick={scanner.retryDiscovery}>{text.nativeRetry}</Button></div>
-        : <div className="space-y-1 text-sm leading-relaxed"><p><span className="font-medium">{text.nativeFormats}</span>：{scanner.formats.map((format) => messages.owned.symbologies[format]).join('、')}</p>
-          {requiredFormats.some((format) => !scanner.formats.includes(format)) && <p><span className="font-medium">{text.nativeMissing}</span>：{requiredFormats.filter((format) => !scanner.formats.includes(format)).map((format) => messages.owned.symbologies[format]).join('、')}</p>}</div>}
+        : <div className="space-y-2 text-sm leading-relaxed">
+          {scanner.nativeFormats.length > 0 && <p><span className="font-medium">{text.nativeFormats}</span>：{scanner.nativeFormats.map((format) => messages.owned.symbologies[format]).join('、')}</p>}
+          {scanner.fallbackFormats.length > 0 && <p><span className="font-medium">{text.fallbackFormats}</span>：{scanner.fallbackFormats.map((format) => messages.owned.symbologies[format]).join('、')}</p>}
+          {requiredScanFormats.some((format) => !scanner.formats.includes(format)) && <p><span className="font-medium">{text.nativeMissing}</span>：{requiredScanFormats.filter((format) => !scanner.formats.includes(format)).map((format) => messages.owned.symbologies[format]).join('、')}</p>}
+          {scanner.fallbackUnavailable && <div className="space-y-2"><p role="status">{text.fallbackUnavailable}</p><Button type="button" variant="outline" disabled={scanner.failure === 'timeout'} className={control} onClick={scanner.retryDiscovery}>{text.nativeRetry}</Button></div>}
+        </div>}
     {!sessionActive && <p role="status" className="text-base">{text.cameraSession}</p>}
     {scanner.failure && <Alert role="alert" className="p-4"><AlertDescription className="text-base">{scanner.failure === 'timeout' ? text.nativeTimeout : text.nativeError}</AlertDescription></Alert>}
     {camera.status === 'requesting' && <p role="status" className="text-base">{text.cameraWaiting}</p>}
@@ -102,6 +105,7 @@ export function ScanCamera({ sessionActive, onUseCode }: { sessionActive: boolea
     {scanner.results && <section aria-labelledby="native-scan-results" className="min-w-0 space-y-4">
       <h3 ref={resultHeading} id="native-scan-results" tabIndex={-1} className="text-xl font-semibold focus:outline-2 focus:outline-ring">{text.nativeResults}</h3>
       <p role="status" className="text-sm leading-relaxed">{text.nativeResultsHelp}</p>
+      {scanner.results.some((code) => code.format === 'EAN_13') && scanner.results.some((code) => code.format === 'UPC_A') && <p className="text-sm leading-relaxed">{text.nativeAmbiguous}</p>}
       {scanner.truncated && <p role="status" className="text-sm leading-relaxed">{text.nativeTruncated}</p>}
       <ul aria-label={text.nativeResults} className="divide-y rounded-lg border">{scanner.results.map((code) => {
         const destination = code.format === 'QR_CODE' ? parseHomeboxQR(code.rawValue, window.location.origin) : undefined

@@ -20,6 +20,8 @@ const text = messages.scan
 
 async function installProbe(page: Page) {
   await page.addInitScript(() => {
+    // Camera-only regressions stay independent of decoder behavior.
+    Object.defineProperty(window, 'Worker', { configurable: true, value: undefined })
     const devices = navigator.mediaDevices
     if (!devices?.getUserMedia) return
     const native = devices.getUserMedia.bind(devices)
