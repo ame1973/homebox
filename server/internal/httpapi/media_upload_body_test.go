@@ -3,10 +3,12 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"image"
 	"image/jpeg"
+	"image/png"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -105,15 +107,21 @@ func TestMediaUploadMultipartRequiresSeparateImageValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	jpegBytes := encoded.Bytes()
+	// This independent 2x3 raster was produced with Pillow/libwebp 1.3.2.
+	webpBytes, err := base64.StdEncoding.DecodeString("UklGRjYAAABXRUJQVlA4TCkAAAAvAYAAEC8w/wKCIv9HExAU+T+aQIDgzP+U4A0i6igIBNKQUgorHNH/WAA=")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, tc := range []struct {
-		name, declared string
-		raw            []byte
-		want           error
+		name, declared, outputType string
+		raw                        []byte
+		want                       error
 	}{
-		{"valid JPEG", "image/jpeg", jpegBytes, nil},
-		{"mismatched MIME", "image/png", jpegBytes, mediaimage.ErrInvalid},
-		{"truncated JPEG", "image/jpeg", jpegBytes[:len(jpegBytes)-2], mediaimage.ErrInvalid},
-		{"WebP decoder not available", "image/webp", []byte("RIFF-not-a-decoder"), mediaimage.ErrUnsupported},
+		{"valid JPEG", "image/jpeg", "image/jpeg", jpegBytes, nil},
+		{"valid WebP", "image/webp", "image/png", webpBytes, nil},
+		{"mismatched MIME", "image/png", "", jpegBytes, mediaimage.ErrInvalid},
+		{"truncated JPEG", "image/jpeg", "", jpegBytes[:len(jpegBytes)-2], mediaimage.ErrInvalid},
+		{"malformed WebP", "image/webp", "", []byte("RIFF-not-a-decoder"), mediaimage.ErrInvalid},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			request := uploadRequest(t, uploadPart("file", "ignored", tc.declared, tc.raw))
@@ -124,8 +132,14 @@ func TestMediaUploadMultipartRequiresSeparateImageValidation(t *testing.T) {
 			}
 			var output bytes.Buffer
 			result, err := mediaimage.Sanitize(request.Context(), file, kind, &output, mediaimage.Limits{})
-			if !errors.Is(err, tc.want) || err == nil && (result.MIMEType != "image/jpeg" || output.Len() == 0) {
+			if !errors.Is(err, tc.want) || err == nil && (result.MIMEType != tc.outputType || output.Len() == 0) {
 				t.Fatalf("separate image validation returned an unexpected result: %v", err)
+			}
+			if tc.outputType == "image/png" {
+				decoded, decodeErr := png.Decode(bytes.NewReader(output.Bytes()))
+				if decodeErr != nil || decoded.Bounds().Dx() != 2 || decoded.Bounds().Dy() != 3 {
+					t.Fatalf("WebP did not become a valid PNG: %v", decodeErr)
+				}
 			}
 		})
 	}
