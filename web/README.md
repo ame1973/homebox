@@ -4,6 +4,8 @@ This is the same-origin React/TypeScript application served by the Go executable
 
 The internal ZXing pixel decoder and terminable worker adapter are groundwork, not yet connected to the live camera. The adapter transfers bounded grayscale frames only from a live video-only stream and discards its canvas; the decoder tests separate EAN-13/UPC-A interpretations and an independently checked UPC-E reader. These checks do not imply real-device acceptance. The bundled dependency licenses are included in [`public/licenses/`](public/licenses/).
 
+The bundled ZXing and transitive dependency notices are also available from the running Go server at `/licenses/zxing-library-0.23.0.txt`, `/licenses/zxing-text-encoding-0.9.0.txt`, and `/licenses/ts-custom-error-3.3.1.txt`. Only these named notices are public; the server does not list the directory or serve arbitrary text files placed there.
+
 ## Install and run
 
 Use Linux/WSL2, Node 24.14.1 (see `../.node-version`), npm 11.14.1, and the Go version in `../server/go.mod`. From the repository root:

@@ -16,16 +16,22 @@ import (
 func fixture(t *testing.T) http.Handler {
 	t.Helper()
 	handler, err := New(Config{Auth: newTestAuth(t), PublicOrigin: "https://homebox.test", Assets: fstest.MapFS{
-		"index.html":                 {Data: []byte("<!doctype html><title>HomeBox fixture</title><main>App shell</main>")},
-		"assets/app-a1b2c3d4.js":     {Data: []byte("console.log('public asset')")},
-		"assets/site-a1b2c3d4.css":   {Data: []byte("body { color: black }")},
-		"favicon.svg":                {Data: []byte("<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>")},
-		"manifest.webmanifest":       {Data: []byte(`{"name":"HomeBox"}`)},
-		"assets/private.sqlite":      {Data: []byte("must not be served")},
-		"assets/app-a1b2c3d4.js.map": {Data: []byte("must not be served")},
-		"data/private.css":           {Data: []byte("must not be served")},
-		"secrets/private.js":         {Data: []byte("must not be served")},
-		"nested/private.html":        {Data: []byte("must not be served")},
+		"index.html":                             {Data: []byte("<!doctype html><title>HomeBox fixture</title><main>App shell</main>")},
+		"assets/app-a1b2c3d4.js":                 {Data: []byte("console.log('public asset')")},
+		"assets/site-a1b2c3d4.css":               {Data: []byte("body { color: black }")},
+		"favicon.svg":                            {Data: []byte("<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>")},
+		"manifest.webmanifest":                   {Data: []byte(`{"name":"HomeBox"}`)},
+		"assets/private.sqlite":                  {Data: []byte("must not be served")},
+		"assets/app-a1b2c3d4.js.map":             {Data: []byte("must not be served")},
+		"data/private.css":                       {Data: []byte("must not be served")},
+		"secrets/private.js":                     {Data: []byte("must not be served")},
+		"nested/private.html":                    {Data: []byte("must not be served")},
+		"licenses/zxing-library-0.23.0.txt":      {Data: []byte("ZXing library license")},
+		"licenses/zxing-text-encoding-0.9.0.txt": {Data: []byte("ZXing text-encoding license")},
+		"licenses/ts-custom-error-3.3.1.txt":     {Data: []byte("ts-custom-error license")},
+		"licenses/private.txt":                   {Data: []byte("must not be served")},
+		"licenses/nested/unknown.js":             {Data: []byte("must not be served")},
+		"assets/private.txt":                     {Data: []byte("must not be served")},
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -212,6 +218,45 @@ func TestRootedFilesystemCannotServeAnEscapingSymlink(t *testing.T) {
 	response := request(t, handler, http.MethodGet, "/escape.js")
 	if response.Code != http.StatusNotFound || strings.Contains(response.Body.String(), "private data") {
 		t.Fatal("public filesystem escaped through a symlink")
+	}
+}
+
+func TestActualSocketServesOnlyNamedDependencyLicenses(t *testing.T) {
+	server := httptest.NewServer(fixture(t))
+	defer server.Close()
+	for name, expected := range map[string]string{
+		"zxing-library-0.23.0.txt":      "ZXing library license",
+		"zxing-text-encoding-0.9.0.txt": "ZXing text-encoding license",
+		"ts-custom-error-3.3.1.txt":     "ts-custom-error license",
+	} {
+		for _, method := range []string{http.MethodGet, http.MethodHead} {
+			req, err := http.NewRequestWithContext(t.Context(), method, server.URL+"/licenses/"+name, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			response, err := server.Client().Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			body, err := io.ReadAll(response.Body)
+			_ = response.Body.Close()
+			if err != nil || response.StatusCode != http.StatusOK || response.Header.Get("Cache-Control") != "no-cache" ||
+				!strings.HasPrefix(response.Header.Get("Content-Type"), "text/plain") || response.Header.Get("X-Content-Type-Options") != "nosniff" ||
+				method == http.MethodGet && string(body) != expected || method == http.MethodHead && len(body) != 0 {
+				t.Fatalf("license %s %s: status=%d body=%q err=%v", method, name, response.StatusCode, body, err)
+			}
+		}
+	}
+	for _, target := range []string{"/licenses", "/licenses/", "/licenses/private.txt", "/licenses/missing.txt", "/licenses/nested/unknown.js", "/assets/private.txt", "/data/private.txt", "/licenses/%2e%2e/assets/private.txt"} {
+		response, err := server.Client().Get(server.URL + target)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, err := io.ReadAll(response.Body)
+		_ = response.Body.Close()
+		if err != nil || response.StatusCode != http.StatusNotFound || strings.Contains(string(body), "must not be served") || strings.Contains(string(body), "App shell") || response.Header.Get("Cache-Control") != "no-store" {
+			t.Fatalf("unsafe license path %s: status=%d body=%q err=%v", target, response.StatusCode, body, err)
+		}
 	}
 }
 

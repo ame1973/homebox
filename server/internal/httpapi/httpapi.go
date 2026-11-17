@@ -141,7 +141,16 @@ func serveApp(w http.ResponseWriter, r *http.Request, assets fs.FS, requestID st
 		}
 	}
 	extension := strings.ToLower(path.Ext(name))
-	if extension == "" {
+	if name == "licenses" || strings.HasPrefix(name, "licenses/") {
+		// Only the bundled dependency notices are public; do not expose arbitrary
+		// text or nested files that an operator may have placed in this directory.
+		switch name {
+		case "licenses/zxing-library-0.23.0.txt", "licenses/zxing-text-encoding-0.9.0.txt", "licenses/ts-custom-error-3.3.1.txt":
+		default:
+			writeError(w, http.StatusNotFound, "NOT_FOUND", "The resource does not exist.", requestID)
+			return
+		}
+	} else if extension == "" {
 		// Extensionless client routes, including /assets, resolve to the shell;
 		// static directories are never listed and private namespaces never fall back.
 		name = "index.html"
