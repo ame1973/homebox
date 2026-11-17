@@ -4,6 +4,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"sync"
 )
@@ -100,8 +101,38 @@ func (files *MediaFiles) RecoveryStatus() MediaRecoveryStatus {
 	}
 	files.mu.RLock()
 	defer files.mu.RUnlock()
-	status := files.worker.snapshot()
+	return publicMediaRecoveryStatus(files.worker.snapshot())
+}
+
+func publicMediaRecoveryStatus(status mediaRecoveryWorkerStatus) MediaRecoveryStatus {
 	return MediaRecoveryStatus{Phase: string(status.Phase), Completed: status.Completed, Saturated: status.Saturated, Failure: string(status.Failure)}
+}
+
+// ReadMediaRecoveryStatus returns a non-sensitive live snapshot only after a
+// completed session is revalidated. A nil files owner reports unavailable; it
+// does not authorize starting storage or retrying recovery.
+func (a *Auth) ReadMediaRecoveryStatus(ctx context.Context, token string, files *MediaFiles) (MediaRecoveryStatus, error) {
+	if ctx == nil || a == nil || a.store == nil || a.store.db == nil {
+		return MediaRecoveryStatus{}, ErrDomainInput
+	}
+	if err := ctx.Err(); err != nil {
+		return MediaRecoveryStatus{}, err
+	}
+	if files != nil {
+		// Hold the lifetime lock before entering SQLite: Close waits for the
+		// worker, and the worker may itself be waiting for the DB connection.
+		files.mu.RLock()
+		defer files.mu.RUnlock()
+		if files.store != a.store || files.library == nil || files.library.auth != a || files.worker == nil {
+			return MediaRecoveryStatus{}, ErrDomainInput
+		}
+	}
+	return readDomain(ctx, a, token, func(*sql.Tx) (MediaRecoveryStatus, error) {
+		if files == nil {
+			return MediaRecoveryStatus{Phase: "unavailable", Failure: string(mediaRecoveryFailureStorage)}, nil
+		}
+		return publicMediaRecoveryStatus(files.worker.snapshot()), nil
+	})
 }
 
 // RetryRecovery requests one explicit retry after a blocked pass. The caller

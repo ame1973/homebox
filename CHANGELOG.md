@@ -23,6 +23,8 @@
 
 ### Added
 
+- Read a bounded Media recovery snapshot through the completed-session transaction, including a safe unavailable state when no service is running. Revalidate the session after activity, keep private file names out of status, and coordinate the read with Media shutdown. This is an internal Go operation, not an HTTP or retry endpoint.
+
 - Add an owner-scoped, volatile photo-capture screen with real gesture-started camera, original-pixel crop/rotation preview, up to ten photos, ordering, explicit cover and description. Warn that photos are not saved or uploaded; clear them and stop camera tracks on suspension or delivered session loss. File selection, persistent drafts, upload and physical-device acceptance remain unfinished.
 
 - Add an explicitly started, Store-owned Media file service that notifies the recovery worker after successful, failed or canceled upload attempts. The Store waits for admitted uploads and the worker before closing Media storage and SQLite. Recovery failure remains latched until explicit retry; uploads can still publish while blocked and leave pending cleanup. This service is not yet wired to HTTP or server startup.
