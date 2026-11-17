@@ -77,6 +77,9 @@ type Store struct {
 	closeOnce   sync.Once
 	closeErr    error
 	offlineAuth bool
+	mediaMu     sync.Mutex
+	mediaFiles  *MediaFiles
+	closing     bool
 }
 
 // Open checks capabilities and history before making the store available to callers.
@@ -217,11 +220,20 @@ func (s *Store) capabilities(ctx context.Context) error {
 // Report returns the completed migration outcome, not a mutable database handle.
 func (s *Store) Report() MigrationReport { return s.report }
 
-// Close releases the database before releasing its process lock; it is idempotent.
+// Close stops managed Media work, then releases the database and process lock.
+// It is idempotent; callers must stop other domain operations separately.
 func (s *Store) Close() error {
 	s.closeOnce.Do(func() {
+		s.mediaMu.Lock()
+		s.closing = true
+		files := s.mediaFiles
+		s.mediaFiles = nil
+		s.mediaMu.Unlock()
+		if files != nil {
+			s.closeErr = files.Close()
+		}
 		if s.db != nil {
-			s.closeErr = s.db.Close()
+			s.closeErr = errors.Join(s.closeErr, s.db.Close())
 		}
 		if s.lock != nil {
 			s.closeErr = errors.Join(s.closeErr, s.lock.Close())

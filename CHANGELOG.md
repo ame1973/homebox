@@ -23,6 +23,8 @@
 
 ### Added
 
+- Add an explicitly started, Store-owned Media file service that notifies the recovery worker after successful, failed or canceled upload attempts. The Store waits for admitted uploads and the worker before closing Media storage and SQLite. Recovery failure remains latched until explicit retry; uploads can still publish while blocked and leave pending cleanup. This service is not yet wired to HTTP or server startup.
+
 - Add an internal, single-owner Media recovery worker that starts an audited pass when explicitly created, processes ten rows per batch, coalesces later notifications and latches failures until explicit retry. It exposes only bounded failure categories and must stop before its storage owner closes. It is not yet connected to server startup, upload HTTP or an operator interface.
 
 - Combine the non-destructive staging audit and one explicit recovery batch under the same storage lock. Unknown staging entries block all cleanup before any unlink; later recovery failures retain the acknowledged-prefix and explicit-retry semantics. This is not an automatic startup service or HTTP endpoint.
