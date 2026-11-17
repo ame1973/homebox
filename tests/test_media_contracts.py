@@ -149,6 +149,43 @@ class MediaContractTests(unittest.TestCase):
             self.assertIn(word, operation["description"])
         self.assertEqual("post_media", API["paths"]["/media"]["post"]["operationId"])
 
+    def test_media_recovery_status_is_bounded_protected_and_coherent(self):
+        operation = API["paths"]["/system/media-recovery"]["get"]
+        self.assertEqual("get_system_media_recovery", operation["operationId"])
+        self.assertEqual(API["security"], operation.get("security", API["security"]))
+        self.assertEqual(0, operation["x-max-body-bytes"])
+        self.assertEqual(0, operation["x-max-query-bytes"])
+        self.assertNotIn("requestBody", operation)
+        self.assertFalse(operation.get("parameters"))
+        self.assertEqual("#/components/schemas/MediaRecoveryStatus", operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"])
+        self.assertEqual({"Cache-Control"}, set(operation["responses"]["200"]["headers"]))
+        for code in ["400", "401", "403", "429", "503"]:
+            self.assertIn(code, operation["responses"])
+        for word in ["session", "snapshot", "not a file", "retry", "acknowledged"]:
+            self.assertIn(word, operation["description"])
+
+        base = {"phase": "idle", "completed": 0, "saturated": False, "failure": ""}
+        for phase in ["queued", "running", "idle", "stopped"]:
+            validator("MediaRecoveryStatus").validate({**base, "phase": phase})
+        for failure in ["staging-unproven", "staging-limit", "object-unproven", "storage-unavailable", "inconsistent-state", "recovery-failed"]:
+            validator("MediaRecoveryStatus").validate({**base, "phase": "blocked", "failure": failure})
+            validator("MediaRecoveryStatus").validate({**base, "phase": "stopped", "failure": failure})
+        validator("MediaRecoveryStatus").validate({**base, "phase": "unavailable", "failure": "storage-unavailable"})
+        validator("MediaRecoveryStatus").validate({**base, "completed": MAXIMUM, "saturated": True})
+        for value in [
+            {}, {**base, "private_path": "/sensitive"}, {**base, "phase": "other"},
+            {**base, "failure": "private error"}, {**base, "phase": "blocked"},
+            {**base, "phase": "idle", "failure": "recovery-failed"},
+            {**base, "phase": "unavailable"},
+            {**base, "phase": "unavailable", "failure": "storage-unavailable", "completed": 1},
+            {**base, "phase": "unavailable", "failure": "storage-unavailable", "saturated": True},
+            {**base, "completed": -1}, {**base, "completed": MAXIMUM + 1}, {**base, "completed": 1.5},
+            {**base, "completed": True}, {**base, "saturated": True},
+        ]:
+            self.reject("MediaRecoveryStatus", value)
+        for field in base:
+            self.reject("MediaRecoveryStatus", {key: value for key, value in base.items() if key != field})
+
     def test_legacy_links_id_has_an_explicit_metadata_escape_and_original_paths_remain(self):
         for path, operation_id in [("/media/{id}", "get_media_id"), ("/media/{id}/view", "get_media_id_view")]:
             operation = API["paths"][path]["get"]
@@ -159,7 +196,7 @@ class MediaContractTests(unittest.TestCase):
             self.assertEqual("#/components/schemas/Media", operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"])
             self.assertEqual({"Cache-Control", "ETag"}, set(operation["responses"]["200"]["headers"]))
         self.assertEqual("get_media_id_links", API["paths"]["/media/{id}/links"]["get"]["operationId"])
-        self.assertEqual(152, sum(len(methods) for methods in API["paths"].values()))
+        self.assertEqual(153, sum(len(methods) for methods in API["paths"].values()))
 
     def test_exact_media_identity_reads_and_attachment_share_path_authority(self):
         cases = [

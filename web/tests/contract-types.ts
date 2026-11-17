@@ -1017,6 +1017,22 @@ const unreviewedCorrectionCommand = correctionCommands.freezeCorrectionCommand({
 const looseCorrectionSend = correctionCommands.sendCorrectionCommand({ kind: 'correct-disposal', body: disposalVoidDecision, key: 'previous-key' }, 'csrf', new AbortController().signal)
 void [sendCorrectionCalls, reusedCorrectionKey, credentialCorrectionCommand, physicalCorrectionCommand, unreviewedCorrectionCommand, looseCorrectionSend]
 
+// Recovery state is a non-versioned snapshot, not a file or retry proof.
+import * as mediaRecovery from '../src/lib/api/media-recovery'
+const recoveryStatus = { phase: 'blocked', completed: 0, saturated: false, failure: 'staging-unproven' } as const satisfies components['schemas']['MediaRecoveryStatus']
+const recoveryReply = recoveryStatus satisfies operations['get_system_media_recovery']['responses'][200]['content']['application/json']
+const recoveryRead = mediaRecovery.fetchMediaRecoveryStatus(new AbortController().signal)
+const recoveryTransport = purchaseTransport.GET('/system/media-recovery')
+// @ts-expect-error Every bounded status field is required.
+const incompleteRecovery: components['schemas']['MediaRecoveryStatus'] = { phase: 'idle', completed: 0 }
+// @ts-expect-error Raw errors are not permitted failure categories.
+const rawRecoveryError: components['schemas']['MediaRecoveryStatus'] = { ...recoveryStatus, failure: 'private path' }
+// @ts-expect-error Recovery status has no caller-selected query or resource identity.
+const scopedRecovery = purchaseTransport.GET('/system/media-recovery', { params: { query: { id: 'media' } } })
+// @ts-expect-error A status read requires caller-owned cancellation.
+const uncancellableRecovery = mediaRecovery.fetchMediaRecoveryStatus()
+void [recoveryStatus, recoveryReply, recoveryRead, recoveryTransport, incompleteRecovery, rawRecoveryError, scopedRecovery, uncancellableRecovery]
+
 // Shared media identities, owner intent and independent proofs remain explicit.
 const mediaMetadata = { id: 'media', revision: 4, sha256: 'a'.repeat(64), mime_type: 'image/jpeg', verification: 'verified', width: 4000, height: 3000, bytes: 120000,
   thumb_url: null, thumb_sha256: null } as const satisfies components['schemas']['Media']

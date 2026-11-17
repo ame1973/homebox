@@ -8415,6 +8415,37 @@ paths:
           - json
           - csv
           default: json
+  /system/media-recovery:
+    get:
+      operationId: get_system_media_recovery
+      summary: Read Media recovery status
+      tags:
+      - system
+      description: Read a bounded live snapshot after completed-session authorization and transaction-time revalidation. The acknowledged count covers only this service lifetime, and failure values are non-sensitive categories. This is not a file integrity or cleanup proof and does not authorize a retry. The service may be unavailable, and the snapshot can change immediately after the read. No body, content encoding or query parameters are accepted.
+      x-max-body-bytes: 0
+      x-max-query-bytes: 0
+      responses:
+        '200':
+          description: Live recovery status without a resource ETag
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaRecoveryStatus'
+          headers:
+            Cache-Control:
+              schema:
+                const: no-store
+              description: Protected API data is never cached by the service worker.
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
   /system/health:
     get:
       operationId: get_system_health
@@ -16221,6 +16252,60 @@ components:
       - ok
       - database
       - version
+    MediaRecoveryStatus:
+      type: object
+      additionalProperties: false
+      properties:
+        phase:
+          type: string
+          enum: [unavailable, queued, running, idle, blocked, stopped]
+        completed:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        saturated:
+          type: boolean
+        failure:
+          type: string
+          enum: ['', staging-unproven, staging-limit, object-unproven, storage-unavailable, inconsistent-state, recovery-failed]
+      required: [phase, completed, saturated, failure]
+      allOf:
+      - if:
+          properties:
+            phase:
+              enum: [queued, running, idle]
+        then:
+          properties:
+            failure:
+              const: ''
+      - if:
+          properties:
+            phase:
+              const: blocked
+        then:
+          properties:
+            failure:
+              enum: [staging-unproven, staging-limit, object-unproven, storage-unavailable, inconsistent-state, recovery-failed]
+      - if:
+          properties:
+            phase:
+              const: unavailable
+        then:
+          properties:
+            failure:
+              const: storage-unavailable
+            completed:
+              const: 0
+            saturated:
+              const: false
+      - if:
+          properties:
+            saturated:
+              const: true
+        then:
+          properties:
+            completed:
+              const: 9007199254740991
     StorageStatus:
       type: object
       additionalProperties: false

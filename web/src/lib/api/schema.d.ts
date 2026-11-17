@@ -1876,6 +1876,26 @@ export interface paths {
         readonly patch?: never;
         readonly trace?: never;
     };
+    readonly "/system/media-recovery": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /**
+         * Read Media recovery status
+         * @description Read a bounded live snapshot after completed-session authorization and transaction-time revalidation. The acknowledged count covers only this service lifetime, and failure values are non-sensitive categories. This is not a file integrity or cleanup proof and does not authorize a retry. The service may be unavailable, and the snapshot can change immediately after the read. No body, content encoding or query parameters are accepted.
+         */
+        readonly get: operations["get_system_media_recovery"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
     readonly "/system/storage": {
         readonly parameters: {
             readonly query?: never;
@@ -3219,6 +3239,14 @@ export interface components {
             readonly data: readonly components["schemas"]["Media"][];
             readonly next_cursor: string | null;
         };
+        readonly MediaRecoveryStatus: {
+            readonly completed: number;
+            /** @enum {string} */
+            readonly failure: "" | "staging-unproven" | "staging-limit" | "object-unproven" | "storage-unavailable" | "inconsistent-state" | "recovery-failed";
+            /** @enum {string} */
+            readonly phase: "unavailable" | "queued" | "running" | "idle" | "blocked" | "stopped";
+            readonly saturated: boolean;
+        } & (unknown & unknown & unknown & unknown);
         /** @description Exactly one multipart image file, with no caller-owned storage path, digest, dimensions or owner. The server validates actual bytes, declared MIME, size, pixel count and privacy before creating or deduplicating Media; a later separately reviewed command attaches it. */
         readonly MediaUploadInput: {
             /** Format: binary */
@@ -9468,6 +9496,33 @@ export interface operations {
             readonly 413: components["responses"]["Error413"];
             readonly 415: components["responses"]["Error415"];
             readonly 422: components["responses"]["Error422"];
+            readonly 429: components["responses"]["Error429"];
+            readonly 503: components["responses"]["Error503"];
+        };
+    };
+    readonly get_system_media_recovery: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Live recovery status without a resource ETag */
+            readonly 200: {
+                headers: {
+                    /** @description Protected API data is never cached by the service worker. */
+                    readonly "Cache-Control"?: "no-store";
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["MediaRecoveryStatus"];
+                };
+            };
+            readonly 400: components["responses"]["Error400"];
+            readonly 401: components["responses"]["Error401"];
+            readonly 403: components["responses"]["Error403"];
             readonly 429: components["responses"]["Error429"];
             readonly 503: components["responses"]["Error503"];
         };

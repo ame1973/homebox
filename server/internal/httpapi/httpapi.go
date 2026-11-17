@@ -22,10 +22,12 @@ const contentSecurityPolicy = "default-src 'self'; script-src 'self'; style-src 
 var hashedAsset = regexp.MustCompile(`-[A-Za-z0-9_-]{8,}\.(js|css|woff2|png|svg|webp|ico)$`)
 
 // Config binds browser authentication to an operator-selected origin and socket peers.
-// Assets must enforce containment; production passes os.Root.FS.
+// Assets must enforce containment; production passes os.Root.FS. MediaFiles may
+// be nil; otherwise it must belong to Auth and outlive all admitted handlers.
 type Config struct {
 	Assets         fs.FS
 	Auth           *store.Auth
+	MediaFiles     *store.MediaFiles
 	PublicOrigin   string
 	TrustedProxies []netip.Prefix
 }
@@ -75,7 +77,7 @@ func New(cfg Config) (http.Handler, error) {
 	if err != nil {
 		return nil, fmt.Errorf("media service is required: %w", err)
 	}
-	api := &authAPI{auth: cfg.Auth, locations: locations, taxonomy: taxonomy, catalog: catalog, inventory: inventory, purchases: purchases, assetFinance: assetFinance, media: media, origin: policy, limiter: newRequestLimiter()}
+	api := &authAPI{auth: cfg.Auth, locations: locations, taxonomy: taxonomy, catalog: catalog, inventory: inventory, purchases: purchases, assetFinance: assetFinance, media: media, mediaFiles: cfg.MediaFiles, origin: policy, limiter: newRequestLimiter()}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestID := rand.Text()
 		w.Header().Set("X-Request-ID", requestID)
