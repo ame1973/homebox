@@ -23,6 +23,8 @@
 
 ### Added
 
+- Add an internal, single-owner Media recovery worker that starts an audited pass when explicitly created, processes ten rows per batch, coalesces later notifications and latches failures until explicit retry. It exposes only bounded failure categories and must stop before its storage owner closes. It is not yet connected to server startup, upload HTTP or an operator interface.
+
 - Combine the non-destructive staging audit and one explicit recovery batch under the same storage lock. Unknown staging entries block all cleanup before any unlink; later recovery failures retain the acknowledged-prefix and explicit-retry semantics. This is not an automatic startup service or HTTP endpoint.
 
 - Inspect a bounded private Media staging directory against current journaled names and inode metadata under the storage lock. Unknown, substituted, stale or unsafe entries fail closed without deletion or a partial count. This is an explicit internal audit, not file-integrity verification, automatic recovery or an HTTP endpoint.

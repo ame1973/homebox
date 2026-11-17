@@ -33,16 +33,17 @@ var (
 // mediaStorage is an exclusive private filesystem scope for one database.
 // It does not itself recover pending files or authorize any upload.
 type mediaStorage struct {
-	mu       sync.Mutex
-	store    *Store
-	path     string
-	instance string
-	root     *os.File
-	staging  *os.File
-	objects  *os.File
-	lock     *os.File
-	closed   bool
-	closeErr error
+	mu                   sync.Mutex
+	store                *Store
+	path                 string
+	instance             string
+	root                 *os.File
+	staging              *os.File
+	objects              *os.File
+	lock                 *os.File
+	recoveryWorkerActive bool
+	closed               bool
+	closeErr             error
 }
 
 func validMediaInstance(value string) bool {
@@ -478,6 +479,9 @@ func (storage *mediaStorage) Close() error {
 	defer storage.mu.Unlock()
 	if storage.closed {
 		return storage.closeErr
+	}
+	if storage.recoveryWorkerActive {
+		return errMediaRecoveryWorkerActive
 	}
 	storage.closed = true
 	var failures []error
