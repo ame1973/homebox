@@ -21,6 +21,8 @@
 
 ### Added
 
+- Process one explicitly requested, validated batch of up to 100 pending Media recovery rows under the same storage lock. Each object commits separately; stop on the first error, report only acknowledged completions and require an explicit retry. This is an internal primitive, not automatic startup recovery or an HTTP endpoint.
+
 - Render a crop and quarter-turn from the original in-memory camera capture into a bounded JPEG, without repeatedly encoding intermediate edits. Verify captured-source identity and decoded dimensions, discard pending results on suspension/session clear, and retain a single decoder/encoder slot until completion or reload after timeout. Synthetic-video/real-JPEG and actual BFCache/logout tests cover this internal helper; the photo editor, file import and upload remain unfinished.
 
 - Use a bounded, terminable local ZXing worker for QR/EAN/UPC/Code 128 formats missing from the browser-native scanner. Show actual native and fallback coverage, retain independent EAN-13/UPC-A interpretations and require explicit result selection and lookup. Real-Go/Chromium tests exercise synthetic fake-camera pixels and session/BFCache cleanup; image-file scanning and physical-device acceptance remain unfinished.

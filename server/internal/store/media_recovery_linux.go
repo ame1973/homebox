@@ -304,8 +304,15 @@ func (storage *mediaStorage) pendingMediaRecoveryPage(ctx context.Context, after
 	}
 	storage.mu.Lock()
 	defer storage.mu.Unlock()
+	return storage.pendingMediaRecoveryPageLocked(ctx, after, limit)
+}
+
+func (storage *mediaStorage) pendingMediaRecoveryPageLocked(ctx context.Context, after string, limit int) ([]string, string, error) {
 	if storage.closed {
 		return nil, "", errMediaStorageClosed
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, "", err
 	}
 	tx, err := storage.store.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -355,6 +362,33 @@ func (storage *mediaStorage) pendingMediaRecoveryPage(ctx context.Context, after
 	return ids, "", nil
 }
 
+// recoverPendingMediaBatch processes one bounded live page under the same owner
+// lock. Each object commits independently; on error completed counts only prior
+// acknowledged objects, while the failed attempt may already have changed files.
+// The more flag is meaningful only on success; callers must explicitly retry
+// rather than skipping the unresolved identity.
+func (storage *mediaStorage) recoverPendingMediaBatch(ctx context.Context, limit int) (completed int, more bool, finalErr error) {
+	if storage == nil || storage.store == nil || storage.store.db == nil || ctx == nil || limit < 1 || limit > 100 {
+		return 0, false, ErrDomainInput
+	}
+	if err := ctx.Err(); err != nil {
+		return 0, false, err
+	}
+	storage.mu.Lock()
+	defer storage.mu.Unlock()
+	ids, next, err := storage.pendingMediaRecoveryPageLocked(ctx, "", limit)
+	if err != nil {
+		return 0, false, err
+	}
+	for _, id := range ids {
+		if _, err = storage.recoverPendingMediaLocked(ctx, id); err != nil {
+			return completed, false, err
+		}
+		completed++
+	}
+	return completed, next != "", nil
+}
+
 // recoverPendingMedia handles one journaled object under exclusive storage and
 // SQLite ownership. Errors may follow a durable unlink; the original row is
 // retained when possible and the caller must explicitly retry or inspect it.
@@ -368,8 +402,15 @@ func (storage *mediaStorage) recoverPendingMedia(ctx context.Context, id string)
 	}
 	storage.mu.Lock()
 	defer storage.mu.Unlock()
+	return storage.recoverPendingMediaLocked(ctx, id)
+}
+
+func (storage *mediaStorage) recoverPendingMediaLocked(ctx context.Context, id string) (result mediaRecoveryResult, finalErr error) {
 	if storage.closed {
 		return result, errMediaStorageClosed
+	}
+	if err := ctx.Err(); err != nil {
+		return result, err
 	}
 	tx, err := storage.store.db.BeginTx(ctx, nil)
 	if err != nil {
