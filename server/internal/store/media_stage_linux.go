@@ -24,11 +24,12 @@ import (
 const maxMediaStageBytes = maxMediaFileBytes
 
 var (
-	errMediaStageLimit    = errors.New("invalid media staging limit")
-	errMediaStageTooLarge = errors.New("staged media exceeds its limit")
-	errMediaStageEmpty    = errors.New("staged media is empty")
-	errMediaStageChanged  = errors.New("staged media changed while being written")
-	errMediaStageClosed   = errors.New("media stage is closed")
+	errMediaStageLimit           = errors.New("invalid media staging limit")
+	errMediaStageTooLarge        = errors.New("staged media exceeds its limit")
+	errMediaStageEmpty           = errors.New("staged media is empty")
+	errMediaStageChanged         = errors.New("staged media changed while being written")
+	errMediaStageClosed          = errors.New("media stage is closed")
+	errMediaAnonymousUnsupported = errors.New("anonymous media staging is unavailable")
 )
 
 type mediaStageDigest struct {
@@ -52,6 +53,7 @@ type mediaStage struct {
 	hash      hash.Hash
 	result    *mediaStageDigest
 	failure   error
+	anonymous bool
 	closing   bool
 	discarded bool
 }
@@ -102,6 +104,14 @@ func openPrivateMediaDirectory(directory string) (*os.File, error) {
 	return dir, nil
 }
 
+func newMediaStageName() (string, error) {
+	var random [16]byte
+	if _, err := rand.Read(random[:]); err != nil {
+		return "", err
+	}
+	return "media-" + hex.EncodeToString(random[:]) + ".partial", nil
+}
+
 func newMediaStage(ctx context.Context, directory string, limit int64) (*mediaStage, error) {
 	if ctx == nil || limit <= 0 || limit > maxMediaStageBytes {
 		return nil, errMediaStageLimit
@@ -115,11 +125,10 @@ func newMediaStage(ctx context.Context, directory string, limit int64) (*mediaSt
 	}
 	fd := int(dir.Fd())
 	for range 8 {
-		var random [16]byte
-		if _, err = rand.Read(random[:]); err != nil {
-			return nil, errors.Join(err, dir.Close())
+		name, nameErr := newMediaStageName()
+		if nameErr != nil {
+			return nil, errors.Join(nameErr, dir.Close())
 		}
-		name := "media-" + hex.EncodeToString(random[:]) + ".partial"
 		fileFD, openErr := unix.Openat(fd, name, unix.O_RDWR|unix.O_CREAT|unix.O_EXCL|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0o600)
 		if errors.Is(openErr, unix.EEXIST) {
 			continue
@@ -144,6 +153,50 @@ func newMediaStage(ctx context.Context, directory string, limit int64) (*mediaSt
 		return stage, nil
 	}
 	return nil, errors.Join(os.ErrExist, dir.Close())
+}
+
+// newAnonymousMediaStage keeps the inode unnamed even after seal. A caller
+// must first commit a durable inode journal before linking it into a directory;
+// this constructor never falls back to a named file on unsupported filesystems.
+func newAnonymousMediaStage(ctx context.Context, directory string, limit int64) (*mediaStage, error) {
+	if ctx == nil || limit <= 0 || limit > maxMediaStageBytes {
+		return nil, errMediaStageLimit
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	dir, err := openPrivateMediaDirectory(directory)
+	if err != nil {
+		return nil, err
+	}
+	name, err := newMediaStageName()
+	if err != nil {
+		return nil, errors.Join(err, dir.Close())
+	}
+	fd, err := unix.Openat(int(dir.Fd()), ".", unix.O_TMPFILE|unix.O_RDWR|unix.O_CLOEXEC, 0o600)
+	if err != nil {
+		if errors.Is(err, unix.EOPNOTSUPP) || errors.Is(err, unix.EINVAL) || errors.Is(err, unix.EISDIR) || errors.Is(err, unix.ENOSYS) || errors.Is(err, unix.ENOENT) {
+			err = errors.Join(errMediaAnonymousUnsupported, err)
+		}
+		return nil, errors.Join(err, dir.Close())
+	}
+	file := os.NewFile(uintptr(fd), "anonymous-media-stage")
+	var identity unix.Stat_t
+	if err = unix.Fstat(fd, &identity); err != nil {
+		return nil, errors.Join(err, file.Close(), dir.Close())
+	}
+	stage := &mediaStage{ctx: ctx, dir: dir, file: file, name: name, anonymous: true,
+		device: uint64(identity.Dev), inode: identity.Ino, limit: limit, hash: sha256.New()}
+	if err = stage.file.Chmod(0o600); err != nil {
+		return nil, errors.Join(err, stage.discard())
+	}
+	if err = stage.checkName(); err != nil {
+		return nil, errors.Join(err, stage.discard())
+	}
+	if err = ctx.Err(); err != nil {
+		return nil, errors.Join(err, stage.discard())
+	}
+	return stage, nil
 }
 
 func syncMediaStageParent(dir *os.File) error {
@@ -211,6 +264,25 @@ func (stage *mediaStage) checkDirectory() error {
 // checkName prevents sealing or deleting a different file substituted at the
 // generated name. The directory descriptor remains anchored across renames.
 func (stage *mediaStage) checkName() error {
+	if stage.anonymous {
+		if stage.file == nil || stage.inode == 0 || !validMediaStageName(stage.name) {
+			return errMediaStageChanged
+		}
+		var open unix.Stat_t
+		if err := unix.Fstat(int(stage.file.Fd()), &open); err != nil {
+			return err
+		}
+		if open.Mode&unix.S_IFMT != unix.S_IFREG || open.Mode&0o7777 != 0o600 || open.Nlink != 0 || uint64(open.Dev) != stage.device || open.Ino != stage.inode {
+			return errMediaStageChanged
+		}
+		var named unix.Stat_t
+		if err := unix.Fstatat(int(stage.dir.Fd()), stage.name, &named, unix.AT_SYMLINK_NOFOLLOW); errors.Is(err, unix.ENOENT) {
+			return nil
+		} else if err != nil {
+			return err
+		}
+		return errMediaStageChanged
+	}
 	var named unix.Stat_t
 	if err := unix.Fstatat(int(stage.dir.Fd()), stage.name, &named, unix.AT_SYMLINK_NOFOLLOW); err != nil {
 		return err
@@ -321,10 +393,12 @@ func (stage *mediaStage) seal() (mediaStageDigest, error) {
 	if err = stage.ctx.Err(); err != nil {
 		return fail(err)
 	}
-	err = stage.file.Close()
-	stage.file = nil
-	if err != nil {
-		return fail(err)
+	if !stage.anonymous {
+		err = stage.file.Close()
+		stage.file = nil
+		if err != nil {
+			return fail(err)
+		}
 	}
 	if err = stage.dir.Sync(); err != nil {
 		return fail(err)
@@ -343,6 +417,23 @@ func (stage *mediaStage) seal() (mediaStageDigest, error) {
 	return result, nil
 }
 
+// closeAnonymous releases an unnamed inode without unlinking any pathname.
+// It reports a collision or unexpected hard link but never removes that name.
+func (stage *mediaStage) closeAnonymous() error {
+	nameErr := stage.checkName()
+	dirErr := stage.checkDirectory()
+	var fileErr error
+	if stage.file != nil {
+		fileErr = stage.file.Close()
+		stage.file = nil
+	}
+	syncErr := stage.dir.Sync()
+	closeErr := stage.dir.Close()
+	stage.dir = nil
+	stage.discarded = true
+	return errors.Join(nameErr, dirErr, fileErr, syncErr, closeErr)
+}
+
 // preserve closes a sealed journaled stage without unlinking it. Recovery must
 // later compare its recorded directory, name and inode before any cleanup.
 func (stage *mediaStage) preserve() error {
@@ -355,6 +446,9 @@ func (stage *mediaStage) preserve() error {
 		return errMediaStageUnsealed
 	}
 	stage.closing = true
+	if stage.anonymous {
+		return stage.closeAnonymous()
+	}
 	nameErr := stage.checkName()
 	var modeErr error
 	if nameErr == nil {
@@ -384,6 +478,9 @@ func (stage *mediaStage) discard() error {
 		return errMediaStageClosed
 	}
 	stage.closing = true
+	if stage.anonymous {
+		return stage.closeAnonymous()
+	}
 	var closeErr error
 	if stage.file != nil {
 		closeErr = stage.file.Close()

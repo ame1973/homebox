@@ -21,6 +21,8 @@
 
 ### Added
 
+- Add a separate internal Linux anonymous Media stage that remains unnamed through sealing, rejects unavailable filesystems rather than silently creating a named stage, and never unlinks a conflicting name or unexpected hard link. Subprocess tests exercise exit before and after seal; the current upload transaction does not yet use this primitive, and durable journal integration remains unfinished.
+
 - Process one explicitly requested, validated batch of up to 100 pending Media recovery rows under the same storage lock. Each object commits separately; stop on the first error, report only acknowledged completions and require an explicit retry. This is an internal primitive, not automatic startup recovery or an HTTP endpoint.
 
 - Render a crop and quarter-turn from the original in-memory camera capture into a bounded JPEG, without repeatedly encoding intermediate edits. Verify captured-source identity and decoded dimensions, discard pending results on suspension/session clear, and retain a single decoder/encoder slot until completion or reload after timeout. Synthetic-video/real-JPEG and actual BFCache/logout tests cover this internal helper; the photo editor, file import and upload remain unfinished.
