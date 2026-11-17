@@ -1832,7 +1832,10 @@ export interface paths {
             readonly path?: never;
             readonly cookie?: never;
         };
-        /** Sync status */
+        /**
+         * Sync status
+         * @description Read current materialization and retention diagnostics. Counts do not prove a complete replica; check bootstrap_ready before attempting bootstrap.
+         */
         readonly get: operations["get_sync_status"];
         readonly put?: never;
         readonly post?: never;
@@ -4033,17 +4036,28 @@ export interface components {
             readonly records: readonly components["schemas"]["SyncEmbedding"][];
         };
         readonly SyncStatus: {
+            /** @description False until complete source backfill and frozen bootstrap are available. */
+            readonly bootstrap_ready: boolean;
+            /** @description Positive current-projection row counts by kind; omitted kinds have zero materialized rows. These are not authoritative source totals. */
             readonly counts: {
                 readonly [key: string]: number;
             };
+            /** @constant */
+            readonly counts_scope: "materialized_projections";
             readonly dataset_epoch: string;
+            /** @description Durable last allocated change sequence, including after retained rows are pruned. */
             readonly high_watermark: number;
-            readonly last_change_at?: string | null;
+            /** @description Timestamp of the highest retained change, or null when no change rows remain; not necessarily the last historical change. */
+            readonly last_change_at: string | null;
+            /** @description Last pruned sequence; a delta cursor at this floor is valid. */
             readonly min_retained_seq: number;
             readonly models?: readonly string[];
             /** @constant */
             readonly projection_version: 1;
+            /** @description Minimum retention policy in days, not the age of the oldest retained row. */
             readonly retention_days: number;
+            /** @description Whether automatic change-log retention is enabled. */
+            readonly retention_enabled: boolean;
             readonly server_instance_id: string;
         };
         /** @description A stable exact-name tag. Its aggregate revision also covers item-tag membership so stale deletion cannot silently detach newly linked items. */
@@ -9412,8 +9426,6 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
-                    readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
                 content: {

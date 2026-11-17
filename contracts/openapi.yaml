@@ -9473,6 +9473,7 @@ paths:
     get:
       operationId: get_sync_status
       summary: Sync status
+      description: Read current materialization and retention diagnostics. Counts do not prove a complete replica; check bootstrap_ready before attempting bootstrap.
       tags:
       - sync
       responses:
@@ -9487,12 +9488,6 @@ paths:
               schema:
                 const: no-store
               description: Protected API data is never cached by the service worker.
-            ETag:
-              schema:
-                type: string
-                minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -13209,6 +13204,7 @@ components:
           minimum: 0
     SyncStatus:
       type: object
+      additionalProperties: false
       required:
       - dataset_epoch
       - server_instance_id
@@ -13216,26 +13212,65 @@ components:
       - min_retained_seq
       - high_watermark
       - counts
+      - counts_scope
+      - last_change_at
       - retention_days
+      - bootstrap_ready
+      - retention_enabled
       properties:
         dataset_epoch:
           type: string
+          minLength: 1
+          maxLength: 128
         server_instance_id:
           type: string
+          pattern: '^[0-9a-f]{32}(?![\s\S])'
         projection_version:
           const: 1
         min_retained_seq:
           type: integer
           minimum: 0
+          maximum: 9007199254740991
+          description: Last pruned sequence; a delta cursor at this floor is valid.
         high_watermark:
           type: integer
           minimum: 0
+          maximum: 9007199254740991
+          description: Durable last allocated change sequence, including after retained rows are pruned.
         counts:
           type: object
+          maxProperties: 22
+          description: Positive current-projection row counts by kind; omitted kinds have zero materialized rows. These are not authoritative source totals.
+          propertyNames:
+            enum:
+            - location
+            - item
+            - unit
+            - stock
+            - barcode
+            - media
+            - media_link
+            - category
+            - tag
+            - item_tag
+            - search_doc
+            - purchase
+            - purchase_line
+            - asset
+            - usage
+            - cost
+            - disposal
+            - alias
+            - attribute
+            - location_event
+            - inventory_event
+            - ai_review
           additionalProperties:
             type: integer
-            minimum: 0
+            minimum: 1
             maximum: 9007199254740991
+        counts_scope:
+          const: materialized_projections
         last_change_at:
           anyOf:
           - &id004
@@ -13244,10 +13279,18 @@ components:
             maxLength: 64
             format: date-time
           - type: 'null'
+          description: Timestamp of the highest retained change, or null when no change rows remain; not necessarily the last historical change.
         retention_days:
           type: integer
           minimum: 1
           maximum: 9007199254740991
+          description: Minimum retention policy in days, not the age of the oldest retained row.
+        bootstrap_ready:
+          type: boolean
+          description: False until complete source backfill and frozen bootstrap are available.
+        retention_enabled:
+          type: boolean
+          description: Whether automatic change-log retention is enabled.
         models:
           type: array
           items:

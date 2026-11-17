@@ -1017,6 +1017,23 @@ const unreviewedCorrectionCommand = correctionCommands.freezeCorrectionCommand({
 const looseCorrectionSend = correctionCommands.sendCorrectionCommand({ kind: 'correct-disposal', body: disposalVoidDecision, key: 'previous-key' }, 'csrf', new AbortController().signal)
 void [sendCorrectionCalls, reusedCorrectionKey, credentialCorrectionCommand, physicalCorrectionCommand, unreviewedCorrectionCommand, looseCorrectionSend]
 
+// Sync status is a bounded diagnostic, not an offline snapshot or cursor.
+import * as syncStatusSDK from '../src/lib/api/sync-status'
+const syncStatus = { dataset_epoch: 'epoch', server_instance_id: 'a'.repeat(32), projection_version: 1, min_retained_seq: 0, high_watermark: 0,
+  counts: {}, counts_scope: 'materialized_projections', last_change_at: null, retention_days: 30, bootstrap_ready: false, retention_enabled: false } as const satisfies components['schemas']['SyncStatus']
+const syncStatusReply = syncStatus satisfies operations['get_sync_status']['responses'][200]['content']['application/json']
+const syncStatusRead = syncStatusSDK.fetchSyncStatus(new AbortController().signal)
+const syncStatusTransport = purchaseTransport.GET('/sync/status')
+// @ts-expect-error A diagnostic must explicitly state its availability and count scope.
+const incompleteSyncStatus: components['schemas']['SyncStatus'] = { dataset_epoch: 'epoch', projection_version: 1 }
+// @ts-expect-error Status never claims the materialized counts are complete source totals.
+const sourceCountStatus: components['schemas']['SyncStatus'] = { ...syncStatus, counts_scope: 'all_sources' }
+// @ts-expect-error Status has no caller-selected query or cursor.
+const scopedSyncStatus = purchaseTransport.GET('/sync/status', { params: { query: { cursor: 'opaque' } } })
+// @ts-expect-error A status read requires caller-owned cancellation.
+const uncancellableSyncStatus = syncStatusSDK.fetchSyncStatus()
+void [syncStatus, syncStatusReply, syncStatusRead, syncStatusTransport, incompleteSyncStatus, sourceCountStatus, scopedSyncStatus, uncancellableSyncStatus]
+
 // Recovery state is a non-versioned snapshot, not a file or retry proof.
 import * as mediaRecovery from '../src/lib/api/media-recovery'
 const recoveryStatus = { phase: 'blocked', completed: 0, saturated: false, failure: 'staging-unproven' } as const satisfies components['schemas']['MediaRecoveryStatus']

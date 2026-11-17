@@ -25,6 +25,8 @@
 
 ### Added
 
+- Expose a protected, no-store sync status diagnostic and stateless browser adapter. It reports partial materialization, retained-floor and durable change-sequence information while explicitly marking bootstrap and automatic retention unavailable; it does not create an offline replica or prune data.
+
 - Add a read-only Media recovery status screen with bounded localized guidance, safe session/BFCache cleanup and an explicit status refresh. It does not retry recovery, delete files or claim file integrity.
 
 - Expose a protected, bodyless `GET /api/v1/system/media-recovery` and a stateless browser adapter for bounded live recovery status. Session authority is rechecked after body reading; the status is not cached, versioned, a file-integrity proof or permission to retry. The current server does not start the Media service yet, so its status is unavailable.
