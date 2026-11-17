@@ -108,6 +108,7 @@ func TestBarcodeSearchCompletesSharedActualSourcesWithoutChangingExactValues(t *
 }
 
 func TestBarcodeSearchPagesPreserveRetainedControlsAndLegacyNamespaces(t *testing.T) {
+	t.Parallel()
 	s, catalog, _, token := catalogFixture(t)
 	ids := []string{strings.Repeat("\x00", 128), "\x00barcode\r\n", ".", "..", "a/b\\", "☕😀", strings.Repeat("😀", 128), "\U0010ffff"}
 	for index := range 205 {

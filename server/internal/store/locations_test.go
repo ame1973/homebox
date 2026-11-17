@@ -484,6 +484,7 @@ func TestLocationNullableParentAndAllMetadataPatchSemantics(t *testing.T) {
 }
 
 func TestLocationHierarchyHasNoArbitraryRecursionDepthCap(t *testing.T) {
+	t.Parallel()
 	s, locations, _, token := locationFixture(t)
 	root := createLocation(t, locations, token, "ROOT", nil)
 	// Seed a deep, valid graph as an imported-data fixture without performing

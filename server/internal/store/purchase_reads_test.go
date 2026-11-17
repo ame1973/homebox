@@ -171,6 +171,7 @@ func TestPurchaseReadsIncludeActualCommandResultsAndDistinctItemHeadersWithoutIm
 }
 
 func TestPurchaseReadsFinishLargeRetainedCollectionsAndPreserveIndependentSafeCounters(t *testing.T) {
+	t.Parallel()
 	fixture, p := purchaseCommands(t)
 	s := fixture.store
 	for index := range 205 {

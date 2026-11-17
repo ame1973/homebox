@@ -20,6 +20,7 @@ func seedAssetPageOwner(t *testing.T, fixture holdingFixture, id string) Asset {
 }
 
 func TestAssetPagesCompleteAll205ProfilesAndOwnedEventsWithIndependentSignedContinuations(t *testing.T) {
+	t.Parallel()
 	fixture := holdingsFixture(t)
 	service := assetReader(t, fixture)
 	for index := range 205 {

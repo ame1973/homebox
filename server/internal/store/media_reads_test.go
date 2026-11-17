@@ -286,6 +286,7 @@ func TestMediaReadCursorsFollowFreshLoginButNotRevocationOrRestoredEpoch(t *test
 }
 
 func TestMediaReadPagesRetainBoundedUnicodeIdentitiesAndCompleteLargeMembership(t *testing.T) {
+	t.Parallel()
 	fixture := newMediaCascadeFixture(t, "item")
 	library, err := NewMediaLibrary(fixture.auth)
 	if err != nil {

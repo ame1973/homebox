@@ -56,6 +56,7 @@ func allReadStock(t *testing.T, inventory *Inventory, token string, filters Stoc
 }
 
 func TestHoldingReadCompleteUnitAndStockCollectionsUseSourceAndNeverPublishOrFabricateTotals(t *testing.T) {
+	t.Parallel()
 	fixture, inventory := inventoryFixture(t)
 	for index := range 205 {
 		seedReadUnit(t, fixture, fmt.Sprintf("owned-%03d", index), []string{"stored", "in_use", "lent", "lost", "retired", "disposed"}[index%6])

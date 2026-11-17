@@ -281,8 +281,10 @@ func TestCatalogCivilDateFilterRejectsUnknownLegacyInstantsWithoutPartialPages(t
 }
 
 func TestCatalogFilteredReadScansCompleteLegacyDatasetsWithoutPublishingOrTruncating(t *testing.T) {
+	t.Parallel()
 	for _, size := range []int{500, 2500, 5000} {
 		t.Run(fmt.Sprint(size), func(t *testing.T) {
+			t.Parallel()
 			s, catalog, _, token := catalogFixture(t)
 			tx, err := s.db.BeginTx(t.Context(), nil)
 			if err != nil {

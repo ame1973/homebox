@@ -11,6 +11,7 @@ import (
 )
 
 func TestPurchaseLineCorrectionHistoryPagesAreCompleteAcrossLargeVoidGapsAndKeepIndependentCursors(t *testing.T) {
+	t.Parallel()
 	fixture, purchases := purchaseCommands(t)
 	const count = 205
 	lines := make([]PurchaseLine, 0, count)

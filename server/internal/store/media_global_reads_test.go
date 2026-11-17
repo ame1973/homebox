@@ -13,6 +13,7 @@ import (
 )
 
 func TestGlobalMediaPageIncludesLinkedAndUnlinkedActualSources(t *testing.T) {
+	t.Parallel()
 	s, catalog, auth, token := catalogFixture(t)
 	library, err := NewMediaLibrary(auth)
 	if err != nil {

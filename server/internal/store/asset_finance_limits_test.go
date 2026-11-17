@@ -29,6 +29,7 @@ func TestAssetFinancialSafeTotalsRejectWholeRangeOverflowWithoutRowOrderDependen
 }
 
 func TestAssetSummaryCompletesLargeSourceCollectionsAndCancellationBeyondInt64(t *testing.T) {
+	t.Parallel()
 	fixture, _ := manualAssetFixture(t, 0)
 	s := fixture.store
 	tx, err := s.db.BeginTx(t.Context(), nil)
