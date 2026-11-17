@@ -4,7 +4,9 @@
 
 ### Changed
 
-- Keep the exact pending original/thumbnail journal rows and sealed stages through successful private Media publication, rather than removing their recovery proof before post-commit cleanup. Explicit reference-aware recovery can reconcile a committed source after producer exit or a partial stage unlink. Successful uploads retain these private records until cleanup; automatic scheduling and pre-journal unknown-stage recovery remain unfinished.
+- Prepare private Media uploads in anonymous Linux inodes, commit their exact journal before naming them, and link/promote/publish within the same protected source mutation. A process exit before the journal leaves no named stage; an interrupted later step retains the journal for explicit reference-aware recovery. Filesystems without the required anonymous-file/link facilities fail closed. Legacy unknown files, automatic cleanup, the HTTP upload route and QNAP/power-loss acceptance remain unfinished.
+
+- Keep the exact pending original/thumbnail journal rows and sealed stages through successful private Media publication, rather than removing their recovery proof before post-commit cleanup. Explicit reference-aware recovery can reconcile a committed source after producer exit or a partial stage unlink. Successful uploads retain these private records until cleanup; automatic scheduling and recovery of older unknown stages remain unfinished.
 
 - Bind private Media ownership markers separately for the root, staging and object directories to the opened database's file identity, resolved path and instance. Reject ordinary database clones, hard links, substituted databases and foreign or swapped child directories without deleting files. Check the database during original-key replay and recheck full ownership after the final session read for new publication. Preserve legacy instance-only markers without silently rebinding; recovery, explicit rebind and HTTP upload remain unfinished.
 
@@ -21,11 +23,11 @@
 
 ### Added
 
-- Link a sealed anonymous Media inode only inside a mutation that revalidates its previously committed journal, actual bytes and directory identities, and rechecks the retained journal after audit/session writes. Preserve partially linked stages for explicit recovery and test real process exit after linking and promotion. This internal helper is not yet wired to the upload transaction.
+- Link a sealed anonymous Media inode only inside a mutation that revalidates its previously committed journal, actual bytes and directory identities, and rechecks the retained journal after audit/session writes. Preserve partially linked stages for explicit recovery and test real process exit after linking and promotion. The private upload transaction uses this helper; it is not an HTTP route.
 
-- Journal the exact inode and intended name of a sealed, still-anonymous Media stage without linking it. Explicit recovery can reconcile a missing stage after producer exit when actual reference checks permit it; an unrelated same-digest object is never claimed. Linking after journal commit and use by the upload transaction remain unfinished.
+- Journal the exact inode and intended name of a sealed, still-anonymous Media stage without linking it. Explicit recovery can reconcile a missing stage after producer exit when actual reference checks permit it; an unrelated same-digest object is never claimed. The private upload now links only after that journal commits.
 
-- Add a separate internal Linux anonymous Media stage that remains unnamed through sealing, rejects unavailable filesystems rather than silently creating a named stage, and never unlinks a conflicting name or unexpected hard link. Subprocess tests exercise exit before and after seal; the current upload transaction does not yet use this primitive, and durable journal integration remains unfinished.
+- Add an internal Linux anonymous Media stage that remains unnamed through sealing, rejects unavailable filesystems rather than silently creating a named stage, and never unlinks a conflicting name or unexpected hard link. Subprocess tests exercise exit before and after seal; the private upload now uses it before journaled publication.
 
 - Process one explicitly requested, validated batch of up to 100 pending Media recovery rows under the same storage lock. Each object commits separately; stop on the first error, report only acknowledged completions and require an explicit retry. This is an internal primitive, not automatic startup recovery or an HTTP endpoint.
 

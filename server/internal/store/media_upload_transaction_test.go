@@ -105,8 +105,13 @@ func requireEmptyUploadStages(t *testing.T, staging string) {
 
 func requirePendingUploadStages(t *testing.T, s *Store, staging string, expected int) {
 	t.Helper()
+	requirePendingUploadStageState(t, s, staging, expected, expected)
+}
+
+func requirePendingUploadStageState(t *testing.T, s *Store, staging string, expectedRows, expectedPresent int) {
+	t.Helper()
 	entries, err := os.ReadDir(staging)
-	if err == nil && len(entries) == expected+1 && entries[0].Name() == mediaOwnerName {
+	if err == nil && len(entries) > 0 && entries[0].Name() == mediaOwnerName {
 		instance := scalar[string](t, s.db, "SELECT server_instance_id FROM sync_state")
 		owner, readErr := os.ReadFile(filepath.Join(staging, mediaOwnerName))
 		if readErr != nil || string(owner) != string(mediaOwnerBytes(instance, s.path, s.fileID, "staging")) {
@@ -114,7 +119,7 @@ func requirePendingUploadStages(t *testing.T, s *Store, staging string, expected
 		}
 		entries = entries[1:]
 	}
-	if err != nil || len(entries) != expected {
+	if err != nil || len(entries) != expectedPresent {
 		t.Fatal("unexpected retained stages", entries, err)
 	}
 	rows, err := s.db.QueryContext(t.Context(), "SELECT stage_name,stage_device,stage_inode FROM media_pending_objects ORDER BY stage_name")
@@ -122,22 +127,37 @@ func requirePendingUploadStages(t *testing.T, s *Store, staging string, expected
 		t.Fatal(err)
 	}
 	defer rows.Close()
-	count := 0
+	count, present := 0, 0
+	names := make(map[string]bool, len(entries))
 	for rows.Next() {
 		var name string
 		var device, inode int64
 		if err = rows.Scan(&name, &device, &inode); err != nil {
 			t.Fatal(err)
 		}
+		if !validMediaStageName(name) {
+			t.Fatal("pending row has an invalid stage name", name)
+		}
 		var info unix.Stat_t
-		if !validMediaStageName(name) || unix.Lstat(filepath.Join(staging, name), &info) != nil ||
-			info.Mode&unix.S_IFMT != unix.S_IFREG || uint64(info.Dev) != uint64(device) || info.Ino != uint64(inode) {
-			t.Fatal("pending row lost its exact private stage inode", name)
+		statErr := unix.Lstat(filepath.Join(staging, name), &info)
+		if statErr == nil {
+			if info.Mode&unix.S_IFMT != unix.S_IFREG || uint64(info.Dev) != uint64(device) || info.Ino != uint64(inode) {
+				t.Fatal("pending row has a different private stage inode", name)
+			}
+			present++
+			names[name] = true
+		} else if !errors.Is(statErr, os.ErrNotExist) {
+			t.Fatal("could not inspect a pending stage", name, statErr)
 		}
 		count++
 	}
-	if err = rows.Err(); err != nil || count != expected {
-		t.Fatal("pending rows and preserved stages disagree", count, expected, err)
+	if err = rows.Err(); err != nil || count != expectedRows || present != expectedPresent {
+		t.Fatal("pending rows and preserved stages disagree", count, present, expectedRows, expectedPresent, err)
+	}
+	for _, entry := range entries {
+		if !names[entry.Name()] {
+			t.Fatal("retained stage has no matching journal row", entry.Name())
+		}
 	}
 }
 
@@ -495,7 +515,13 @@ func TestStagedMediaUploadConcurrentKeysDeduplicate(t *testing.T) {
 			if remaining != 4 && (test.name != "same key" || remaining != 2) {
 				t.Fatal("concurrent publication lost recoverable stage proofs", remaining)
 			}
-			requirePendingUploadStages(t, s, staging, remaining)
+			present := remaining
+			if test.name == "same key" && remaining == 4 {
+				// The replayed preparation committed its journal but never linked
+				// the now-closed anonymous pair; the original pair remains named.
+				present = 2
+			}
+			requirePendingUploadStageState(t, s, staging, remaining, present)
 		})
 	}
 }
@@ -540,7 +566,7 @@ func TestStagedMediaUploadDetectsActualFileTamperingBeforeCommit(t *testing.T) {
 	requirePendingUploadStages(t, s, staging, 2)
 }
 
-func TestStagedMediaUploadPreservesStagesOnAmbiguousJournalCommit(t *testing.T) {
+func TestStagedMediaUploadClosesAnonymousStagesOnAmbiguousJournalCommit(t *testing.T) {
 	s, _, library, token, staging, objects := privateUploadFixture(t)
 	execSQL(t, s.db, `CREATE TABLE pending_commit_fault(value TEXT REFERENCES media(id) DEFERRABLE INITIALLY DEFERRED)`)
 	execSQL(t, s.db, `CREATE TRIGGER fail_pending_commit AFTER INSERT ON media_pending_objects BEGIN INSERT INTO pending_commit_fault VALUES('missing-media'); END`)
@@ -553,10 +579,7 @@ func TestStagedMediaUploadPreservesStagesOnAmbiguousJournalCommit(t *testing.T) 
 	if scalar[int](t, s.db, "SELECT COUNT(*) FROM media_pending_objects") != 0 {
 		t.Fatal("deferred foreign-key failure unexpectedly committed pending rows")
 	}
-	stages, err := os.ReadDir(staging)
-	if err != nil || len(stages) != 2 || !validMediaStageName(stages[0].Name()) || !validMediaStageName(stages[1].Name()) {
-		t.Fatal("ambiguous COMMIT error did not conservatively preserve both stages", stages, err)
-	}
+	requireEmptyUploadStages(t, staging)
 	if entries, err := os.ReadDir(objects); err != nil || len(entries) != 0 {
 		t.Fatal("objects were promoted despite the failed journal COMMIT", entries, err)
 	}
@@ -595,7 +618,7 @@ func TestStagedMediaUploadJournalsBeforePromotionWithoutClaimingPreexistingObjec
 }
 
 func TestStagedMediaUploadRejectsReplacedObjectDirectory(t *testing.T) {
-	for _, changeAt := range []int{4, 8} {
+	for _, changeAt := range []int{4, 8, 9} {
 		t.Run(fmt.Sprintf("clock-%d", changeAt), func(t *testing.T) {
 			t.Parallel()
 			s, auth, library, token, staging, objects := privateUploadFixture(t)
@@ -620,7 +643,12 @@ func TestStagedMediaUploadRejectsReplacedObjectDirectory(t *testing.T) {
 				t.Fatal("a substituted object directory was published", calls, swapErr, result, err)
 			}
 			requireDomainState(t, s, before)
-			requirePendingUploadStages(t, s, staging, 2)
+			present := 2
+			if changeAt == 4 {
+				// The changed object directory is detected before either inode is linked.
+				present = 0
+			}
+			requirePendingUploadStageState(t, s, staging, 2, present)
 			var original, replacement unix.Stat_t
 			if err = unix.Stat(moved, &original); err != nil {
 				t.Fatal(err)

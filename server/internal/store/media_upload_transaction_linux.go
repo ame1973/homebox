@@ -69,7 +69,7 @@ func (library *MediaLibrary) uploadStagedMediaGuarded(ctx context.Context, token
 	}
 
 	preserveStages := false
-	original, err := newMediaStage(ctx, stagingDir, maxMediaStageBytes)
+	original, err := newAnonymousMediaStage(ctx, stagingDir, maxMediaStageBytes)
 	if err != nil {
 		return Media{}, err
 	}
@@ -85,7 +85,7 @@ func (library *MediaLibrary) uploadStagedMediaGuarded(ctx context.Context, token
 			result = Media{}
 		}
 	}()
-	thumbnail, err := newMediaStage(ctx, stagingDir, maxMediaStageBytes)
+	thumbnail, err := newAnonymousMediaStage(ctx, stagingDir, maxMediaStageBytes)
 	if err != nil {
 		return Media{}, err
 	}
@@ -135,52 +135,68 @@ func (library *MediaLibrary) uploadStagedMediaGuarded(ctx context.Context, token
 			result = Media{}
 		}
 	}()
-	pending, err := library.journalMediaObjects(ctx, token, []*mediaStage{original, thumbnail}, objects)
+	requireBindings := func() error {
+		if err := requireMediaDirectoryBinding(stagingDir, original.dir); err != nil {
+			return err
+		}
+		if err := requireMediaDirectoryBinding(stagingDir, thumbnail.dir); err != nil {
+			return err
+		}
+		return requireMediaDirectoryBinding(objectDir, objects)
+	}
+	if err = requireBindings(); err != nil {
+		return Media{}, err
+	}
+	stages := []*mediaStage{original, thumbnail}
+	pending, err := library.journalMediaObjects(ctx, token, stages, objects)
 	if len(pending) != 0 {
-		// A COMMIT error may be ambiguous, so preserve these stages even on error.
+		// A COMMIT error may be ambiguous. Unnamed inodes can be closed safely;
+		// any committed rows remain for explicit reference-aware recovery.
 		preserveStages = true
 	}
 	if err != nil {
 		return Media{}, err
 	}
-	// Keep these inode-identifiable stages through publication and until a
-	// separate reference-aware recovery process completes durable cleanup.
-	if err = requireMediaDirectoryBinding(objectDir, objects); err != nil {
-		return Media{}, err
-	}
-	promotedOriginal, err := original.promoteTo(objects)
-	if err != nil {
-		return Media{}, err
-	}
-	promotedThumbnail, err := thumbnail.promoteTo(objects)
-	if err != nil {
-		return Media{}, err
-	}
-	if err = verifyMediaObject(ctx, objects, promotedOriginal.key, originalDigest); err != nil {
-		return Media{}, err
-	}
-	if err = verifyMediaObject(ctx, objects, promotedThumbnail.key, thumbnailDigest); err != nil {
-		return Media{}, err
-	}
 	var publicationTx *sql.Tx
-	var publicationCheck func() error
-	if guard != nil {
-		publicationCheck = func() error {
-			if publicationTx == nil {
+	publicationCheck := func() error {
+		if publicationTx == nil {
+			if databaseCheck != nil {
 				return databaseCheck()
 			}
+			return nil
+		}
+		if err := requireBindings(); err != nil {
+			return err
+		}
+		if guard != nil {
 			return guard(publicationTx)
 		}
+		return nil
 	}
 	result, err = runDomainMutationWithFinalCheck(ctx, library.auth, token, key, "post_media", request, func(m *mutationTx) (Media, error) {
-		value, err := m.publishStagedMedia(image, preview, promotedOriginal, promotedThumbnail, objects, objectDir)
+		publicationTx = m.tx
+		if err := publicationCheck(); err != nil {
+			return Media{}, err
+		}
+		if err := m.materializeAnonymousMediaStages(stages, pending, objects); err != nil {
+			return Media{}, err
+		}
+		promotedOriginal, err := original.promoteTo(objects)
 		if err != nil {
 			return Media{}, err
 		}
-		if guard != nil {
-			publicationTx = m.tx
+		promotedThumbnail, err := thumbnail.promoteTo(objects)
+		if err != nil {
+			return Media{}, err
 		}
-		if err = m.retainMediaPending(pending); err != nil {
+		if err = verifyMediaObject(ctx, objects, promotedOriginal.key, originalDigest); err != nil {
+			return Media{}, err
+		}
+		if err = verifyMediaObject(ctx, objects, promotedThumbnail.key, thumbnailDigest); err != nil {
+			return Media{}, err
+		}
+		value, err := m.publishStagedMedia(image, preview, promotedOriginal, promotedThumbnail, objects, objectDir)
+		if err != nil {
 			return Media{}, err
 		}
 		return value, nil
