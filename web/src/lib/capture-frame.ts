@@ -10,6 +10,14 @@ export type FrameCaptureResult = CapturedFrame | Readonly<{ kind: 'not-ready' | 
 // Canvas encoding cannot be canceled. Retain one document-wide slot across
 // route remounts, and require a reload if the native callback never returns.
 let encodingBusy = false, encodingTimedOut = false
+const capturedFrames = new WeakSet<object>()
+
+// A canvas-generated JPEG already has its video orientation baked into pixels.
+// Keep the original immutable wrapper in memory; untrusted files and restored
+// drafts need a separate, validated import path.
+export function isCapturedFrame(value: unknown): value is CapturedFrame {
+  return typeof value === 'object' && value !== null && capturedFrames.has(value)
+}
 
 function currentVideo(video: HTMLVideoElement, stream: MediaStream): boolean {
   try {
@@ -87,7 +95,9 @@ export async function captureVideoFrame(video: HTMLVideoElement, stream: MediaSt
         if (signal.aborted || !currentVideo(video, stream)) { finish({ kind: 'cancelled' }); return }
         if (!blob || blob.type !== 'image/jpeg' || !blob.size) { finish({ kind: 'failed' }); return }
         if (blob.size > maxFrameBytes) { finish({ kind: 'too-large' }); return }
-        finish({ kind: 'captured', blob, width, height })
+        const frame: CapturedFrame = Object.freeze({ kind: 'captured', blob, width, height })
+        capturedFrames.add(frame)
+        finish(frame)
       }, 'image/jpeg', 0.9)
     } catch {
       releaseEncoder(); finish({ kind: 'failed' })

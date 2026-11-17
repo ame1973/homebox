@@ -19,6 +19,8 @@
 
 ### Added
 
+- Render a crop and quarter-turn from the original in-memory camera capture into a bounded JPEG, without repeatedly encoding intermediate edits. Verify captured-source identity and decoded dimensions, discard pending results on suspension/session clear, and retain a single decoder/encoder slot until completion or reload after timeout. Synthetic-video/real-JPEG and actual BFCache/logout tests cover this internal helper; the photo editor, file import and upload remain unfinished.
+
 - Use a bounded, terminable local ZXing worker for QR/EAN/UPC/Code 128 formats missing from the browser-native scanner. Show actual native and fallback coverage, retain independent EAN-13/UPC-A interpretations and require explicit result selection and lookup. Real-Go/Chromium tests exercise synthetic fake-camera pixels and session/BFCache cleanup; image-file scanning and physical-device acceptance remain unfinished.
 
 - Serve only the three named bundled ZXing and transitive-dependency license notices from the Go application, without exposing arbitrary text files or directory listings. Verify the served bytes against the installed dependency licenses.

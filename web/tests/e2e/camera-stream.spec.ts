@@ -94,6 +94,25 @@ async function holdFrameEncoding(page: Page) {
   await expect.poll(() => page.evaluate(() => window.__frameCaptureProbe.held)).toBe(true)
 }
 
+async function holdPhotoRendering(page: Page) {
+  await page.evaluate(async () => {
+    const modulePath = '/assets/camera-harness.js', harness = await import(modulePath)
+    const video = document.querySelector<HTMLVideoElement>('video[aria-label="Live camera"]')
+    if (!video || !(video.srcObject instanceof MediaStream)) throw new Error('Missing live video stream')
+    const captured = await harness.captureVideoFrame(video, video.srcObject, new AbortController().signal)
+    if (captured.kind !== 'captured') throw new Error(`Capture failed: ${captured.kind}`)
+    const geometry = harness.newPhotoGeometry(captured.width, captured.height)
+    if (!geometry) throw new Error('Missing captured geometry')
+    const native = HTMLCanvasElement.prototype.toBlob, probe: FrameProbe = { held: false }
+    window.__frameCaptureProbe = probe
+    HTMLCanvasElement.prototype.toBlob = function (callback, type, quality) {
+      native.call(this, (blob) => { probe.held = true; probe.release = () => callback(blob) }, type, quality)
+    }
+    void harness.renderCapturedPhoto(captured, geometry, new AbortController().signal).then((result: { kind: string }) => { probe.kind = result.kind })
+  })
+  await expect.poll(() => page.evaluate(() => window.__frameCaptureProbe.held)).toBe(true)
+}
+
 async function hidePage(page: Page) {
   await page.evaluate(() => {
     Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' })
@@ -244,6 +263,64 @@ test('encodes actual fake-camera video pixels into a bounded JPEG in the private
   expect(uploads).toEqual([])
 })
 
+test('renders cropped original pixels at every quarter-turn from a real captured JPEG', async ({ page, cameraBundle }) => {
+  await prepareCamera(page, cameraBundle)
+  const results = await page.evaluate(async () => {
+    const modulePath = '/assets/camera-harness.js', harness = await import(modulePath)
+    const source = document.createElement('canvas'), video = document.createElement('video')
+    source.width = 80; source.height = 60
+    const drawing = source.getContext('2d')
+    if (!drawing) throw new Error('Missing synthetic source context')
+    for (const [color, x, y] of [['#f00000', 0, 0], ['#00f000', 40, 0], ['#0000f0', 0, 30], ['#f0f000', 40, 30]] as const) {
+      drawing.fillStyle = color; drawing.fillRect(x, y, 40, 30)
+    }
+    const stream = source.captureStream(10)
+    video.muted = true; video.playsInline = true; video.srcObject = stream; document.body.append(video)
+    try {
+      await video.play()
+      const frame = await harness.captureVideoFrame(video, stream, new AbortController().signal)
+      if (frame.kind !== 'captured') throw new Error(`Synthetic video capture failed: ${frame.kind}`)
+      const initial = harness.newPhotoGeometry(frame.width, frame.height)
+      if (!initial) throw new Error('Missing initial geometry')
+      let geometry = harness.cropPhotoGeometry(initial, { x: 10, y: 10, width: 60, height: 40 })
+      if (!geometry) throw new Error('Missing crop geometry')
+      const result = []
+      for (let turns = 0; turns < 4; turns++) {
+        const rendered = await harness.renderCapturedPhoto(frame, geometry, new AbortController().signal)
+        if (rendered.kind !== 'rendered') throw new Error(`Synthetic image rendering failed: ${rendered.kind}`)
+        const bitmap = await createImageBitmap(rendered.blob, { imageOrientation: 'none' })
+        try {
+          const output = document.createElement('canvas')
+          output.width = bitmap.width; output.height = bitmap.height
+          const context = output.getContext('2d')
+          if (!context) throw new Error('Missing rendered context')
+          context.drawImage(bitmap, 0, 0)
+          const colors = []
+          for (const [x, y] of [[1, 1], [3, 1], [1, 3], [3, 3]]) {
+            const pixel = context.getImageData(Math.floor(bitmap.width * x! / 4), Math.floor(bitmap.height * y! / 4), 1, 1).data
+            colors.push([...pixel.slice(0, 3)])
+          }
+          result.push({ width: bitmap.width, height: bitmap.height, colors })
+          output.width = 0; output.height = 0
+        } finally { bitmap.close() }
+        geometry = harness.rotatePhotoGeometry(geometry, 'clockwise')
+        if (!geometry) throw new Error('Missing rotated geometry')
+      }
+      return result
+    } finally {
+      for (const track of stream.getTracks()) track.stop()
+      video.srcObject = null; video.remove(); source.width = 0; source.height = 0
+    }
+  })
+  const colors = [[240, 0, 0], [0, 240, 0], [0, 0, 240], [240, 240, 0]]
+  const expected = [[0, 1, 2, 3], [2, 0, 3, 1], [3, 2, 1, 0], [1, 3, 0, 2]]
+  expect(results.map(({ width, height }) => [width, height])).toEqual([[60, 40], [40, 60], [60, 40], [40, 60]])
+  for (let turn = 0; turn < results.length; turn++) for (let index = 0; index < 4; index++) {
+    const actual = results[turn]!.colors[index]!, reference = colors[expected[turn]![index]!]!
+    for (let channel = 0; channel < 3; channel++) expect(Math.abs(actual[channel]! - reference[channel]!)).toBeLessThan(35)
+  }
+})
+
 for (const reason of ['pagehide', 'session'] as const) test(`discards a real encoded frame returned after ${reason}`, async ({ page, cameraBundle }) => {
   await prepareCamera(page, cameraBundle)
   await page.getByRole('button', { name: 'Start camera' }).click()
@@ -277,6 +354,30 @@ for (const transport of ['broadcast', 'storage'] as const) test(`discards a pend
   await expect(page.locator('[aria-label="Camera state"]')).toHaveText('active')
   await expect.poll(() => page.locator('video[aria-label="Live camera"]').evaluate((video: HTMLVideoElement) => video.videoWidth)).toBeGreaterThan(0)
   await holdFrameEncoding(page)
+  const other = await context.newPage()
+  try {
+    await other.goto('/settings/account')
+    await other.getByRole('button', { name: messages.auth.logout, exact: true }).click()
+    await other.getByRole('alertdialog').getByRole('button', { name: messages.auth.logout, exact: true }).click()
+    await expect.poll(() => page.evaluate(() => window.__frameCaptureProbe.kind)).toBe('cancelled')
+    await expect.poll(() => streamState(page, 0)).toBe('ended')
+    await page.evaluate(() => { window.__frameCaptureProbe.release?.() })
+    expect(await page.evaluate(() => window.__frameCaptureProbe.kind)).toBe('cancelled')
+  } finally { await other.close() }
+})
+
+for (const transport of ['broadcast', 'storage'] as const) test(`discards a pending rendered photo after real cross-window logout using ${transport}`, async ({ page, context, cameraBundle, application }) => {
+  await provision(page, application)
+  await context.addInitScript((selected: 'broadcast' | 'storage') => {
+    if (selected === 'broadcast') Object.defineProperty(window, 'localStorage', { configurable: true, get() { throw new DOMException('disabled for test', 'SecurityError') } })
+    else Object.defineProperty(window, 'BroadcastChannel', { configurable: true, value: undefined })
+  }, transport)
+  await prepareCamera(page, cameraBundle, '/settings/account')
+  await page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' }) })
+  await page.getByRole('button', { name: 'Start camera' }).click()
+  await expect(page.locator('[aria-label="Camera state"]')).toHaveText('active')
+  await expect.poll(() => page.locator('video[aria-label="Live camera"]').evaluate((video: HTMLVideoElement) => video.videoWidth)).toBeGreaterThan(0)
+  await holdPhotoRendering(page)
   const other = await context.newPage()
   try {
     await other.goto('/settings/account')

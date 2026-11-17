@@ -3,6 +3,7 @@ import { createQueryClient } from '../../src/lib/query'
 import { CameraHarness } from './camera-harness'
 export { captureVideoFrame } from '../../src/lib/capture-frame'
 export { cropPhotoGeometry, newPhotoGeometry, photoDisplaySize, rotatePhotoGeometry } from '../../src/features/capture/geometry'
+export { renderCapturedPhoto } from '../../src/features/capture/render'
 
 // Playwright serves this entry only from a disposable private bundle.
 export function mountCameraHarness() {
