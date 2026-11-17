@@ -6,20 +6,22 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-function fixture(t, { initial = 100, lazy = 100, manifest } = {}) {
+function fixture(t, { initial = 100, lazy = 100, worker = 100, manifest } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'homebox-budgets-'))
   t.after(() => rmSync(root, { recursive: true, force: true }))
   mkdirSync(join(root, 'scripts'))
   mkdirSync(join(root, 'dist', '.vite'), { recursive: true })
+  mkdirSync(join(root, 'dist', 'assets'), { recursive: true })
   const script = join(root, 'scripts', 'check-build.mjs')
   copyFileSync(new URL('../scripts/check-build.mjs', import.meta.url), script)
   writeFileSync(join(root, 'dist', 'entry.js'), randomBytes(initial))
   writeFileSync(join(root, 'dist', 'shared.js'), 'shared')
   writeFileSync(join(root, 'dist', 'lazy.js'), randomBytes(lazy))
+  writeFileSync(join(root, 'dist', 'assets', 'scan-zxing-worker-test.js'), randomBytes(worker))
   writeFileSync(join(root, 'dist', '.vite', 'manifest.json'), JSON.stringify(manifest ?? {
     'index.html': { file: 'entry.js', isEntry: true, imports: ['shared', 'shared'] },
     shared: { file: 'shared.js' },
-    lazy: { file: 'lazy.js', isDynamicEntry: true },
+    lazy: { file: 'lazy.js', isDynamicEntry: true, assets: ['assets/scan-zxing-worker-test.js'] },
   }))
   return () => execFileSync(process.execPath, [script], { encoding: 'utf8', stdio: 'pipe' })
 }
@@ -32,6 +34,25 @@ test('rejects excessive initial JavaScript', (t) => {
 })
 test('rejects an oversized lazy chunk', (t) => {
   assert.throws(fixture(t, { lazy: 200 * 1024 }), /Lazy chunk exceeds/)
+})
+test('rejects an oversized emitted worker asset', (t) => {
+  const manifest = { entry: { file: 'entry.js', isEntry: true }, lazy: { file: 'lazy.js', isDynamicEntry: true, assets: ['assets/scan-zxing-worker-test.js'] } }
+  assert.throws(fixture(t, { worker: 200 * 1024, manifest }), /Worker asset exceeds 150 KiB gzip/)
+})
+test('rejects a scanner worker included in the initial application graph', (t) => {
+  const manifest = { entry: { file: 'entry.js', isEntry: true, assets: ['assets/scan-zxing-worker-test.js'] } }
+  assert.throws(fixture(t, { manifest }), /Scanner worker must stay out of the initial application graph/)
+})
+test('rejects a scanner worker in a transitive initial import', (t) => {
+  const manifest = {
+    entry: { file: 'entry.js', isEntry: true, imports: ['shared'] },
+    shared: { file: 'shared.js', assets: ['assets/scan-zxing-worker-test.js'] },
+  }
+  assert.throws(fixture(t, { manifest }), /Scanner worker must stay out of the initial application graph/)
+})
+test('rejects a missing emitted worker asset', (t) => {
+  const manifest = { entry: { file: 'entry.js', isEntry: true }, lazy: { file: 'lazy.js', isDynamicEntry: true, assets: ['assets/missing-worker.js'] } }
+  assert.throws(fixture(t, { manifest }), /ENOENT/)
 })
 test('rejects a missing entrypoint', (t) => {
   assert.throws(fixture(t, { manifest: {} }), /no entry chunk/)
