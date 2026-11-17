@@ -84,6 +84,7 @@ func TestPurchaseLineCorrectionHistoryPagesAreCompleteAcrossLargeVoidGapsAndKeep
 func TestPurchaseLineCorrectionCorruptActualContextNeverResurrectsCurrentFinancialOrSearchEvidence(t *testing.T) {
 	for _, defect := range []string{"missing after", "missing replacement Item", "missing replacement decision", "missing replacement nullable Unit", "missing after nullable Unit", "unknown field", "wrong original interpretation", "wrong replacement proof", "native reason", "native time", "original counter", "missing replacement", "missing replacement counter", "unadvanced Purchase", "unadvanced original Item", "unadvanced replacement Item"} {
 		t.Run(defect, func(t *testing.T) {
+			t.Parallel()
 			fixture, purchases, assets, _ := purchaseAssetFixture(t)
 			s := fixture.store
 			input := reviewedLineVoid(t, fixture, fixture.unitLine)
@@ -162,6 +163,7 @@ func TestPurchaseLineCorrectionCorruptActualContextNeverResurrectsCurrentFinanci
 func TestPurchaseLineCorrectionHistoryAdmissionLookaheadAndFinalReadFailuresReturnNoPrefix(t *testing.T) {
 	for _, failure := range []string{"lookahead", "missing owner", "table query", "signing", "session write", "ignored session write", "deferred commit", "late expiry"} {
 		t.Run(failure, func(t *testing.T) {
+			t.Parallel()
 			fixture, purchases := purchaseCommands(t)
 			s := fixture.store
 			for index, line := range []PurchaseLine{fixture.unitLine, fixture.stockLine} {

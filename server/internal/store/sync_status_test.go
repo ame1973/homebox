@@ -183,6 +183,7 @@ func TestSyncStatusRejectsInvalidSequenceAndProjectionState(t *testing.T) {
 		{"invalid retained timestamp", `INSERT INTO sync_changes(entity_type,entity_id,operation,entity_revision,projection_json,created_at) VALUES('location','retained','delete',1,NULL,'not-an-instant')`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			s, locations, auth, token := locationFixture(t)
 			createLocation(t, locations, token, "BAD", nil)
 			execSQL(t, s.db, test.statement)

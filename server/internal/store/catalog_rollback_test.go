@@ -14,6 +14,7 @@ func TestCatalogCreateRollsBackEverySourceDerivedProjectionAndReplyWrite(t *test
 		{"data_revision", "UPDATE"}, {"api_idempotency", "INSERT"}, {"mutation_events", "INSERT"}, {"sessions", "UPDATE"},
 	} {
 		t.Run(failure.table+failure.event, func(t *testing.T) {
+			t.Parallel()
 			s, catalog, auth, token := catalogFixture(t)
 			taxonomy, err := NewTaxonomy(auth)
 			if err != nil {
@@ -47,6 +48,7 @@ func TestCatalogPatchRollsBackEverySourceFTSProjectionAndReplyWrite(t *testing.T
 		{"data_revision", "UPDATE"}, {"api_idempotency", "INSERT"}, {"mutation_events", "INSERT"}, {"sessions", "UPDATE"},
 	} {
 		t.Run(failure.table+failure.event, func(t *testing.T) {
+			t.Parallel()
 			s, catalog, auth, token := catalogFixture(t)
 			item := createCatalogItem(t, catalog, token, ItemCreate{Name: "BeforeTitle"})
 			now := auth.now().Add(time.Minute)
@@ -77,6 +79,7 @@ func TestCatalogDeleteRollsBackEveryOwnedCascadeCounterTombstoneAndReply(t *test
 		{"sync_changes", "INSERT"}, {"api_idempotency", "INSERT"}, {"mutation_events", "INSERT"},
 	} {
 		t.Run(failure.table+failure.event, func(t *testing.T) {
+			t.Parallel()
 			fixture := catalogWithOwnedRows(t)
 			s, catalog, item := fixture.store, fixture.catalog, fixture.item
 			before := domainState(t, s)
@@ -100,6 +103,7 @@ func TestCatalogLateAuthorizationAndDeferredCommitFailureWithholdAllMutationResu
 	for _, operation := range []string{"create", "patch", "archive", "delete"} {
 		for _, failure := range []string{"late revocation", "deferred commit"} {
 			t.Run(operation+failure, func(t *testing.T) {
+				t.Parallel()
 				s, catalog, _, token := catalogFixture(t)
 				item := createCatalogItem(t, catalog, token, ItemCreate{Name: "Before"})
 				if failure == "late revocation" {
@@ -161,6 +165,7 @@ func setCatalogProjectionRevision(t *testing.T, s *Store, kind, id string, revis
 func TestCatalogSafeCounterAndSequenceOverflowRollbackAllDependentState(t *testing.T) {
 	for _, scope := range []string{"item", "search", "catalog", "sequence", "category", "deleted item", "deleted tag"} {
 		t.Run(scope, func(t *testing.T) {
+			t.Parallel()
 			s, catalog, auth, token := catalogFixture(t)
 			item := createCatalogItem(t, catalog, token, ItemCreate{Name: "Before"})
 			var category Category
@@ -218,6 +223,7 @@ func TestCatalogSafeCounterAndSequenceOverflowRollbackAllDependentState(t *testi
 func TestCatalogDeleteRejectsCorruptOwnedIdentitiesWithoutPartialCleanup(t *testing.T) {
 	for _, table := range []string{"item_barcodes", "item_aliases", "item_attributes", "media_links", "ai_review_entries"} {
 		t.Run(table, func(t *testing.T) {
+			t.Parallel()
 			fixture := catalogWithOwnedRows(t)
 			s, item := fixture.store, fixture.item
 			execSQL(t, s.db, "UPDATE "+table+" SET id=? WHERE item_id=?", strings.Repeat("x", 129), item.ID)
@@ -233,6 +239,7 @@ func TestCatalogDeleteRejectsCorruptOwnedIdentitiesWithoutPartialCleanup(t *test
 func TestCatalogDeleteExhaustedOwnedAndSearchCountersRollbackEarlierTombstones(t *testing.T) {
 	for _, scope := range []string{"barcode", "item_tag", "category", "search_doc"} {
 		t.Run(scope, func(t *testing.T) {
+			t.Parallel()
 			fixture := catalogWithOwnedRows(t)
 			s, item := fixture.store, fixture.item
 			id := "owned-barcode"
@@ -257,6 +264,7 @@ func TestCatalogDeleteExhaustedOwnedAndSearchCountersRollbackEarlierTombstones(t
 func TestCatalogReadCommitFailureWithholdsResourcesAndPageContinuations(t *testing.T) {
 	for _, operation := range []string{"get", "list"} {
 		t.Run(operation, func(t *testing.T) {
+			t.Parallel()
 			s, catalog, auth, token := catalogFixture(t)
 			item := createCatalogItem(t, catalog, token, ItemCreate{Name: "Read"})
 			now := auth.now().Add(time.Minute)

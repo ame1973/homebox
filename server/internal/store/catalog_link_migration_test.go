@@ -180,6 +180,7 @@ func TestCatalogLinkUnsafeBackfillRollsBackSourceLedgerAndAllPendingDDL(t *testi
 		{"overlong value", "INSERT INTO item_attributes VALUES('bad','item-1','Key',printf('%010001d',0),'2026')"},
 	} {
 		t.Run(invalid.name, func(t *testing.T) {
+			t.Parallel()
 			path, old := legacyFixture(t, 2)
 			execSQL(t, old, invalid.insert)
 			_ = old.Close()

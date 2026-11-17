@@ -198,6 +198,7 @@ func TestPurchaseInvalidLegacySourceOrCounterRollsBackEveryPendingMigrationAndCh
 		{"counter identity UTF", "INSERT INTO projection_revisions VALUES('purchase_line',CAST(x'ff' AS TEXT),1)"},
 	} {
 		t.Run(invalid.name, func(t *testing.T) {
+			t.Parallel()
 			path, old := legacyFixture(t, 2)
 			seedPurchaseUpgradeSource(t, old)
 			execSQL(t, old, invalid.query)
@@ -218,6 +219,7 @@ func TestPurchaseInvalidLegacySourceOrCounterRollsBackEveryPendingMigrationAndCh
 func TestPurchaseCertifiedValidationAndLateLedgerFailuresPreserveAllOriginalState(t *testing.T) {
 	for _, failure := range []string{"source bound", "missing Item counter", "ledger"} {
 		t.Run(failure, func(t *testing.T) {
+			t.Parallel()
 			path, old := rootTwelveFixture(t)
 			seedPurchaseUpgradeSource(t, old.db)
 			if failure == "source bound" {

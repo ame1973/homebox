@@ -16,6 +16,7 @@ func TestAssetPurchaseEveryActualStatementFailureRollsBackFinancialAndSearchPubl
 		{"data_revision", "UPDATE"}, {"api_idempotency", "INSERT"}, {"mutation_events", "INSERT"}, {"sessions", "UPDATE"},
 	} {
 		t.Run(failure.table+"/"+failure.verb, func(t *testing.T) {
+			t.Parallel()
 			fixture, purchases, _, _ := purchaseAssetFixture(t)
 			s := fixture.store
 			execSQL(t, s.db, "CREATE TRIGGER fail_asset_purchase BEFORE "+failure.verb+" ON "+failure.table+" BEGIN SELECT RAISE(ABORT,'financial allocation statement failure'); END")
@@ -36,6 +37,7 @@ func TestAssetPurchaseEveryActualStatementFailureRollsBackFinancialAndSearchPubl
 func TestAssetPurchaseIgnoredRewrittenOrReseededSourceCannotFreezeSuccess(t *testing.T) {
 	for _, failure := range []string{"ignored Line", "ignored Asset", "ignored Item", "rewritten Line", "rewritten Asset", "reseeded Asset", "missing final Asset", "missing final Unit", "occupied Line identity"} {
 		t.Run(failure, func(t *testing.T) {
+			t.Parallel()
 			fixture, purchases, _, _ := purchaseAssetFixture(t)
 			s := fixture.store
 			setCatalogProjectionRevision(t, s, "asset", fixture.unit.ID, 7)
@@ -75,6 +77,7 @@ func TestAssetPurchaseIgnoredRewrittenOrReseededSourceCannotFreezeSuccess(t *tes
 func TestAssetPurchaseFinancialLimitsNeverReseedAuthorityOrPartiallyPublish(t *testing.T) {
 	for _, scope := range []string{"asset", "item", "purchase", "catalog", "sequence"} {
 		t.Run(scope, func(t *testing.T) {
+			t.Parallel()
 			fixture, purchases, _, _ := purchaseAssetFixture(t)
 			s := fixture.store
 			switch scope {
@@ -104,6 +107,7 @@ func TestAssetPurchaseFinancialLimitsNeverReseedAuthorityOrPartiallyPublish(t *t
 func TestAssetPurchaseFinalAuthorizationCancellationAndDeferredCommitWithholdEverything(t *testing.T) {
 	for _, failure := range []string{"mandatory", "revoked", "epoch", "canceled", "late expiry", "deferred commit"} {
 		t.Run(failure, func(t *testing.T) {
+			t.Parallel()
 			fixture, purchases, _, _ := purchaseAssetFixture(t)
 			s := fixture.store
 			ctx := t.Context()

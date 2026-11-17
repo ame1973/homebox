@@ -12,6 +12,7 @@ func TestDomainMutationIgnoredPublicationWritesWithholdEveryEffect(t *testing.T)
 		{"mutation_events", "INSERT"}, {"sessions", "UPDATE"},
 	} {
 		t.Run(failure.table, func(t *testing.T) {
+			t.Parallel()
 			s, locations, auth, token := locationFixture(t)
 			now := auth.now().Add(time.Minute)
 			auth.now = func() time.Time { return now }
@@ -86,6 +87,7 @@ func TestDomainMutationRejectsReceiptChangedDuringSessionActivity(t *testing.T) 
 				name = failure.name + "/original-key replay"
 			}
 			t.Run(name, func(t *testing.T) {
+				t.Parallel()
 				s, locations, _, token := locationFixture(t)
 				input := LocationCreate{Code: "BOX", Name: "Receipt must remain exact"}
 				const key = "activity-receipt-original"
@@ -125,6 +127,7 @@ func TestDomainReplayRequiresOriginalAuditScope(t *testing.T) {
 		{"operation", "dataset_epoch", "'different-operation'"},
 	} {
 		t.Run(fields.name, func(t *testing.T) {
+			t.Parallel()
 			s, locations, _, token := locationFixture(t)
 			input := LocationCreate{Code: "BOX", Name: "Original audit scope"}
 			const key = "original-audit-scope"
@@ -172,6 +175,7 @@ func TestDomainReadsAndOriginalReplaysRejectAuthorizationChangedDuringActivity(t
 		{"expiry", "", ErrAuthentication},
 	} {
 		t.Run(failure.name, func(t *testing.T) {
+			t.Parallel()
 			s, locations, auth, token := locationFixture(t)
 			input := LocationCreate{Code: "BOX", Name: "Original"}
 			original, err := locations.Create(t.Context(), token, "activity-revalidation-original", 0, input)

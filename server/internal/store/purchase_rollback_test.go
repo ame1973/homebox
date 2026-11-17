@@ -38,6 +38,7 @@ func TestPurchasePublicationRollsBackEverySourceProjectionSearchReceiptAndSessio
 func TestPurchasePublicationLateAuthorizationAndDeferredCommitWithholdAllFinancialResults(t *testing.T) {
 	for _, failure := range []string{"late revocation", "deferred commit"} {
 		t.Run(failure, func(t *testing.T) {
+			t.Parallel()
 			fixture := purchasesFixture(t)
 			s := fixture.store
 			if failure == "late revocation" {
@@ -61,6 +62,7 @@ func TestPurchasePublicationLateAuthorizationAndDeferredCommitWithholdAllFinanci
 func TestPurchasePublicationNeverReseedsMissingOriginalOrRelatedAuthority(t *testing.T) {
 	for _, scope := range []string{"purchase", "unit line", "stock line", "individual Item", "quantity Item", "Unit"} {
 		t.Run(scope, func(t *testing.T) {
+			t.Parallel()
 			fixture := purchasesFixture(t)
 			s := fixture.store
 			key := projectionKey{"purchase", fixture.purchase.ID}
@@ -90,6 +92,7 @@ func TestPurchasePublicationNeverReseedsMissingOriginalOrRelatedAuthority(t *tes
 func TestPurchasePublicationExhaustionRollsBackAllocationsSearchHistoryAndReplies(t *testing.T) {
 	for _, scope := range []string{"purchase", "individual Item", "quantity Item", "unit search", "item search", "catalog revision", "sequence"} {
 		t.Run(scope, func(t *testing.T) {
+			t.Parallel()
 			fixture := purchasesFixture(t)
 			s := fixture.store
 			key := projectionKey{"purchase", fixture.purchase.ID}

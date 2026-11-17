@@ -15,6 +15,7 @@ func TestTaxonomyCreationRollsBackSourceAndPublicationTogether(t *testing.T) {
 			{"mutation_events", "INSERT"}, {"sessions", "UPDATE"},
 		} {
 			t.Run(kind+failure.table, func(t *testing.T) {
+				t.Parallel()
 				s, taxonomy, _, token := taxonomyFixture(t)
 				table := failure.table
 				if table == "source" {
@@ -49,6 +50,7 @@ func TestTaxonomyCreationRollsBackSourceAndPublicationTogether(t *testing.T) {
 func TestTaxonomyCorruptReadDoesNotReturnPartialPagesOrResources(t *testing.T) {
 	for _, kind := range []string{"category", "tag"} {
 		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
 			s, taxonomy, _, token := taxonomyFixture(t)
 			category := createCategory(t, taxonomy, token, "Category", nil)
 			tag := createTag(t, taxonomy, token, "Tag")
@@ -88,6 +90,7 @@ func TestTaxonomyRenameRollsBackEveryDependentWriteAndReusesOnlyRolledBackKeys(t
 		{"mutation_events", "INSERT"}, {"sessions", "UPDATE"},
 	} {
 		t.Run(failure.table+failure.event, func(t *testing.T) {
+			t.Parallel()
 			s, taxonomy, auth, token := taxonomyFixture(t)
 			category := createCategory(t, taxonomy, token, "BeforeClass", nil)
 			seedCatalogItem(t, taxonomy, token, "item-1", &category.ID)
@@ -119,6 +122,7 @@ func TestTaxonomyDeletionRollsBackSourceLinksTombstonesAndSearchTogether(t *test
 			{"sync_changes", "INSERT"}, {"mutation_events", "INSERT"},
 		} {
 			t.Run(kind+failure.table, func(t *testing.T) {
+				t.Parallel()
 				s, taxonomy, auth, token := taxonomyFixture(t)
 				category := createCategory(t, taxonomy, token, "Category", nil)
 				tag := createTag(t, taxonomy, token, "Tag")
@@ -147,6 +151,7 @@ func TestTaxonomyDeletionRollsBackSourceLinksTombstonesAndSearchTogether(t *test
 	}
 	for _, table := range []string{"item_tags", "tags", "categories"} {
 		t.Run("source-delete-"+table, func(t *testing.T) {
+			t.Parallel()
 			s, taxonomy, _, token := taxonomyFixture(t)
 			category := createCategory(t, taxonomy, token, "Category", nil)
 			tag := createTag(t, taxonomy, token, "Tag")
@@ -170,6 +175,7 @@ func TestTaxonomyDeletionRollsBackSourceLinksTombstonesAndSearchTogether(t *test
 func TestTaxonomyDeferredCommitAndLateSearchFailuresWithholdEveryEffect(t *testing.T) {
 	for _, failure := range []string{"deferred commit", "later search"} {
 		t.Run(failure, func(t *testing.T) {
+			t.Parallel()
 			s, taxonomy, _, token := taxonomyFixture(t)
 			category := createCategory(t, taxonomy, token, "BeforeClass", nil)
 			seedCatalogItem(t, taxonomy, token, "item-1", &category.ID)
@@ -197,6 +203,7 @@ func TestTaxonomyDeferredCommitAndLateSearchFailuresWithholdEveryEffect(t *testi
 func TestTaxonomySourcePublicationRejectsInvalidStateAndUnboundedCycles(t *testing.T) {
 	for _, corruption := range []string{"invalid item", "invalid text", "category cycle"} {
 		t.Run(corruption, func(t *testing.T) {
+			t.Parallel()
 			s, taxonomy, _, token := taxonomyFixture(t)
 			root := createCategory(t, taxonomy, token, "Root", nil)
 			child := createCategory(t, taxonomy, token, "Child", &root.ID)
@@ -228,6 +235,7 @@ func TestTaxonomyLateAuthorizationChangesRollBackDerivedPublication(t *testing.T
 		{"revision", "UPDATE admin_accounts SET revision=revision+1"},
 	} {
 		t.Run(change.name, func(t *testing.T) {
+			t.Parallel()
 			s, taxonomy, _, token := taxonomyFixture(t)
 			category := createCategory(t, taxonomy, token, "BeforeClass", nil)
 			seedCatalogItem(t, taxonomy, token, "item-1", &category.ID)
@@ -245,6 +253,7 @@ func TestTaxonomyLateAuthorizationChangesRollBackDerivedPublication(t *testing.T
 func TestTaxonomyOverflowRollsBackApprovedSourceAndFrozenState(t *testing.T) {
 	for _, scope := range []string{"category", "search_doc", "catalog", "sequence"} {
 		t.Run(scope, func(t *testing.T) {
+			t.Parallel()
 			s, taxonomy, _, token := taxonomyFixture(t)
 			category := createCategory(t, taxonomy, token, "BeforeClass", nil)
 			seedCatalogItem(t, taxonomy, token, "item-1", &category.ID)

@@ -242,6 +242,7 @@ func TestAssetInvalidLegacySourceOrRetainedCounterRollsBackAllPendingDDLAndCheck
 		{"disposal identity", "INSERT INTO projection_revisions VALUES('disposal',char(0)||printf('%0128d',0),1)"},
 	} {
 		t.Run(invalid.name, func(t *testing.T) {
+			t.Parallel()
 			path, old := legacyFixture(t, 2)
 			seedAssetUpgradeSource(t, old)
 			execSQL(t, old, invalid.statement)
@@ -272,6 +273,7 @@ func TestAssetInvalidLegacySourceOrRetainedCounterRollsBackAllPendingDDLAndCheck
 func TestAssetCertifiedValidationAndLateLedgerFailuresPreserveEveryOriginalTableAndRecoverySnapshot(t *testing.T) {
 	for _, failure := range []string{"missing Unit counter", "missing Item counter", "source validation", "ledger"} {
 		t.Run(failure, func(t *testing.T) {
+			t.Parallel()
 			path, old := assetRootFourteenFixture(t)
 			seedAssetUpgradeSource(t, old.db)
 			if failure != "missing Unit counter" {

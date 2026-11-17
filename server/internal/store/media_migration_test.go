@@ -252,6 +252,7 @@ func TestMediaFreshSchemaDefaultsLegacyClaimsToUnverified(t *testing.T) {
 func TestMediaBackfillValidationWithholdsFailedQueriesAndCancellation(t *testing.T) {
 	for _, stage := range []string{"counters", "media", "links", "current", "canceled"} {
 		t.Run(stage, func(t *testing.T) {
+			t.Parallel()
 			s := openTestStore(t)
 			if stage == "current" {
 				execSQL(t, s.db, `INSERT INTO media(id,storage_key,sha256,mime_type,width,height,bytes,created_at) VALUES('photo','opaque',?,'image/jpeg',1,1,1,'2026')`, strings.Repeat("a", 64))
@@ -295,6 +296,7 @@ func TestMediaUpgradeRejectsIgnoredBackfillAndLedgerWrites(t *testing.T) {
 		{"late checksum removal", `CREATE TRIGGER ignore_media_backfill AFTER INSERT ON schema_migration_checksums WHEN NEW.version=19 BEGIN DELETE FROM schema_migration_checksums WHERE version=18; END`},
 	} {
 		t.Run(failure.name, func(t *testing.T) {
+			t.Parallel()
 			path, old := mediaMatrixEighteenFixture(t, snapshot)
 			execSQL(t, old.db, `INSERT INTO media(id,storage_key,sha256,mime_type,width,height,bytes,created_at) VALUES('photo','opaque',?,'image/jpeg',1,1,1,'2026')`, strings.Repeat("a", 64))
 			execSQL(t, old.db, `INSERT INTO media_links(id,media_id,item_id) VALUES('link','photo','item-1')`)
@@ -353,6 +355,7 @@ func TestMediaUpgradeRejectsInvalidLegacyAuthorityWithoutCommittingAnyPrefix(t *
 		{"deleted location owner", `UPDATE locations SET deleted_at='2026' WHERE id='loc-1'; INSERT INTO media_links(id,media_id,location_id) VALUES('bad','photo','loc-1')`},
 	} {
 		t.Run(invalid.name, func(t *testing.T) {
+			t.Parallel()
 			path, old := mediaMatrixEighteenFixture(t, snapshot)
 			execSQL(t, old.db, `INSERT INTO media(id,storage_key,sha256,mime_type,width,height,bytes,created_at) VALUES('photo','opaque',?,'image/jpeg',1,1,1,'2026')`, strings.Repeat("a", 64))
 			execSQL(t, old.db, invalid.query)

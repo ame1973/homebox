@@ -69,6 +69,7 @@ func TestDomainMutationRollsBackEveryDependentCreateWrite(t *testing.T) {
 		{"mutation_events", "INSERT"}, {"sessions", "UPDATE"},
 	} {
 		t.Run(failure.table, func(t *testing.T) {
+			t.Parallel()
 			s, locations, a, token := locationFixture(t)
 			before := domainState(t, s)
 			now := a.now().Add(time.Minute)
@@ -135,6 +136,7 @@ func TestDomainMutationUsesOneRevisionAndFinalStatePerIdentity(t *testing.T) {
 func TestDomainMutationPayloadFailuresRollBackSourceAndCounters(t *testing.T) {
 	for _, state := range []string{"missing source", "invalid source", "unsupported upsert", "unknown kind", "invalid identity", "invalid result"} {
 		t.Run(state, func(t *testing.T) {
+			t.Parallel()
 			s, locations, a, token := locationFixture(t)
 			location := createLocation(t, locations, token, "BOX", nil)
 			before := domainState(t, s)
@@ -180,6 +182,7 @@ func TestDomainMutationPayloadFailuresRollBackSourceAndCounters(t *testing.T) {
 func TestDomainMutationRechecksAuthorizationBeforeCommit(t *testing.T) {
 	for _, state := range []string{"expiry", "revoked", "epoch", "mandatory", "revision"} {
 		t.Run(state, func(t *testing.T) {
+			t.Parallel()
 			s, a, now, _, token := completedAuthFixture(t)
 			locations, err := s.NewLocations(a)
 			if err != nil {
@@ -228,6 +231,7 @@ func TestDomainMutationDeleteFailureRestoresOwnerLinksAndCurrentProjection(t *te
 		{"current_projections", "DELETE"}, {"sync_changes", "INSERT"}, {"mutation_events", "INSERT"},
 	} {
 		t.Run(failure.table, func(t *testing.T) {
+			t.Parallel()
 			s, locations, _, token := locationFixture(t)
 			location := createLocation(t, locations, token, "BOX", nil)
 			execSQL(t, s.db, "INSERT INTO media(id,storage_key,sha256,mime_type,width,height,bytes,created_at) VALUES('photo','private-photo',?,'image/jpeg',1,1,10,'2026')", strings.Repeat("a", 64))
@@ -278,6 +282,7 @@ func TestDomainMutationSubtreeArchiveRollsBackEarlierNodeWrites(t *testing.T) {
 func TestDomainMutationSafeIntegerLimitsRollBackAllWrites(t *testing.T) {
 	for _, counter := range []string{"projection", "catalog", "sequence"} {
 		t.Run(counter, func(t *testing.T) {
+			t.Parallel()
 			s, locations, _, token := locationFixture(t)
 			location := createLocation(t, locations, token, "BOX", nil)
 			switch counter {
@@ -378,6 +383,7 @@ func TestDomainFrozenRepliesRejectCorruptedRowsRatherThanApplyingAgain(t *testin
 		"created_at='2099-01-01T00:00:00Z'", "expires_at=created_at",
 	} {
 		t.Run(change, func(t *testing.T) {
+			t.Parallel()
 			s, locations, _, token := locationFixture(t)
 			input := LocationCreate{Code: "BOX", Name: "Original"}
 			if _, err := locations.Create(t.Context(), token, "corrupt-reply-key", 0, input); err != nil {

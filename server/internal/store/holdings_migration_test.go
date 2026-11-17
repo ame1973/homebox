@@ -187,6 +187,7 @@ func TestHoldingInvalidLegacyBackfillRollsBackSourceLedgerAndAllPendingDDL(t *te
 		{"invalid stock pair", "INSERT INTO projection_revisions VALUES('stock','not-a-pair',7)"},
 	} {
 		t.Run(invalid.name, func(t *testing.T) {
+			t.Parallel()
 			path, old := legacyFixture(t, 2)
 			execSQL(t, old, "INSERT INTO items(id,name,tracking_mode,created_at,updated_at) VALUES('individual','Physical','individual','2026','2026')")
 			execSQL(t, old, invalid.query)
