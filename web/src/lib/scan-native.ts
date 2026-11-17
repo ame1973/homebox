@@ -7,6 +7,9 @@ const nativeFormats = {
 type NativeFormat = keyof typeof nativeFormats
 export type ScanFormat = typeof nativeFormats[NativeFormat]
 export type ScannedCode = Readonly<{ format: ScanFormat; rawValue: string }>
+export const requiredScanFormats: readonly ScanFormat[] = ['QR_CODE', 'EAN_13', 'EAN_8', 'UPC_A', 'UPC_E', 'CODE_128']
+export const maxScanDimension = 1920
+export const maxScanPixels = 1920 * 1080
 
 interface NativeDetector {
   detect(source: ImageBitmapSource): Promise<unknown>

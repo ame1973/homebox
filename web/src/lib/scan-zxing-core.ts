@@ -12,12 +12,9 @@ import EAN8Reader from '@zxing/library/esm/core/oned/EAN8Reader'
 import UPCAReader from '@zxing/library/esm/core/oned/UPCAReader'
 import QRCodeReader from '@zxing/library/esm/core/qrcode/QRCodeReader'
 import type Reader from '@zxing/library/esm/core/Reader'
-import type { ScanFormat, ScannedCode } from './scan-native'
+import { maxScanDimension, maxScanPixels, type ScanFormat, type ScannedCode } from './scan-native'
 import { validText } from './text-literal'
 import { UPCEBarcodeReader } from './scan-upce-reader'
-
-export const maxScanDimension = 1920
-export const maxScanPixels = 1920 * 1080
 
 const formats: Record<ScanFormat, { value: BarcodeFormat; create: () => Reader }> = {
   QR_CODE: { value: BarcodeFormat.QR_CODE, create: () => new QRCodeReader() },
