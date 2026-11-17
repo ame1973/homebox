@@ -197,12 +197,32 @@ func requireMediaPendingEpoch(ctx context.Context, tx *sql.Tx, epoch string) err
 	return err
 }
 
-func requireMediaPendingRow(ctx context.Context, tx *sql.Tx, expected pendingMediaObject) error {
+const mediaPendingSelect = `SELECT id,dataset_epoch,sha256,bytes,created_at,stage_name,stage_device,stage_inode,staging_device,staging_inode,object_device,object_inode FROM media_pending_objects`
+
+func scanMediaPendingRow(row rowScanner) (pendingMediaObject, error) {
 	var actual pendingMediaObject
-	err := tx.QueryRowContext(ctx, `SELECT id,dataset_epoch,sha256,bytes,created_at,stage_name,stage_device,stage_inode,staging_device,staging_inode,object_device,object_inode FROM media_pending_objects WHERE id=?`, expected.ID).
-		Scan(&actual.ID, &actual.Epoch, &actual.SHA256, &actual.Bytes, &actual.CreatedAt, &actual.StageName, &actual.StageDevice, &actual.StageInode,
-			&actual.StagingDevice, &actual.StagingInode, &actual.ObjectDevice, &actual.ObjectInode)
-	if errors.Is(err, sql.ErrNoRows) || err == nil && actual != expected {
+	err := row.Scan(&actual.ID, &actual.Epoch, &actual.SHA256, &actual.Bytes, &actual.CreatedAt, &actual.StageName, &actual.StageDevice, &actual.StageInode,
+		&actual.StagingDevice, &actual.StagingInode, &actual.ObjectDevice, &actual.ObjectInode)
+	if errors.Is(err, sql.ErrNoRows) {
+		return pendingMediaObject{}, ErrNotFound
+	}
+	return actual, err
+}
+
+func loadMediaPendingRow(ctx context.Context, query queryer, id string) (pendingMediaObject, error) {
+	return scanMediaPendingRow(query.QueryRowContext(ctx, mediaPendingSelect+" WHERE id=?", id))
+}
+
+func validPendingMediaObject(value pendingMediaObject) bool {
+	return validDomainID(value.ID) && authString(value.Epoch, 1, 128) && validMediaDigest(value.SHA256) &&
+		value.Bytes >= 1 && value.Bytes <= maxMediaFileBytes && authString(value.CreatedAt, 1, 128) && validMediaStageName(value.StageName) &&
+		value.StageDevice >= 0 && value.StageInode >= 1 && value.StagingDevice == value.StageDevice && value.StagingInode >= 1 &&
+		value.ObjectDevice == value.StageDevice && value.ObjectInode >= 1 && value.ObjectInode != value.StagingInode
+}
+
+func requireMediaPendingRow(ctx context.Context, tx *sql.Tx, expected pendingMediaObject) error {
+	actual, err := loadMediaPendingRow(ctx, tx, expected.ID)
+	if errors.Is(err, ErrNotFound) || err == nil && actual != expected {
 		return ErrDomainState
 	}
 	return err
@@ -227,10 +247,7 @@ func (m *mutationTx) consumeMediaPending(input []pendingMediaObject) error {
 		return err
 	}
 	for _, value := range pending {
-		if !validDomainID(value.ID) || value.Epoch != epoch || !validMediaDigest(value.SHA256) ||
-			value.Bytes < 1 || value.Bytes > maxMediaFileBytes || !authString(value.CreatedAt, 1, 128) || !validMediaStageName(value.StageName) ||
-			value.StageDevice < 0 || value.StageInode < 1 || value.StagingDevice != value.StageDevice || value.StagingInode < 1 ||
-			value.ObjectDevice != value.StageDevice || value.ObjectInode < 1 || value.ObjectInode == value.StagingInode {
+		if !validPendingMediaObject(value) || value.Epoch != epoch {
 			return ErrDomainState
 		}
 		if err := requireMediaPendingRow(m.ctx, m.tx, value); err != nil {
