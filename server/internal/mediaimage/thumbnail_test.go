@@ -348,15 +348,15 @@ func TestThumbnailSamplingRespectsCancellationAndImageOrigin(t *testing.T) {
 func FuzzSanitizeWithThumbnail(f *testing.F) {
 	f.Add(encodePNG(f, sampleImage()), byte(0))
 	f.Add(encodeJPEG(f, sampleImage()), byte(1))
+	f.Add(webpFixture(f, losslessWebP), byte(2))
+	f.Add(webpFixture(f, lossyAlphaWebP), byte(2))
+	f.Add(webpFixture(f, animatedWebP), byte(2))
 	f.Add([]byte("\x89PNG\r\n\x1a\n"), byte(0))
 	f.Fuzz(func(t *testing.T, raw []byte, format byte) {
 		if len(raw) > 1<<20 {
 			t.Skip()
 		}
-		kind := "image/png"
-		if format&1 != 0 {
-			kind = "image/jpeg"
-		}
+		kind := []string{"image/png", "image/jpeg", "image/webp"}[format%3]
 		var full, thumb bytes.Buffer
 		original, result, err := SanitizeWithThumbnail(t.Context(), raw, kind, &full, &thumb, Limits{InputBytes: 1 << 20, Dimension: 128, Pixels: 4096})
 		if err != nil {

@@ -403,7 +403,7 @@ func TestStagedMediaUploadRejectsUnsafeImagesAndUnauthorizedSessions(t *testing.
 		{"invalid-token", "wrong-session-key", "image/png", raw, ErrAuthentication},
 		{token, "short", "image/png", raw, ErrDomainInput},
 		{token, "wrong-mime-key", "image/jpeg", raw, mediaimage.ErrInvalid},
-		{token, "unsupported-webp-key", "image/webp", []byte("RIFF....WEBP"), mediaimage.ErrUnsupported},
+		{token, "invalid-webp-key", "image/webp", []byte("RIFF....WEBP"), mediaimage.ErrInvalid},
 		{token, "broken-png-key", "image/png", raw[:len(raw)-1], mediaimage.ErrInvalid},
 	} {
 		if got, err := library.uploadStagedMedia(t.Context(), test.token, test.key, test.mime, test.raw, staging, objects); !errors.Is(err, test.want) || got != (Media{}) {

@@ -106,7 +106,11 @@ func (library *MediaLibrary) uploadStagedMediaGuarded(ctx context.Context, token
 	if err != nil {
 		return Media{}, err
 	}
-	if image.MIMEType != mime || preview.MIMEType != "image/jpeg" {
+	outputMIME := mime
+	if outputMIME == "image/webp" {
+		outputMIME = "image/png"
+	}
+	if image.MIMEType != outputMIME || preview.MIMEType != "image/jpeg" {
 		return Media{}, ErrDomainState
 	}
 	originalDigest, err := original.seal()

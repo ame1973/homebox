@@ -13,6 +13,8 @@ import (
 	"image/png"
 	"io"
 	"mime"
+
+	"golang.org/x/image/webp"
 )
 
 const (
@@ -49,11 +51,11 @@ type Result struct {
 // budget if greater throughput is needed. HTTP admission must also bound staging.
 var decodeSlot = make(chan struct{}, 1)
 
-// Sanitize completely decodes a JPEG or PNG, applies EXIF orientation, and
-// writes freshly encoded pixels without the source metadata. WebP is not yet
-// supported. The caller must not change raw concurrently and must discard the
-// entire output if an error occurs. A successful result alone does not publish
-// or prove the later integrity of a stored file.
+// Sanitize completely decodes a JPEG, PNG or static WebP, applies EXIF
+// orientation, and writes freshly encoded pixels without the source metadata.
+// WebP is losslessly re-encoded as PNG because the decoder has no WebP encoder.
+// The caller must not change raw concurrently and must discard the entire
+// output on error. A result alone does not publish or prove later file integrity.
 func Sanitize(ctx context.Context, raw []byte, declaredMIME string, dst io.Writer, limits Limits) (Result, error) {
 	return sanitizeImage(ctx, raw, declaredMIME, dst, limits, nil, nil)
 }
@@ -94,7 +96,7 @@ func sanitizeImage(ctx context.Context, raw []byte, declaredMIME string, dst io.
 	if err != nil || len(params) != 0 {
 		return Result{}, ErrUnsupported
 	}
-	if kind != "image/jpeg" && kind != "image/png" {
+	if kind != "image/jpeg" && kind != "image/png" && kind != "image/webp" {
 		return Result{}, ErrUnsupported
 	}
 
@@ -121,6 +123,11 @@ func sanitizeImage(ctx context.Context, raw []byte, declaredMIME string, dst io.
 		if err == nil {
 			config, err = png.DecodeConfig(bytes.NewReader(raw))
 		}
+	case "image/webp":
+		orientation, err = inspectWebP(raw)
+		if err == nil {
+			config, err = webp.DecodeConfig(bytes.NewReader(raw))
+		}
 	}
 	if err != nil {
 		return Result{}, ErrInvalid
@@ -143,6 +150,8 @@ func sanitizeImage(ctx context.Context, raw []byte, declaredMIME string, dst io.
 		decoded, err = jpeg.Decode(reader)
 	case "image/png":
 		decoded, err = png.Decode(reader)
+	case "image/webp":
+		decoded, err = webp.Decode(reader)
 	}
 	if err != nil {
 		if ctx.Err() != nil {
@@ -165,7 +174,7 @@ func sanitizeImage(ctx context.Context, raw []byte, declaredMIME string, dst io.
 	switch kind {
 	case "image/jpeg":
 		err = jpeg.Encode(out, decoded, &jpeg.Options{Quality: 90})
-	case "image/png":
+	case "image/png", "image/webp":
 		err = png.Encode(out, decoded)
 	}
 	if err != nil {
@@ -174,7 +183,11 @@ func sanitizeImage(ctx context.Context, raw []byte, declaredMIME string, dst io.
 	if err := ctx.Err(); err != nil {
 		return Result{}, err
 	}
-	result := Result{MIMEType: kind, Width: decoded.Bounds().Dx(), Height: decoded.Bounds().Dy(), Bytes: out.count}
+	outputMIME := kind
+	if outputMIME == "image/webp" {
+		outputMIME = "image/png"
+	}
+	result := Result{MIMEType: outputMIME, Width: decoded.Bounds().Dx(), Height: decoded.Bounds().Dy(), Bytes: out.count}
 	copy(result.SHA256[:], hash.Sum(nil))
 	if thumbnail != nil {
 		*preview, err = writeThumbnail(ctx, decoded, thumbnail)
