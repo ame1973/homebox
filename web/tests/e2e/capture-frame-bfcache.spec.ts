@@ -123,6 +123,7 @@ test('discards a pending rendered photo across actual BFCache restoration', asyn
   await page.evaluate(() => { window.__captureBF.release?.() })
   expect(await page.evaluate(() => window.__captureBF.kind)).toBe('cancelled')
   await page.getByRole('button', { name: messages.scan.restoreContinue }).click()
+  await expect(page.getByRole('button', { name: messages.scan.cameraStart })).toBeEnabled()
   await page.evaluate(() => { window.__captureBFUnmount() })
   expect(writes).toEqual([])
 })
