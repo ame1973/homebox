@@ -29,7 +29,7 @@ class CIConfigurationTests(unittest.TestCase):
         race_target = re.search(r"(?m)^test-go:\n\t([^\n]+)$", makefile)
         self.assertIsNotNone(race_target)
         self.assertEqual(
-            "go -C server test -race -count=1 -timeout=20m ./...",
+            "go -C server test -race -p=1 -count=1 -timeout=20m ./...",
             race_target.group(1),
         )
         self.assertIn("check-backend: test-contracts test-go", makefile)

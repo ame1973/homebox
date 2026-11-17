@@ -11,8 +11,9 @@ test: test-contracts test-go test-web
 test-contracts:
 	uv run --frozen python -m unittest discover -s tests -v
 
+# Keep separate package processes from competing for memory-heavy KDF work.
 test-go:
-	go -C server test -race -count=1 -timeout=20m ./...
+	go -C server test -race -p=1 -count=1 -timeout=20m ./...
 
 test-go-pure:
 	CGO_ENABLED=0 go -C server test -count=1 ./...
