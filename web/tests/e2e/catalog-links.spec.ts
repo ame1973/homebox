@@ -11,6 +11,7 @@ const text = messages.owned
 type Item = components['schemas']['Item']
 type Tag = components['schemas']['Tag']
 type Alias = components['schemas']['Alias']
+type Attribute = components['schemas']['Attribute']
 const input = (page: Page, label: string) => page.getByLabel(new RegExp(`^${label}`))
 const watch = (page: Page) => watchDomainWrites(page, ['/api/v1/items', '/api/v1/barcodes', '/api/v1/aliases', '/api/v1/attributes'])
 async function seedItem(page: Page, origin: string, name = 'Owned maintenance fixture'): Promise<Item> {
@@ -52,11 +53,23 @@ for (const spec of [
   test(`maintains independent ${spec.kind} through real reviewed screens and scoped returns`, async ({ page, application }, info) => {
     await provision(page, application)
     const owner = await seedItem(page, application.url)
+    let ownerRevision = owner.revision
+    let existingAttribute: Attribute | undefined
+    if (spec.kind === 'attributes') {
+      // Seed one independent duplicate-key row through the real API so this
+      // reviewed create/edit/delete scenario stays within production admission.
+      const response = await page.request.post(`/api/v1/items/${owner.id}/attributes`, {
+        headers: await writeContext(page, application.url, ownerRevision),
+        data: { attribute_key: spec.first.attribute_key, attribute_value: 'Another independent row' },
+      })
+      expect(response.status()).toBe(200)
+      existingAttribute = await response.json() as Attribute
+      ownerRevision++
+    }
     const writes = watch(page)
     await page.goto('/items?q=Owned&limit=1')
     await page.getByRole('link', { name: new RegExp(owner.name) }).click()
     await collection(page, spec.kind)
-    let ownerRevision = owner.revision
     await page.getByRole('link', { name: text.create[spec.kind], exact: true }).click()
     if (spec.kind === 'barcodes') {
       await page.getByRole('button', { name: text.review, exact: true }).click()
@@ -74,9 +87,17 @@ for (const spec of [
     await confirm(page, text.confirmCreate[spec.kind])
     expect(writes.at(-1)?.proof).toBe(JSON.stringify(String(ownerRevision++)))
     expect(JSON.parse(writes.at(-1)?.body ?? '{}')).toEqual(spec.first)
-    const created: { data: { id: string; revision: number; raw_value?: string; normalized_value?: string }[] } = await (await page.request.get(`/api/v1/items/${owner.id}/${spec.kind}`)).json()
-    const row = created.data[0]!
+    const createdResponse = await page.request.get(`/api/v1/items/${owner.id}/${spec.kind}`)
+    expect(createdResponse.status(), 'created collection read must succeed').toBe(200)
+    const created: { data: { id: string; revision: number; raw_value?: string; normalized_value?: string; attribute_key?: string; attribute_value?: string }[] } = await createdResponse.json()
+    expect(created.data).toHaveLength(spec.kind === 'attributes' ? 2 : 1)
+    const row = (spec.kind === 'attributes' ? created.data.find((value) => value.attribute_value === 'Original content') : created.data[0])!
     expect(row.revision).toBe(1)
+    if (spec.kind === 'attributes') {
+      expect(row.attribute_key).toBe(spec.first.attribute_key)
+      expect(row.id).not.toBe(existingAttribute?.id)
+      await expect(page.getByText(`${text.count}2`, { exact: true })).toBeVisible()
+    }
     if (spec.kind === 'barcodes') {
       expect(row).toMatchObject({ raw_value: '036000291452', normalized_value: '036000291452' })
       for (const colorScheme of ['light', 'dark'] as const) {
@@ -85,15 +106,6 @@ for (const spec of [
         await accessible(page)
         await page.screenshot({ path: info.outputPath(`owned-list-${colorScheme}.png`), fullPage: true })
       }
-    }
-    if (spec.kind === 'attributes') {
-      await page.getByRole('link', { name: text.create.attributes, exact: true }).click()
-      await input(page, text.fields.attribute_key).fill(spec.first.attribute_key)
-      await input(page, text.fields.attribute_value).fill('Another independent row')
-      await page.getByRole('button', { name: text.review, exact: true }).click()
-      await confirm(page, text.confirmCreate.attributes)
-      expect(writes.at(-1)?.proof).toBe(JSON.stringify(String(ownerRevision++)))
-      await expect(page.getByText(`${text.count}2`, { exact: true })).toBeVisible()
     }
     await page.getByRole('link', { name: `${text.edit[spec.kind]}：${row.id}`, exact: true }).click()
     for (const [key, value] of Object.entries(spec.changed)) {
@@ -115,8 +127,15 @@ for (const spec of [
     ownerRevision++
     expect(writes.at(-1)?.proof).toBe('"2"')
     expect(writes.at(-1)?.body).toBeNull()
-    expect((await (await page.request.get(`/api/v1/items/${owner.id}/${spec.kind}`)).json()).data.some((value: { id: string }) => value.id === row.id)).toBe(false)
-    expect(writes).toHaveLength(spec.kind === 'attributes' ? 4 : 3)
+    const remainingResponse = await page.request.get(`/api/v1/items/${owner.id}/${spec.kind}`)
+    expect(remainingResponse.status(), 'collection read after deletion must succeed').toBe(200)
+    const remaining: { data: { id: string; attribute_key?: string; attribute_value?: string }[] } = await remainingResponse.json()
+    expect(remaining.data.some((value) => value.id === row.id)).toBe(false)
+    if (spec.kind === 'attributes') {
+      expect(remaining.data).toHaveLength(1)
+      expect(remaining.data[0]).toMatchObject({ id: existingAttribute?.id, attribute_key: spec.first.attribute_key, attribute_value: 'Another independent row' })
+    }
+    expect(writes).toHaveLength(3)
     expect(new Set(writes.map((request) => request.key)).size).toBe(writes.length)
     await page.getByRole('link', { name: messages.catalog.back, exact: true }).click()
     expect(new URL(page.url()).search).toBe('?q=Owned&limit=1')
