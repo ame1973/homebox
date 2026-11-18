@@ -1017,6 +1017,24 @@ const unreviewedCorrectionCommand = correctionCommands.freezeCorrectionCommand({
 const looseCorrectionSend = correctionCommands.sendCorrectionCommand({ kind: 'correct-disposal', body: disposalVoidDecision, key: 'previous-key' }, 'csrf', new AbortController().signal)
 void [sendCorrectionCalls, reusedCorrectionKey, credentialCorrectionCommand, physicalCorrectionCommand, unreviewedCorrectionCommand, looseCorrectionSend]
 
+// Connectivity is a passive completed-session read, not a write or a health proof.
+import * as connectivitySDK from '../src/lib/api/connectivity'
+const connectivityStatus = { status: 'ok' } as const satisfies components['schemas']['ConnectivityStatus']
+const connectivityReply = connectivityStatus satisfies operations['get_system_connectivity']['responses'][200]['content']['application/json']
+const connectivityRead = connectivitySDK.probeConnectivity(new AbortController().signal)
+const connectivityTransport = purchaseTransport.GET('/system/connectivity')
+// @ts-expect-error A connectivity reply must contain the bounded status.
+const missingConnectivity: components['schemas']['ConnectivityStatus'] = {}
+// @ts-expect-error The connectivity status cannot be an arbitrary server string.
+const unknownConnectivity: components['schemas']['ConnectivityStatus'] = { status: 'ready-for-sync' }
+// @ts-expect-error A connectivity reply cannot contain private diagnostic fields.
+const privateConnectivity: components['schemas']['ConnectivityStatus'] = { status: 'ok', path: '/private' }
+// @ts-expect-error Connectivity has no caller-selected query or resource identity.
+const scopedConnectivity = purchaseTransport.GET('/system/connectivity', { params: { query: { id: 'private' } } })
+// @ts-expect-error A connectivity probe requires caller-owned cancellation.
+const uncancellableConnectivity = connectivitySDK.probeConnectivity()
+void [connectivityStatus, connectivityReply, connectivityRead, connectivityTransport, missingConnectivity, unknownConnectivity, privateConnectivity, scopedConnectivity, uncancellableConnectivity]
+
 // Sync status is a bounded diagnostic, not an offline snapshot or cursor.
 import * as syncStatusSDK from '../src/lib/api/sync-status'
 const syncStatus = { dataset_epoch: 'epoch', server_instance_id: 'a'.repeat(32), projection_version: 1, min_retained_seq: 0, high_watermark: 0,

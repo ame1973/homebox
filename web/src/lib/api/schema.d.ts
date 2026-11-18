@@ -1852,7 +1852,10 @@ export interface paths {
             readonly path?: never;
             readonly cookie?: never;
         };
-        /** Connectivity */
+        /**
+         * Authenticated connectivity
+         * @description Check same-origin reachability and a completed session without refreshing its idle deadline. The current server returns ok only; this is not a health, storage, write-authority or offline-sync guarantee. The request accepts no query, body or content encoding.
+         */
         readonly get: operations["get_system_connectivity"];
         readonly put?: never;
         readonly post?: never;
@@ -2694,6 +2697,11 @@ export interface components {
         readonly Change: {
             readonly record: components["schemas"]["OfflineRecord"];
             readonly seq: number;
+        };
+        /** @description A completed-session reachability response, not proof of current data, storage or offline-sync integrity. The current implementation reports only ok. */
+        readonly ConnectivityStatus: {
+            /** @enum {unknown} */
+            readonly status: "ok" | "degraded";
         };
         /** @description One immutable complete positive minor-unit magnitude plus explicit expense/credit direction, with independent event identity/revision. Retained uppercase currency and absent correction provenance remain exact representation, not proof of new-money eligibility or an invented replacement event. */
         readonly Cost: {
@@ -9458,12 +9466,10 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
-                    readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
                 content: {
-                    readonly "application/json": components["schemas"]["Health"];
+                    readonly "application/json": components["schemas"]["ConnectivityStatus"];
                 };
             };
             readonly 400: components["responses"]["Error400"];

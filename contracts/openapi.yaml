@@ -8581,7 +8581,8 @@ paths:
   /system/connectivity:
     get:
       operationId: get_system_connectivity
-      summary: Connectivity
+      summary: Authenticated connectivity
+      description: Check same-origin reachability and a completed session without refreshing its idle deadline. The current server returns ok only; this is not a health, storage, write-authority or offline-sync guarantee. The request accepts no query, body or content encoding.
       tags:
       - system
       responses:
@@ -8590,18 +8591,12 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Health'
+                $ref: '#/components/schemas/ConnectivityStatus'
           headers:
             Cache-Control:
               schema:
                 const: no-store
               description: Protected API data is never cached by the service worker.
-            ETag:
-              schema:
-                type: string
-                minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -13458,6 +13453,17 @@ components:
           minLength: 1
           maxLength: 2048
       description: One bounded live page; required null terminates the current traversal, which is not a frozen snapshot.
+    ConnectivityStatus:
+      type: object
+      additionalProperties: false
+      description: A completed-session reachability response, not proof of current data, storage or offline-sync integrity. The current implementation reports only ok.
+      required:
+      - status
+      properties:
+        status:
+          enum:
+          - ok
+          - degraded
     Health:
       type: object
       required:

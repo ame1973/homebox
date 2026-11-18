@@ -25,6 +25,8 @@
 
 ### Added
 
+- Expose a protected, no-store authenticated connectivity probe and one-request browser adapter. Passive checks do not renew the session's idle deadline or prove offline readiness; automatic foreground probing/backoff remains unfinished.
+
 - Add a read-only sync diagnostics screen in Settings, with explicit incomplete-coverage guidance, refreshed session checks and session/BFCache redaction. It neither starts offline sync nor deletes change records.
 
 - Expose a protected, no-store sync status diagnostic and stateless browser adapter. It reports partial materialization, retained-floor and durable change-sequence information while explicitly marking bootstrap and automatic retention unavailable; it does not create an offline replica or prune data.
