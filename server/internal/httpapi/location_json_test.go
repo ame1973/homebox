@@ -13,6 +13,7 @@ func TestLocationJSONPreservesPresenceUnicodeAndExactIntegers(t *testing.T) {
 	for _, body := range []string{
 		`{"name":"  箱子 📦 é  ","code":"BOX","description":"<notes>\n","sort_order":1e3}`,
 		`{"name":"  箱子 📦 é  ","code":"BOX","description":"<notes>\n","sort_order":1000.00}`,
+		"{\"name\":\"  箱子 📦 é  \",\"code\":\"BOX\",\"description\":\"<notes>\\n\",\"sort_order\": \t1000.00 \n}",
 	} {
 		response := httptest.NewRecorder()
 		input, ok := readLocationFields(response, apiRequest(http.MethodPost, "/", body), "request")

@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Share the existing lossless JSON/Unicode and exact safe-integer validation between HTTP input and future persisted-projection readers without changing accepted request semantics.
+
 - Stop admitting HTTP requests during server shutdown and wait for all already admitted handlers before closing SQLite, including handlers that remain active after their connections are canceled. The normal graceful window remains ten seconds; an uncooperative handler can extend the final wait.
 
 - Prepare private Media uploads in anonymous Linux inodes, commit their exact journal before naming them, and link/promote/publish within the same protected source mutation. A process exit before the journal leaves no named stage; an interrupted later step retains the journal for explicit reference-aware recovery. Filesystems without the required anonymous-file/link facilities fail closed. Legacy unknown files, automatic cleanup, the HTTP upload route and QNAP/power-loss acceptance remain unfinished.

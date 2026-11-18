@@ -3,16 +3,15 @@ package httpapi
 import (
 	"bytes"
 	"encoding/json"
-	"math/big"
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 
 	"homebox/internal/store"
+	"homebox/internal/strictjson"
 )
 
-const maxJSONInteger int64 = 9007199254740991
+const maxJSONInteger int64 = strictjson.MaxSafeInteger
 
 func jsonString(raw json.RawMessage, minimum, maximum int) (*string, bool) {
 	if len(raw) == 0 || raw[0] != '"' {
@@ -41,36 +40,7 @@ func jsonParent(raw json.RawMessage) (store.NullableID, bool) {
 // not through float64 (which could round a fractional or unsafe value to an int).
 // Lexical/exponent bounds keep hostile numeric representations cheap to reject.
 func exactSafeInteger(raw json.RawMessage) (int64, bool) {
-	if len(raw) == 0 || len(raw) > 128 || !json.Valid(raw) || raw[0] != '-' && (raw[0] < '0' || raw[0] > '9') {
-		return 0, false
-	}
-	text := string(raw)
-	coefficient := text
-	index := strings.IndexAny(text, "eE")
-	if index >= 0 {
-		coefficient = text[:index]
-	}
-	zero := true
-	for _, character := range coefficient {
-		if character >= '1' && character <= '9' {
-			zero = false
-		}
-	}
-	if zero {
-		return 0, true
-	}
-	if index >= 0 {
-		exponent, err := strconv.ParseInt(text[index+1:], 10, 64)
-		if err != nil || exponent < -256 || exponent > 256 {
-			return 0, false
-		}
-	}
-	value, ok := new(big.Rat).SetString(text)
-	if !ok || !value.IsInt() || !value.Num().IsInt64() {
-		return 0, false
-	}
-	number := value.Num().Int64()
-	return number, number >= -maxJSONInteger && number <= maxJSONInteger
+	return strictjson.ExactSafeInteger(raw)
 }
 
 func resourceRevision(w http.ResponseWriter, r *http.Request, requestID string, required bool) (int64, bool, bool) {

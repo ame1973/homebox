@@ -8,9 +8,10 @@ import (
 	"mime"
 	"net/http"
 	"slices"
-	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"homebox/internal/strictjson"
 )
 
 const authBodyLimit = 16 << 10
@@ -60,7 +61,7 @@ func readJSONObject(w http.ResponseWriter, r *http.Request, requestID string, li
 
 // Nested financial decisions use the same strict object rules as the outer body.
 func parseJSONObject(w http.ResponseWriter, requestID string, body []byte, fields ...string) (map[string]json.RawMessage, bool) {
-	if !utf8.Valid(body) || !json.Valid(body) || !validJSONSurrogates(body) {
+	if !strictjson.ValidUnicodeJSON(body) {
 		writeError(w, http.StatusBadRequest, "INVALID_JSON", "The request must contain one valid UTF-8 JSON object.", requestID)
 		return nil, false
 	}
@@ -116,34 +117,6 @@ func requireNoBody(w http.ResponseWriter, r *http.Request, requestID string) boo
 	if err != nil || len(body) != 0 {
 		writeError(w, http.StatusBadRequest, "INVALID_BODY", "This request does not accept a body.", requestID)
 		return false
-	}
-	return true
-}
-
-// encoding/json replaces lone escaped surrogates with U+FFFD. Reject them rather
-// than silently changing a submitted value. Call only after json.Valid.
-func validJSONSurrogates(body []byte) bool {
-	for i := 0; i < len(body); i++ {
-		if body[i] != '\\' {
-			continue
-		}
-		i++
-		if body[i] != 'u' {
-			continue
-		}
-		unit, _ := strconv.ParseUint(string(body[i+1:i+5]), 16, 16)
-		i += 4
-		if unit < 0xD800 || unit > 0xDFFF {
-			continue
-		}
-		if unit > 0xDBFF || i+6 >= len(body) || body[i+1] != '\\' || body[i+2] != 'u' {
-			return false
-		}
-		low, err := strconv.ParseUint(string(body[i+3:i+7]), 16, 16)
-		if err != nil || low < 0xDC00 || low > 0xDFFF {
-			return false
-		}
-		i += 6
 	}
 	return true
 }

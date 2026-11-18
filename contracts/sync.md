@@ -36,6 +36,8 @@ Every business mutation runs inside one immediate SQLite transaction:
 
 Raw SQL writes outside transaction-aware domain services are forbidden. Initial legacy backfill must publish every existing eligible row before enabling sync. Exceptional bulk changes that cannot enumerate every affected projection rotate the epoch atomically; they cannot leave silent replica divergence.
 
+The server's shared strict JSON checks reject invalid UTF-8 and unpaired surrogate escapes, and parse bounded safe integers exactly without floating-point rounding. These checks are available to future frozen-projection readers and preserve the existing HTTP input behavior; they do not by themselves validate projection schemas or authorize publication.
+
 Derived effects matter: changing category/tag/alias/purchase/review data may change item search; moving a unit changes its location evidence; deleting an owner emits media-link tombstones. Paths are derived from parent links rather than copied into every descendant projection. Unreviewed OCR and rejected suggestions never enter published search documents.
 
 ## Financial correction effects
