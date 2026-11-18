@@ -6,8 +6,9 @@ import type { components } from './schema'
 
 export type SyncStatus = components['schemas']['SyncStatus']
 
-const kinds = z.enum(['location', 'item', 'unit', 'stock', 'barcode', 'media', 'media_link', 'category', 'tag', 'item_tag', 'search_doc',
-  'purchase', 'purchase_line', 'asset', 'usage', 'cost', 'disposal', 'alias', 'attribute', 'location_event', 'inventory_event', 'ai_review'])
+export const syncProjectionKinds = ['location', 'item', 'unit', 'stock', 'barcode', 'media', 'media_link', 'category', 'tag', 'item_tag', 'search_doc',
+  'purchase', 'purchase_line', 'asset', 'usage', 'cost', 'disposal', 'alias', 'attribute', 'location_event', 'inventory_event', 'ai_review'] as const
+const kinds = z.enum(syncProjectionKinds)
 const nonnegative = z.int().min(0).max(Number.MAX_SAFE_INTEGER)
 const positive = z.int().min(1).max(Number.MAX_SAFE_INTEGER)
 const statusFields = new Set(['dataset_epoch', 'server_instance_id', 'projection_version', 'min_retained_seq', 'high_watermark', 'counts',

@@ -25,6 +25,8 @@
 
 ### Added
 
+- Add a read-only sync diagnostics screen in Settings, with explicit incomplete-coverage guidance, refreshed session checks and session/BFCache redaction. It neither starts offline sync nor deletes change records.
+
 - Expose a protected, no-store sync status diagnostic and stateless browser adapter. It reports partial materialization, retained-floor and durable change-sequence information while explicitly marking bootstrap and automatic retention unavailable; it does not create an offline replica or prune data.
 
 - Add a read-only Media recovery status screen with bounded localized guidance, safe session/BFCache cleanup and an explicit status refresh. It does not retry recovery, delete files or claim file integrity.

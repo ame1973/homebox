@@ -13,6 +13,7 @@ import { RestoreGate } from '@/features/auth/restore-gate'
 
 const ConnectionPage = lazy(() => import('@/features/system/connection-page'))
 const MediaRecoveryPage = lazy(() => import('@/features/system/media-recovery-page'))
+const SyncStatusPage = lazy(() => import('@/features/system/sync-status-page'))
 const AccountPage = lazy(() => import('@/features/auth/account-page'))
 const SettingsPage = lazy(() => import('@/features/taxonomy/settings-page'))
 const CatalogPage = lazy(() => import('@/features/catalog/catalog-page'))
@@ -38,7 +39,7 @@ export default function App() {
   const restoreGuard = useRef(false)
   const restoreFocus = useRef(false)
   const [restoration, setRestoration] = useState<'active' | 'suspended' | 'checking'>('active')
-  const [restoreKind, setRestoreKind] = useState<'scan' | 'item' | 'capture' | 'recovery'>('scan')
+  const [restoreKind, setRestoreKind] = useState<'scan' | 'item' | 'capture' | 'recovery' | 'sync'>('scan')
   const [restoreGeneration, setRestoreGeneration] = useState(0)
   useEffect(() => {
     if (restoration === 'active' && (previousPath.current !== location.pathname || restoreFocus.current)) {
@@ -63,14 +64,14 @@ export default function App() {
       const marker: unknown = location.state?.scanToken
       const scanMarker = typeof marker === 'string' && marker.length === 36
       const guarded = restoreGuard.current
-      if (!guarded && location.pathname !== '/scan' && location.pathname !== '/items/new' && location.pathname !== '/photos/capture' && location.pathname !== '/settings/media-recovery' && !scanMarker) return
+      if (!guarded && location.pathname !== '/scan' && location.pathname !== '/items/new' && location.pathname !== '/photos/capture' && location.pathname !== '/settings/media-recovery' && location.pathname !== '/settings/sync-status' && !scanMarker) return
       restoreGuard.current = true
       // Wipe only this page's volatile state; suspension is not a logout in
       // another tab. Commit the redacted screen before the browser freezes it.
       notifyPageSuspended()
       flushSync(() => {
         clearBarcodeHandoff()
-        if (!guarded) setRestoreKind(location.pathname === '/photos/capture' ? 'capture' : location.pathname === '/settings/media-recovery' ? 'recovery' : location.pathname === '/items/new' && !scanMarker ? 'item' : 'scan')
+        if (!guarded) setRestoreKind(location.pathname === '/photos/capture' ? 'capture' : location.pathname === '/settings/media-recovery' ? 'recovery' : location.pathname === '/settings/sync-status' ? 'sync' : location.pathname === '/items/new' && !scanMarker ? 'item' : 'scan')
         setRestoration('suspended')
       })
       void client.cancelQueries()
@@ -112,6 +113,7 @@ export default function App() {
               <Route path="/setup" element={<AccountPage key={location.key} mode="setup" />} />
               <Route path="/settings/account" element={<AccountPage key={location.key} mode="account" />} />
               <Route path="/settings/media-recovery" element={<MediaRecoveryPage key={location.key} />} />
+              <Route path="/settings/sync-status" element={<SyncStatusPage key={location.key} />} />
               <Route path="/settings" element={<SettingsPage key={location.key} mode="home" />} />
               <Route path="/settings/categories" element={<SettingsPage key={location.key} kind="categories" mode="list" />} />
               <Route path="/settings/categories/new" element={<SettingsPage key={location.key} kind="categories" mode="create" />} />

@@ -2,7 +2,15 @@
 
 The protected `GET /api/v1/sync/status` is a **read-only diagnostic**, not an offline sync service. A completed administrator session and the normal same-origin transport are required. The response is `Cache-Control: no-store` and has no ETag. It accepts no query, body or content encoding, and session authority is rechecked in the SQLite transaction after the request body is read.
 
-After signing in to HomeBox on its exact configured origin, an administrator can inspect the diagnostic from that same origin. For example, in the browser's developer console:
+## Browser diagnostic
+
+After completing administrator setup and signing in, open **Settings → Sync diagnostics** (`/settings/sync-status`). The same read-only screen is available on phone, tablet and desktop. It shows the server's bootstrap and retention claims, change positions, sparse materialized projection counts, dataset context and any reported model identifiers. It does **not** report this device's synchronized-record, cached-image, embedding or ready-model coverage; those offline capabilities remain unfinished. Even a future server readiness claim does not itself establish that this browser has an offline replica.
+
+Choose **Refresh status** to revalidate the session and read a new snapshot. An offline or failed read hides the prior snapshot; reconnecting reads status again but does not start synchronization or prune records. A delivered session-clear signal removes this screen's cached diagnostic and requires sign-in. Cross-window notification is best effort: it may not arrive if both browser transports are blocked, and it does not purge other routes or offline storage. Before a possible back-forward-cache suspension the screen is redacted; restoration requires a fresh session check and explicit continuation before another status read.
+
+## API diagnostic
+
+An administrator can also inspect the diagnostic from the configured origin. For example, in the browser's developer console:
 
 ```js
 const response = await fetch('/api/v1/sync/status', {
