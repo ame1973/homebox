@@ -28,6 +28,8 @@ func TestCatalogCursorBindsEveryEffectiveFilterAndTimezoneWithoutExposingQueries
 		seedSearchUnit(t, s, name, item.ID, "ASSET-"+name, nil, "")
 		execSQL(t, s.db, "UPDATE item_units SET location_id=? WHERE id=?", box.ID, name)
 		seedCatalogPurchase(t, s, item.ID, name, "2026-11-05T12:00:00Z", "TWD", "PrivateMerchant")
+		// Directly seeded purchase evidence must be materialized before a search.
+		publishCatalogSearch(t, taxonomy, token, "publish-cursor-search-"+name, item.ID)
 	}
 	filters := ItemFilters{From: "2026-11-05", To: "2026-11-06", Currency: "TWD", CategoryID: category.ID,
 		LocationID: box.ID, Status: "active", Merchant: "PrivateMerchant", Query: "  PRIVATEQUERY  "}

@@ -327,6 +327,22 @@ func TestCatalogFilteredReadScansCompleteLegacyDatasetsWithoutPublishingOrTrunca
 				scalar[int](t, s.db, "SELECT COUNT(*) FROM mutation_events") != 0 {
 				t.Fatal("a complete filtered read was truncated or mutated authoritative publication")
 			}
+			// Seed existing current rows only as a fixture; a read must independently
+			// verify their text against source without rewriting or publishing them.
+			execSQL(t, s.db, `INSERT INTO projection_revisions(entity_type,entity_id,revision)
+ SELECT 'search_doc',json_array('item',id),1 FROM items`)
+			execSQL(t, s.db, `INSERT INTO current_projections(entity_type,entity_id,entity_revision,payload_json,updated_at)
+ SELECT 'search_doc',json_array('item',id),1,json_object('entity_type','item','entity_id',id,'approved_text',name),'2026' FROM items`)
+			started = time.Now()
+			values = readAllCatalogPages(t, catalog, token, ItemFilters{Query: "needle"}, 50)
+			t.Logf("%d materialized candidates, approved-source verification, one matching item: %s", size, time.Since(started))
+			if len(values) != 1 || values[0].ID != fmt.Sprintf("item-%05d", size-1) ||
+				scalar[int](t, s.db, "SELECT COUNT(*) FROM current_projections WHERE entity_type='search_doc'") != size ||
+				scalar[int](t, s.db, "SELECT COUNT(*) FROM search_documents") != 0 ||
+				scalar[int](t, s.db, "SELECT COUNT(*) FROM sync_changes") != 0 ||
+				scalar[int](t, s.db, "SELECT COUNT(*) FROM mutation_events") != 0 {
+				t.Fatal("a materialized filtered read was truncated or published read-side changes")
+			}
 		})
 	}
 }

@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Verify present catalog search projections against freshly derived approved source before matching. Reject source-inconsistent or lossy records without returning partial pages or repairing them; raw/unreviewed OCR cannot become a search match through a structurally valid stale projection.
+
 - Share the existing lossless JSON/Unicode and exact safe-integer validation between HTTP input and future persisted-projection readers without changing accepted request semantics.
 
 - Stop admitting HTTP requests during server shutdown and wait for all already admitted handlers before closing SQLite, including handlers that remain active after their connections are canceled. The normal graceful window remains ten seconds; an uncooperative handler can extend the final wait.

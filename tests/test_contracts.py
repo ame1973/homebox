@@ -453,6 +453,7 @@ class OpenAPIContractTests(unittest.TestCase):
                 with self.subTest(field=field, value=value), self.assertRaises(ValidationError):
                     check.validate(value)
         for rule in ["before page slicing", "exact stored merchant", "UTC when unset", "read-only",
+                     "even when a current search projection exists", "source-inconsistent", "without returning a partial page",
                      "home timezone", "never authorize", "not frozen snapshots"]:
             self.assertIn(rule, operation["description"])
 

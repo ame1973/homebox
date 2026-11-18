@@ -8,7 +8,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
-	"unicode/utf8"
+
+	"homebox/internal/strictjson"
 )
 
 const itemCursorPurpose = "items-list-cursor-v1"
@@ -253,29 +254,33 @@ func itemMatchesPurchase(ctx context.Context, tx *sql.Tx, itemID string, filters
 
 func readItemSearchText(ctx context.Context, tx *sql.Tx, item Item) (string, error) {
 	var payload string
-	var revision, counter int64
+	var revision, counter, version int64
 	var fieldCount int
-	err := tx.QueryRowContext(ctx, `SELECT p.payload_json,p.entity_revision,COALESCE(r.revision,0),
+	err := tx.QueryRowContext(ctx, `SELECT p.payload_json,p.entity_revision,COALESCE(r.revision,0),p.projection_version,
  (SELECT COUNT(*) FROM json_each(p.payload_json))
  FROM current_projections p LEFT JOIN projection_revisions r ON r.entity_type=p.entity_type AND r.entity_id=p.entity_id
- WHERE p.entity_type='search_doc' AND p.entity_id=?`, projectionPair("item", item.ID)).Scan(&payload, &revision, &counter, &fieldCount)
-	if errors.Is(err, sql.ErrNoRows) {
-		// Legacy search caches are not authoritative. Derive an unmaterialized
-		// document from approved source without publishing any read-side writes.
-		text, err := loadSearchText(ctx, tx, item.ItemData, "")
-		if err != nil {
-			return "", err
-		}
-		return sourceText(text.title, text.identifiers, text.details, text.reviewed), nil
-	}
-	if err != nil {
+ WHERE p.entity_type='search_doc' AND p.entity_id=?`, projectionPair("item", item.ID)).Scan(&payload, &revision, &counter, &version, &fieldCount)
+	missing := errors.Is(err, sql.ErrNoRows)
+	if err != nil && !missing {
 		return "", err
 	}
 	var fields map[string]*string
-	if revision < 1 || revision > maxSafeInteger || counter != revision || !utf8.ValidString(payload) || fieldCount != 3 ||
-		json.Unmarshal([]byte(payload), &fields) != nil || len(fields) != 3 || fields["entity_type"] == nil || fields["entity_id"] == nil || fields["approved_text"] == nil ||
-		*fields["entity_type"] != "item" || *fields["entity_id"] != item.ID {
+	if !missing && (revision < 1 || revision > maxSafeInteger || counter != revision || version != 1 ||
+		!strictjson.ValidUnicodeJSON([]byte(payload)) || fieldCount != 3 || json.Unmarshal([]byte(payload), &fields) != nil ||
+		len(fields) != 3 || fields["entity_type"] == nil || fields["entity_id"] == nil || fields["approved_text"] == nil ||
+		*fields["entity_type"] != "item" || *fields["entity_id"] != item.ID) {
 		return "", ErrDomainState
 	}
-	return *fields["approved_text"], nil
+	// A structurally valid retained current row is not proof that its search
+	// text was approved. Derive the actual source even when materialized and
+	// fail closed on a mismatch; never repair or republish on a read.
+	text, err := loadSearchText(ctx, tx, item.ItemData, "")
+	if err != nil {
+		return "", err
+	}
+	approved := sourceText(text.title, text.identifiers, text.details, text.reviewed)
+	if !missing && *fields["approved_text"] != approved {
+		return "", ErrDomainState
+	}
+	return approved, nil
 }
