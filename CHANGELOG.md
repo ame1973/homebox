@@ -25,9 +25,9 @@
 
 ### Added
 
-- Add a caller-gated foreground connectivity monitor with bounded retry/backoff, `Retry-After` handling and session/page lifecycle cancellation. It is internal groundwork and is not yet wired into application screens.
+- Display authenticated foreground connectivity in the application shell after a completed session check. Hide stale results on session changes or page suspension, and require fresh authorization before restarting; the indicator does not authorize writes or certify offline coverage.
 
-- Expose a protected, no-store authenticated connectivity probe and one-request browser adapter. Passive checks do not renew the session's idle deadline or prove offline readiness; automatic foreground probing/backoff remains unfinished.
+- Expose a protected, no-store authenticated connectivity probe and one-request browser adapter. Passive checks do not renew the session's idle deadline or prove offline readiness; offline coverage remains unfinished.
 
 - Add a read-only sync diagnostics screen in Settings, with explicit incomplete-coverage guidance, refreshed session checks and session/BFCache redaction. It neither starts offline sync nor deletes change records.
 

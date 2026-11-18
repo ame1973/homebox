@@ -40,6 +40,7 @@ test('real setup, mandatory rotation, fresh login and explicit logout', async ({
   expect((await context.cookies()).filter((cookie) => cookie.name === 'homebox_session')).toHaveLength(0)
   await login(page)
   await expect(page.getByText(text.mandatory, { exact: true })).toBeVisible()
+  await expect(page.getByLabel(messages.connectivityIndicator.label)).toHaveCount(0)
   const cookie = (await context.cookies()).find((cookie) => cookie.name === 'homebox_session')
   expect(cookie?.httpOnly).toBe(true)
   expect(cookie?.sameSite).toBe('Strict')
@@ -52,6 +53,7 @@ test('real setup, mandatory rotation, fresh login and explicit logout', async ({
   expect((await context.cookies()).filter((cookie) => cookie.name === 'homebox_session')).toHaveLength(0)
   await login(page, newPassword)
   await expect(page.getByText(text.mandatory, { exact: true })).toHaveCount(0)
+  await expect(page.getByLabel(messages.connectivityIndicator.label).getByText(messages.connectivityIndicator.phases.reachable)).toBeVisible()
   for (const colorScheme of ['light', 'dark'] as const) {
     await page.emulateMedia({ colorScheme })
     await expect(page.locator('html')).toHaveAttribute('data-theme', colorScheme)
@@ -74,6 +76,7 @@ test('real setup, mandatory rotation, fresh login and explicit logout', async ({
   await page.getByRole('button', { name: text.logout, exact: true }).click()
   await dialog.getByRole('button', { name: text.logout, exact: true }).click()
   await expect(page.getByText(text.logoutDone, { exact: true })).toBeVisible()
+  await expect(page.getByLabel(messages.connectivityIndicator.label)).toHaveCount(0)
   expect(posts).toEqual(['/api/v1/auth/setup', '/api/v1/auth/login', '/api/v1/auth/password', '/api/v1/auth/login', '/api/v1/auth/logout'])
   expect((await context.cookies()).filter((cookie) => cookie.name === 'homebox_session')).toHaveLength(0)
 })

@@ -10,6 +10,7 @@ import { messages } from '@/lib/messages'
 import { clearBarcodeHandoff, retainBarcodeHandoff } from '@/lib/scan-handoff'
 import { notifyPageSuspended, subscribeSessionCleared } from '@/lib/session-lifecycle'
 import { RestoreGate } from '@/features/auth/restore-gate'
+import { ConnectivityIndicator } from '@/features/system/connectivity-indicator'
 
 const ConnectionPage = lazy(() => import('@/features/system/connection-page'))
 const MediaRecoveryPage = lazy(() => import('@/features/system/media-recovery-page'))
@@ -104,6 +105,7 @@ export default function App() {
           <ThemeMenu />
         </nav>
       </header>
+      <ConnectivityIndicator />
       <main id="main" ref={main} tabIndex={-1} className="flex-1 outline-none">
         <AppErrorBoundary key={location.pathname}>
           <Suspense fallback={<p role="status" className="py-12">{messages.app.loading}</p>}>

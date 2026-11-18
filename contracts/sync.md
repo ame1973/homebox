@@ -4,7 +4,7 @@ SQLite is authoritative. IndexedDB is a disposable per-device read replica, not 
 
 **Current implementation:** the protected, no-store `GET /sync/status` reports materialized projection counts, the durable allocated change watermark, the retained floor and the highest retained change's timestamp. It explicitly returns `bootstrap_ready: false` and `retention_enabled: false`: the diagnostic is not proof of complete backfill, source integrity, retained-history completeness, working bootstrap/delta or automatic pruning. Missing count keys mean zero materialized rows, not zero source records. The 30-day minimum is a retention policy, not a claim that a pruning job exists or that the oldest row has that age. See [Sync Status](../docs/sync-status.md).
 
-The protected [authenticated connectivity probe](../docs/connectivity.md) is available as a minimal no-store read with an eight-second stateless browser adapter. It verifies a completed session without renewing idle activity, but it does not start sync, establish source or storage health, or measure device coverage. Automatic foreground probing and retry/backoff remain unfinished; the current UI still treats the browser online signal as advisory.
+The protected [authenticated connectivity probe](../docs/connectivity.md) is available as a minimal no-store read with an eight-second stateless browser adapter. It verifies a completed session without renewing idle activity, but it does not start sync, establish source or storage health, or measure device coverage. The application shell displays foreground probe results with bounded retry/backoff after a completed session check; existing page-specific online controls still treat the browser signal as advisory and handle their own failures.
 
 ## Record identity
 

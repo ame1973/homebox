@@ -448,6 +448,16 @@ export const messages = {
     offline: '目前離線，不能送出財務更正', leaveTitle: '要離開尚未完成的財務更正嗎？', leaveHelp: '輸入與原請求只留在本頁。停止等候不代表伺服器已取消；離開後仍需核對目前資料。', stay: '留在此頁', leave: '放棄此畫面並離開',
   },
   theme: { label: '外觀', system: '跟隨系統', light: '淺色', dark: '深色' },
+  connectivityIndicator: {
+    label: '登入連線檢查', account: '重新確認帳號',
+    help: '這是最近一次連線檢查，不代表離線資料完整，也不會自動送出變更。',
+    phases: {
+      checking: '正在確認登入連線…', reachable: '最近一次登入連線檢查成功', degraded: '伺服器回報連線異常',
+      unavailable: '暫時無法確認登入連線', 'rate-limited': '連線檢查暫緩，將稍後再試',
+      'session-required': '登入狀態需要重新確認', 'access-blocked': '登入連線檢查被伺服器拒絕',
+      paused: '登入連線檢查已暫停', stopped: '登入連線檢查已停止，請重新確認帳號',
+    },
+  },
   connection: {
     title: '連上家中的 HomeBox',
     introduction: '連上家中的網路或 VPN，確認這部裝置能否連上家庭伺服器。',
