@@ -25,6 +25,8 @@
 
 ### Added
 
+- Add private, independently signed snapshot and delta cursor codecs with exact dataset/principal scope, bounded canonical tokens, snapshot expiry and retained-floor position checks. They do not authenticate a session or enable bootstrap/delta HTTP routes.
+
 - Display authenticated foreground connectivity in the application shell after a completed session check. Hide stale results on session changes or page suspension, and require fresh authorization before restarting; the indicator does not authorize writes or certify offline coverage.
 
 - Expose a protected, no-store authenticated connectivity probe and one-request browser adapter. Passive checks do not renew the session's idle deadline or prove offline readiness; offline coverage remains unfinished.
