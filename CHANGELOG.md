@@ -27,6 +27,8 @@
 
 ### Added
 
+- Compare a selected current offline search payload against freshly derived approved Item/Unit and financial source without reading search caches or rewriting historical frozen changes. This private check does not enable bootstrap, authorize a read or prove full backfill.
+
 - Check private frozen-sync record identities, safe revisions and tombstone payload absence against the supported version-one payloads. This structural check does not establish source provenance or enable sync.
 
 - Validate the supported version-one offline payload shapes with a private, lossless Go helper backed by the root schema, strict numeric/Unicode checks and independent contract tests. It does not validate source provenance or record envelopes and does not enable sync.

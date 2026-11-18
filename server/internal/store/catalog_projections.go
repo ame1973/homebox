@@ -271,6 +271,47 @@ func loadSearchText(ctx context.Context, query *sql.Tx, item ItemData, unitID st
 	return value, nil
 }
 
+// readSearchProjectionText derives the same item/unit-scoped fields as
+// publication without changing search caches, counters, projections or outbox.
+func readSearchProjectionText(ctx context.Context, tx *sql.Tx, kind, id string) (searchText, error) {
+	if (kind != "item" && kind != "unit") || !validDomainID(id) {
+		return searchText{}, ErrDomainState
+	}
+	itemID, unitID := id, ""
+	var assetCode, notes string
+	var serial sql.NullString
+	if kind == "unit" {
+		unitID = id
+		err := tx.QueryRowContext(ctx, "SELECT item_id,asset_code,serial_number,notes FROM item_units WHERE id=?", id).
+			Scan(&itemID, &assetCode, &serial, &notes)
+		if errors.Is(err, sql.ErrNoRows) {
+			return searchText{}, ErrNotFound
+		}
+		if err != nil {
+			return searchText{}, err
+		}
+		if !validDomainID(itemID) || !authString(assetCode, 1, 10000) || !authString(serial.String, 0, 10000) || !authString(notes, 0, 10000) {
+			return searchText{}, ErrDomainState
+		}
+	}
+	item, err := loadItem(ctx, tx, itemID)
+	if err != nil {
+		return searchText{}, err
+	}
+	if kind == "unit" && item.TrackingMode != "individual" {
+		return searchText{}, ErrDomainState
+	}
+	text, err := loadSearchText(ctx, tx, item.ItemData, unitID)
+	if err != nil {
+		return searchText{}, err
+	}
+	if kind == "unit" {
+		text.identifiers = sourceText(text.identifiers, assetCode, serial.String)
+		text.details = sourceText(text.details, notes)
+	}
+	return text, nil
+}
+
 func (m *mutationTx) materializeSearch(identity string) (searchData, error) {
 	parts, valid := projectionPairParts(identity)
 	pending, staged := m.pending[projectionKey{"search_doc", identity}]
@@ -278,31 +319,7 @@ func (m *mutationTx) materializeSearch(identity string) (searchData, error) {
 		return searchData{}, ErrDomainState
 	}
 	kind, id := parts[0], parts[1]
-	itemID, unitID := id, ""
-	var assetCode, notes string
-	var serial sql.NullString
-	if kind == "unit" {
-		unitID = id
-		err := m.tx.QueryRowContext(m.ctx, "SELECT item_id,asset_code,serial_number,notes FROM item_units WHERE id=?", id).
-			Scan(&itemID, &assetCode, &serial, &notes)
-		if errors.Is(err, sql.ErrNoRows) {
-			return searchData{}, ErrNotFound
-		}
-		if err != nil {
-			return searchData{}, err
-		}
-		if !validDomainID(itemID) || !authString(assetCode, 1, 10000) || !authString(serial.String, 0, 10000) || !authString(notes, 0, 10000) {
-			return searchData{}, ErrDomainState
-		}
-	}
-	item, err := loadItem(m.ctx, m.tx, itemID)
-	if err != nil {
-		return searchData{}, err
-	}
-	if kind == "unit" && item.TrackingMode != "individual" {
-		return searchData{}, ErrDomainState
-	}
-	text, err := loadSearchText(m.ctx, m.tx, item.ItemData, unitID)
+	text, err := readSearchProjectionText(m.ctx, m.tx, kind, id)
 	if err != nil {
 		return searchData{}, err
 	}
@@ -310,8 +327,6 @@ func (m *mutationTx) materializeSearch(identity string) (searchData, error) {
  VALUES(?,?,?,?,?,?,?) ON CONFLICT(item_id) DO UPDATE SET title=excluded.title,identifiers=excluded.identifiers,
  details=excluded.details,reviewed_ai=excluded.reviewed_ai,revision=excluded.revision,updated_at=excluded.updated_at`
 	if kind == "unit" {
-		text.identifiers = sourceText(text.identifiers, assetCode, serial.String)
-		text.details = sourceText(text.details, notes)
 		statement = `INSERT INTO unit_search_documents(unit_id,title,identifiers,details,reviewed_ai,revision,updated_at)
  VALUES(?,?,?,?,?,?,?) ON CONFLICT(unit_id) DO UPDATE SET title=excluded.title,identifiers=excluded.identifiers,
  details=excluded.details,reviewed_ai=excluded.reviewed_ai,revision=excluded.revision,updated_at=excluded.updated_at`
