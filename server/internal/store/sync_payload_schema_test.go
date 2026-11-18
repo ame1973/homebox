@@ -121,11 +121,17 @@ func TestActualDomainProjectionPayloadsMatchOfflineContract(t *testing.T) {
 			if err := offlineprojection.ValidatePayload(key.kind, []byte(payload.String)); err != nil {
 				t.Fatal("actual frozen payload failed the offline contract", key, err)
 			}
+			if err := validateSyncRecord(key.kind, key.id, operation, revision, 1, []byte(payload.String)); err != nil {
+				t.Fatal("actual frozen record failed identity validation", key, err)
+			}
 			upsertKinds[key.kind] = true
 			replayed[key] = projectionValue{Revision: revision, Payload: payload.String}
 		case "delete":
 			if payload.Valid {
 				t.Fatal("tombstone retained a payload", key)
+			}
+			if err := validateSyncRecord(key.kind, key.id, operation, revision, 1, nil); err != nil {
+				t.Fatal("actual tombstone failed identity validation", key, err)
 			}
 			deleteKinds[key.kind] = true
 			delete(replayed, key)
@@ -157,6 +163,9 @@ func TestActualDomainProjectionPayloadsMatchOfflineContract(t *testing.T) {
 		if err := offlineprojection.ValidatePayload(key.kind, []byte(projection.Payload)); err != nil {
 			t.Fatal("actual current payload failed the offline contract", key, err)
 		}
+		if err := validateSyncRecord(key.kind, key.id, "upsert", projection.Revision, 1, []byte(projection.Payload)); err != nil {
+			t.Fatal("actual current record failed identity validation", key, err)
+		}
 	}
 }
 
@@ -176,6 +185,10 @@ func TestActualMediaAttachmentPayloadsMatchOfflineContract(t *testing.T) {
 		}
 		if err := offlineprojection.ValidatePayload(key.kind, []byte(current)); err != nil {
 			t.Fatal("actual Media payload failed the offline contract", key, err)
+		}
+		revision := scalar[int64](t, fixture.store.db, "SELECT entity_revision FROM current_projections WHERE entity_type=? AND entity_id=?", key.kind, key.id)
+		if err := validateSyncRecord(key.kind, key.id, "upsert", revision, 1, []byte(current)); err != nil {
+			t.Fatal("actual Media record failed identity validation", key, err)
 		}
 	}
 	if _, err := library.Unlink(t.Context(), fixture.token, "schema-unlink-media", link.ID, link.Revision); err != nil {

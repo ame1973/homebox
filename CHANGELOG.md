@@ -27,6 +27,8 @@
 
 ### Added
 
+- Check private frozen-sync record identities, safe revisions and tombstone payload absence against the supported version-one payloads. This structural check does not establish source provenance or enable sync.
+
 - Validate the supported version-one offline payload shapes with a private, lossless Go helper backed by the root schema, strict numeric/Unicode checks and independent contract tests. It does not validate source provenance or record envelopes and does not enable sync.
 
 - Add private, independently signed snapshot and delta cursor codecs with exact dataset/principal scope, bounded canonical tokens, snapshot expiry and retained-floor position checks. They do not authenticate a session or enable bootstrap/delta HTTP routes.
