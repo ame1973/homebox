@@ -1,14 +1,11 @@
 import { isCapturedFrame, maxFrameBytes, type CapturedFrame } from '@/lib/capture-frame'
 import { subscribeSessionCleared } from '@/lib/session-lifecycle'
 import { photoDisplaySize, type PhotoGeometry } from './geometry'
+import { acquirePhotoProcessing } from './photo-processing-slot'
 
 export type PhotoRenderResult =
   | Readonly<{ kind: 'rendered'; blob: Blob; width: number; height: number }>
   | Readonly<{ kind: 'invalid' | 'failed' | 'too-large' | 'cancelled' | 'busy' | 'timeout' }>
-
-// Image decoding and canvas encoding cannot be canceled. Retain the slot
-// across SPA remounts until the browser finishes; a hung operation needs reload.
-let renderBusy = false, renderTimedOut = false
 
 function clearCanvas(canvas: HTMLCanvasElement | undefined) {
   try { if (canvas) { canvas.width = 0; canvas.height = 0 } } catch { /* Discarded pixels are never returned. */ }
@@ -23,22 +20,21 @@ function closeBitmap(bitmap: ImageBitmap | undefined) {
 // This does not accept selected files, persist drafts, upload or sanitize bytes.
 export async function renderCapturedPhoto(frame: CapturedFrame, value: PhotoGeometry, signal: AbortSignal): Promise<PhotoRenderResult> {
   if (signal.aborted) return { kind: 'cancelled' }
-  if (renderTimedOut) return { kind: 'timeout' }
-  if (renderBusy) return { kind: 'busy' }
-  if (document.visibilityState !== 'visible') return { kind: 'cancelled' }
-  if (!isCapturedFrame(frame)) return { kind: 'invalid' }
+  const slot = acquirePhotoProcessing()
+  if (slot.kind !== 'held') return { kind: slot.kind }
+  if (document.visibilityState !== 'visible') { slot.release(); return { kind: 'cancelled' } }
+  if (!isCapturedFrame(frame)) { slot.release(); return { kind: 'invalid' } }
   let geometry: PhotoGeometry
   try {
     geometry = { sourceWidth: value.sourceWidth, sourceHeight: value.sourceHeight, crop: { ...value.crop }, turns: value.turns }
-  } catch { return { kind: 'invalid' } }
+  } catch { slot.release(); return { kind: 'invalid' } }
   const size = photoDisplaySize(geometry)
-  if (!size || frame.width !== geometry.sourceWidth || frame.height !== geometry.sourceHeight) return { kind: 'invalid' }
+  if (!size || frame.width !== geometry.sourceWidth || frame.height !== geometry.sourceHeight) { slot.release(); return { kind: 'invalid' } }
   const { width, height } = size
-  if (typeof createImageBitmap !== 'function') return { kind: 'failed' }
+  if (typeof createImageBitmap !== 'function') { slot.release(); return { kind: 'failed' } }
 
-  renderBusy = true
   return await new Promise<PhotoRenderResult>((resolve) => {
-    let finished = false, browserFinished = false, canvas: HTMLCanvasElement | undefined
+    let finished = false, canvas: HTMLCanvasElement | undefined
     let unsubscribe = () => {}
     const finish = (result: PhotoRenderResult) => {
       if (finished) return
@@ -56,12 +52,10 @@ export async function renderCapturedPhoto(frame: CapturedFrame, value: PhotoGeom
     document.addEventListener('visibilitychange', visibility)
     window.addEventListener('pagehide', interrupted)
     unsubscribe = subscribeSessionCleared(interrupted)
-    const deadline = setTimeout(() => { renderTimedOut = true; finish({ kind: 'timeout' }) }, 30_000)
+    const deadline = setTimeout(() => { slot.timeout(); finish({ kind: 'timeout' }) }, 30_000)
     const release = () => {
-      if (browserFinished) return false
-      browserFinished = true
+      if (!slot.release()) return false
       clearTimeout(deadline)
-      renderBusy = false
       return true
     }
     const valid = () => !finished && !signal.aborted && document.visibilityState === 'visible'

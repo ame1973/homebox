@@ -1,8 +1,15 @@
 import { maxFrameBytes, maxFrameDimension, maxFramePixels } from '@/lib/capture-frame'
 import { subscribeSessionCleared } from '@/lib/session-lifecycle'
 
-type Prepared = Readonly<{ kind: 'prepared'; mime: 'image/jpeg' | 'image/png' | 'image/webp'; width: number; height: number; orientation: number; blob: Blob }>
-export type SelectedImagePreparation = Prepared | Readonly<{ kind: 'invalid' | 'unsupported' | 'too-large' | 'failed' | 'busy' | 'timeout' | 'cancelled' }>
+export type PreparedSelectedImage = Readonly<{ kind: 'prepared'; mime: 'image/jpeg' | 'image/png' | 'image/webp'; width: number; height: number; orientation: number; blob: Blob }>
+export type SelectedImagePreparation = PreparedSelectedImage | Readonly<{ kind: 'invalid' | 'unsupported' | 'too-large' | 'failed' | 'busy' | 'timeout' | 'cancelled' }>
+const preparedImages = new WeakSet<object>()
+
+// Only the current document's completed worker result may be decoded. Callers
+// still own session/gesture validation and the lifetime of this intermediate.
+export function isPreparedSelectedImage(value: unknown): value is PreparedSelectedImage {
+  return typeof value === 'object' && value !== null && preparedImages.has(value)
+}
 
 // A terminated worker cannot publish a late result. Keep one in-flight slot
 // across SPA remounts; if termination itself fails, require a real reload.
@@ -18,7 +25,9 @@ function reply(data: unknown, sourceSize: number): SelectedImagePreparation {
     !Number.isSafeInteger(data.orientation) || data.orientation < 1 || data.orientation > 8 || !('blob' in data) || !(data.blob instanceof Blob) ||
     typeof File !== 'undefined' && data.blob instanceof File || data.blob.type !== data.mime || !Number.isSafeInteger(data.blob.size) ||
     data.blob.size < 1 || data.blob.size > sourceSize) return { kind: 'failed' }
-  return Object.freeze({ kind: 'prepared', mime: data.mime, width: data.width, height: data.height, orientation: data.orientation, blob: data.blob })
+  const result: PreparedSelectedImage = Object.freeze({ kind: 'prepared', mime: data.mime, width: data.width, height: data.height, orientation: data.orientation, blob: data.blob })
+  preparedImages.add(result)
+  return result
 }
 
 // Call from an explicit action after a current completed-session check. The

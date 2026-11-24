@@ -42,7 +42,7 @@ afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); Object.defineProper
 
 describe('selected-image preparation worker client', () => {
   it('uses one same-origin module worker and sends a nameless bounded Blob only', async () => {
-    const { prepareSelectedImage } = await import('./image-prepare-client')
+    const { prepareSelectedImage, isPreparedSelectedImage } = await import('./image-prepare-client')
     const input = source(), pending = prepareSelectedImage(input, new AbortController().signal), worker = FakeWorker.instances[0]!
     expect(worker.url.pathname).toMatch(/image-prepare-worker\.ts$/)
     expect(worker.options).toEqual({ type: 'module' })
@@ -52,7 +52,10 @@ describe('selected-image preparation worker client', () => {
     expect(message.blob).not.toBeInstanceOf(File); expect(message.blob.size).toBe(input.size); expect(message.blob.type).toBe('')
     expect(message.blob).not.toHaveProperty('name'); expect(message.blob).not.toHaveProperty('lastModified')
     const prepared = response(); worker.emit(prepared)
-    expect(await pending).toEqual({ kind: 'prepared', mime: 'image/png', width: 2, height: 3, orientation: 6, blob: prepared.blob })
+    const result = await pending
+    expect(result).toEqual({ kind: 'prepared', mime: 'image/png', width: 2, height: 3, orientation: 6, blob: prepared.blob })
+    expect(isPreparedSelectedImage(result)).toBe(true); expect(Object.isFrozen(result)).toBe(true)
+    expect(isPreparedSelectedImage({ ...result })).toBe(false); expect(isPreparedSelectedImage(null)).toBe(false)
     expect(worker.terminated).toBe(true)
   })
 

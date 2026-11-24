@@ -29,6 +29,8 @@
 
 ### Added
 
+- Normalize a worker-prepared image into a volatile, separately branded canvas frame, applying EXIF orientation and retaining transparency at browser-canvas precision. Native decoding is shared with camera-photo rendering and may alter color/precision; the file picker and upload remain unfinished.
+
 - Add a cancellable same-origin worker for bounded selected-image preparation, without filenames or raw errors. It is internal groundwork, not an image picker, final decoder or upload.
 
 - Prepare a metadata-minimized intermediate for future JPEG/PNG/static-WebP browser decoding while retaining orientation and transparency information. This is not a sanitized photo, a file picker or an upload.
