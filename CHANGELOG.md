@@ -29,6 +29,8 @@
 
 ### Added
 
+- Expose a protected current Location summary with direct/subtree recorded-holding counts and separately grouped base quantities. Validate real location/Unit/Stock authority, retained zeros and disposed Units, fail closed on unsafe totals, and return the actual Location aggregate ETag. The stateless browser adapter validates the reply without retries. Location detail displays the summary only after matching live Location reads and hides it during errors, session changes and page suspension; complete paged contents remain separate.
+
 - Offer an explicit JPEG/PNG/static-WebP file-selection fallback on the volatile photo screen. Process files locally with bounded sequential admission, preserve orientation and transparency at browser-canvas precision, disclose possible quality changes, and discard pending results on session or page suspension. Photos remain unsaved and are never uploaded.
 
 - Extend the volatile photo-album model and original-pixel renderer to independently branded camera and imported frames, keeping one combined budget and preserving PNG transparency at canvas precision. The model itself does not save or upload photos.

@@ -540,6 +540,39 @@ class OpenAPIContractTests(unittest.TestCase):
                              set(SCHEMAS["AssetCostSummary"]["required"]))
 
 
+    def test_location_summary_requires_safe_counts_and_explicit_dimensioned_arrays(self):
+        summary = SCHEMAS["LocationSummary"]
+        self.assertEqual({"location_id", "direct_units", "subtree_units", "distinct_item_count",
+                          "direct_quantities", "subtree_quantities"}, set(summary["required"]))
+        for field in ("direct_units", "subtree_units", "distinct_item_count"):
+            self.assertEqual(9007199254740991, summary["properties"][field]["maximum"])
+        for field in ("direct_quantities", "subtree_quantities"):
+            self.assertEqual(500, summary["properties"][field]["maxItems"])
+            self.assertEqual({"allOf": [{"$ref": "#/components/schemas/QuantityGroup"},
+                                         {"type": "object", "properties": {"quantity_base": {"type": "integer", "minimum": 1}}}]},
+                             summary["properties"][field]["items"])
+        self.assertEqual(SCHEMAS["Item"]["properties"]["base_unit"], SCHEMAS["QuantityGroup"]["properties"]["base_unit"])
+        validator("QuantityGroup").validate({"base_unit": "g", "quantity_base": 0})
+        operation = API["paths"]["/locations/{id}/summary"]["get"]
+        self.assertEqual(0, operation["x-max-body-bytes"])
+        etag = operation["responses"]["200"]["headers"]["ETag"]
+        self.assertTrue(etag["required"])
+        self.assertEqual(18, etag["schema"]["maxLength"])
+        value = {"location_id": "location", "direct_units": 0, "subtree_units": 1,
+                 "distinct_item_count": 2, "direct_quantities": [],
+                 "subtree_quantities": [{"base_unit": "g", "quantity_base": 1500}]}
+        validator("LocationSummary").validate(value)
+        for field in summary["required"]:
+            with self.subTest(missing=field), self.assertRaises(ValidationError):
+                validator("LocationSummary").validate({key: item for key, item in value.items() if key != field})
+        for change in ({"location_id": "x" * 129}, {"direct_units": 9007199254740992}, {"subtree_units": -1}, {"distinct_item_count": 1.5},
+                       {"subtree_quantities": [{"base_unit": "g\n", "quantity_base": 1}]},
+                       {"direct_quantities": [{"base_unit": "g", "quantity_base": 0}]},
+                       {"subtree_quantities": [{"base_unit": "g", "quantity_base": 0}]},
+                       {"direct_quantities": None}, {"revision": 1}):
+            with self.subTest(change=change), self.assertRaises(ValidationError):
+                validator("LocationSummary").validate({**value, **change})
+
     def test_taxonomy_creation_patch_and_nullable_parent_are_distinct(self):
         validator("CategoryCreate").validate({"name": "  分類 😀  "})
         validator("CategoryCreate").validate({"name": "分類", "parent_id": None})

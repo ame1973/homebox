@@ -1,6 +1,6 @@
 # Location Rules
 
-**Implementation status:** the authoritative Go/SQLite service, seven HTTP operations, and responsive location-management screens are implemented and tested. Location contents/summary/QR endpoints, content/photo/history UI, persistent drafts, and full offline synchronization are separate unfinished features.
+**Implementation status:** the authoritative Go/SQLite service, eight HTTP operations, and responsive location-management screens, including the direct/subtree summary, are implemented. Location contents/QR endpoints, location history UI, saved photo uploads, persistent drafts, and full offline synchronization remain unfinished.
 
 ## Browser usage
 
@@ -11,7 +11,7 @@ Sign in and complete any mandatory password change first. The same routes and co
 | `/locations` | Browse, expand/collapse, search names/codes, and optionally show archived locations |
 | `/locations/new` | Create a root location or explicitly choose an active parent |
 | `/locations/new?parent=ID` | Start a child under the selected parent, with its reviewed aggregate revision |
-| `/locations/ID` | Read metadata/direct children and start move, archive, restore, or delete |
+| `/locations/ID` | Read metadata, direct children and a direct/subtree holdings summary; start move, archive, restore, or delete |
 | `/locations/ID/edit` | Edit descriptive metadata without implicitly changing parent or status |
 | `/l/ID` | Open a protected relative alias, returning to the location after login |
 
@@ -22,6 +22,14 @@ Supported imported IDs matching the reserved create segment `new` (including cas
 The screen follows every signed page before publishing a complete, validated hierarchy. Duplicate identities, repeated cursors, orphans, and cycles are rejected rather than displayed as invented roots. Traversal is iterative with no hierarchy-depth cutoff. Visual indentation is capped for narrow screens; actual depth, direct parent, and full expandable ancestry remain available. Search preserves matching ancestor paths; its expansion controls are disabled while search determines visibility. Displayed totals count location records, never mixed-unit inventory quantities.
 
 Parent selection uses native controls plus name/code filtering and a full-path disclosure. Only active locations with active ancestors are offered. Moving excludes the selected branch. An unavailable prior choice stays visibly unavailable, not silently changed to root. A changed creation-parent revision requires an explicit recheck before submission. These are live reads, not a frozen/offline replica: inconsistent list/detail revisions disable writes and request a fresh read.
+
+### Read the location summary
+
+The location detail page shows direct and subtree individual Unit counts, a subtree count of distinct Items, and separate direct/subtree quantity groups by base unit. These are recorded holdings, not proof of physical presence: lost or retired Units retain their recorded location, while disposed Units and zero Stock do not count as present. A quantity is never added to an unlike unit or silently converted. Open the separate holdings screens for actual Unit or Stock operations; the summary has no inventory write action.
+
+The page reads a live summary after a completed-session check and compares its aggregate Location revision with the separately read current Location. A mismatch, failed read, offline state, or ongoing session/location revalidation hides the numbers rather than presenting a partial or stale total. Use **Refresh location summary** to explicitly recheck the session and location metadata before reading again. These independent live reads are not a frozen snapshot, and the displayed values can change afterward.
+
+A delivered session-clear signal cancels and removes this panel's summary read. Before browser page suspension the panel is redacted; after back-forward-cache restoration, explicitly confirm the session and continue. This cleanup applies to the summary panel, not all other routes or offline storage; cross-window signals may not arrive if both supported browser transports fail.
 
 ### Create, edit, and review
 
@@ -56,6 +64,7 @@ All paths are relative to `/api/v1`, use the configured same-origin session boun
 | `GET /locations/tree` | Optional `limit` 1–100 (default 100) and signed `cursor`; no body | Flat parent-linked page, including archived but excluding deleted locations |
 | `POST /locations` | JSON name/code and optional metadata; conditional parent `If-Match` | Location and quoted aggregate ETag |
 | `GET /locations/{id}` | Active completed session; no body | Current location and ETag |
+| `GET /locations/{id}/summary` | Active completed session; no body or query | Current direct/subtree recorded holding counts and base-unit groups, with the actual Location aggregate ETag |
 | `PATCH /locations/{id}` | Nonempty JSON patch and target `If-Match` | Updated location and ETag |
 | `POST /locations/{id}/move` | Required nullable `target_parent_id` and target `If-Match` | Moved location and ETag |
 | `POST /locations/{id}/archive` | JSON object, optional `archive_children`/reason, target `If-Match` | Archived location and ETag |
@@ -65,11 +74,17 @@ Missing revision proofs return `409 PRECONDITION_REQUIRED`; stale ones return `4
 
 Location JSON is unencoded UTF-8 `application/json`, capped at 128 KiB before parsing. Fields are case-sensitive; duplicate names, invalid UTF-8/surrogates, unknown fields, null nonnullable values, and trailing documents are rejected. Integer-valued decimal/exponent forms such as `1000.00` or `1e3` are accepted exactly, never rounded through floating point. Numeric representations are limited to 128 characters with bounded exponent work; nonintegral or unsafe values are rejected. Authentication retains its separate 16 KiB limit. GET/DELETE bodies and query parameters outside the documented tree pagination are rejected; tree query strings are bounded to 2,300 encoded characters.
 
+### Current recorded-holdings summary
+
+`GET /locations/{id}/summary` counts the actual target and all nondeleted descendants in one completed-session SQLite transaction after session activity. Direct and subtree Unit counts include retained `stored`, `in_use`, `lent`, `lost` and `retired` Units at their actual locations, but exclude `disposed` Units. Positive quantity Stock is grouped by its exact `base_unit`, without conversion or a mixed-unit scalar. A retained zero balance is validated but does not count as present. The subtree distinct-Item count deduplicates an Item across locations and holdings. Empty quantity groups are explicit arrays, and positive groups are ordered by their ASCII base-unit spelling.
+
+The read validates the actual location ancestry/subtree, all matching Unit and Stock rows, their Item ownership and retained independent counters, including disposed Units and zero balances. A missing or invalid source, cycle, grouped sum above `9007199254740991`, or more than 500 distinct positive base units returns a safe error without a partial summary. The 500-group limit is on each summary, not the number of Items or Stock rows. The response's strong ETag is the actual aggregate Location revision for that live read, not a Unit or Stock write proof; later changes require a fresh read. This is not a frozen snapshot, inventory write, complete offline replica or proof of physical presence. Complete paged contents remain separate work.
+
 Location reads and writes share the existing general 60/minute peer and 600/minute global admission windows; they do not bypass the limiter or consume a separate credential-minting allowance. An active-session middleware check does not replace the second transactional authorization: revocation after middleware but before source mutation still rejects the write.
 
 ## Typed browser client
 
-`web/src/lib/api/locations.ts` implements the seven operations through generated OpenAPI paths and strict runtime schemas. It validates safe integer/Unicode bounds, exact resource identity, matching strong ETags, allowed mutation revision transitions, deletion acknowledgements, page sizes, and duplicate IDs. Extra success fields are rejected. It returns one explicit page at a time rather than following continuations invisibly or claiming a frozen tree.
+`web/src/lib/api/locations.ts` implements the eight operations through generated OpenAPI paths and strict runtime schemas. It validates safe integer/Unicode bounds, exact resource identity, matching strong ETags, allowed mutation revision transitions, deletion acknowledgements, page sizes, and duplicate IDs. The stateless `fetchLocationSummary` also checks the exact requested identity, required arrays, canonical safe Location ETag, sorted independent base-unit groups, direct-versus-subtree consistency and counts without retaining unexpected raw keys. It returns `{ value, revision }` to allow an explicit comparison with a separately read Location; that revision is not a Unit or Stock proof. Extra success fields are rejected. The adapter returns one explicit list page at a time rather than following continuations invisibly or claiming a frozen tree.
 
 Root/child create overloads make their concurrency difference explicit: root context has no expected revision, while a child requires `LocationWriteContext.expectedRevision` for its reviewed parent. Other writes use the target's original expected revision. Callers supply CSRF, stable idempotency key, and AbortSignal; the adapter never fetches a new proof, chooses a fresh key, rebases, retries, queues, persists, or replays a mutation. Empty versus explicit-null PATCH parents remain distinct, and optional server defaults are not silently inserted into the submitted request.
 
@@ -152,10 +167,10 @@ go -C server test -race -count=1 ./internal/httpapi -run '^TestLocation'
 make check-backend
 ```
 
-Tests cover Unicode/safe-integer bounds, parent/subtree revisions, a hierarchy deeper than 1,000 levels, concurrent duplicate creation and opposite moves, stale parent proofs, owner/link tombstones, shared-media preservation, immutable/frozen records, retention independence, all dependent write failures, and deferred commit failure. HTTP checks drive all seven operations through verified TLS/cookie jars, exact acknowledgement replay, signed pagination, safe errors, method/URL/Origin/CSRF/version/admission rules, and revocation after middleware but before SQL. Frontend tests cover complete/invalid graph reads, original-text forms, explicit reconciliation, frozen command dispatch, dirty navigation, parent selection, protected returns, and interruption without automatic replay. The isolated real-server browser suite exercises actual creation/edit/move/archive/restore/delete, reserved-code rejection, stale-version reconciliation, an actually committed write with a malformed response followed by explicit same-key retry, deep links through real login, light/dark accessibility, long paths and 200% text across five emulated layouts. These are automated checks, not physical NAS/iPhone/Android acceptance.
+Tests cover Unicode/safe-integer bounds, parent/subtree revisions, a hierarchy deeper than 1,000 levels, concurrent duplicate creation and opposite moves, stale parent proofs, owner/link tombstones, shared-media preservation, immutable/frozen records, retention independence, all dependent write failures, and deferred commit failure. HTTP checks drive the seven metadata operations through verified TLS/cookie jars, exact acknowledgement replay, signed pagination, safe errors, method/URL/Origin/CSRF/version/admission rules, and revocation after middleware but before SQL. Separate summary tests use actual Unit/Stock sources, deep paths, retained zeros and disposed Units, group overflow, source/counter corruption and late-session/commit failures; the protected HTTP tests cover methods, bodies and revocation during body reading. Actual-Go browser tests exercise the SDK and rendered summary through real holding changes, a concurrent revision mismatch, subtree movement, offline and failed reads, both cross-window logout transports, actual BFCache restoration, focus and enlarged light/dark accessibility. The isolated metadata browser suite also exercises actual creation/edit/move/archive/restore/delete, reserved-code rejection, stale-version reconciliation, an actually committed write with a malformed response followed by explicit same-key retry, deep links through real login and long paths. These are automated checks in five emulated layouts, not physical NAS/iPhone/Android acceptance.
 
 ```sh
 npm --prefix web test -- --coverage.enabled=false src/features/locations
 make build-web
-npm --prefix web run test:e2e -- tests/e2e/locations.spec.ts
+npm --prefix web run test:e2e -- tests/e2e/location-summary-api.spec.ts tests/e2e/location-summary.spec.ts tests/e2e/location-summary-bfcache.spec.ts tests/e2e/locations.spec.ts --workers=1
 ```

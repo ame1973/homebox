@@ -10,10 +10,11 @@ import { ApiError } from '@/lib/api/client'
 import * as api from '@/lib/api/locations'
 import { createQueryClient } from '@/lib/query'
 import { messages } from '@/lib/messages'
+import { notifyPageSuspended } from '@/lib/session-lifecycle'
 
 vi.mock('@/lib/api/client', async (original) => ({ ...await original<typeof import('@/lib/api/client')>(), fetchHealth: vi.fn().mockResolvedValue({ status: 'ok' }) }))
 vi.mock('@/lib/api/auth', async (original) => ({ ...await original<typeof import('@/lib/api/auth')>(), fetchAdmin: vi.fn(), fetchCSRF: vi.fn(), login: vi.fn() }))
-vi.mock('@/lib/api/locations', async (original) => ({ ...await original<typeof import('@/lib/api/locations')>(), fetchLocation: vi.fn(), fetchLocationsPage: vi.fn(), createLocation: vi.fn(), patchLocation: vi.fn(), moveLocation: vi.fn(), archiveLocation: vi.fn(), deleteLocation: vi.fn() }))
+vi.mock('@/lib/api/locations', async (original) => ({ ...await original<typeof import('@/lib/api/locations')>(), fetchLocation: vi.fn(), fetchLocationSummary: vi.fn(), fetchLocationsPage: vi.fn(), createLocation: vi.fn(), patchLocation: vi.fn(), moveLocation: vi.fn(), archiveLocation: vi.fn(), deleteLocation: vi.fn() }))
 const text = messages.locations
 const root: api.Location = { id: 'room', name: '書房', code: 'ROOM-1', revision: 3, parent_id: null, kind: 'room', sort_order: -2, description: '房間說明', status: 'active' }
 const child: api.Location = { ...root, id: 'box', name: '收納箱', code: 'BOX-1', parent_id: 'room', revision: 1, kind: '防潮容器', sort_order: 0, description: '' }
@@ -37,6 +38,12 @@ beforeEach(() => {
   vi.mocked(auth.login).mockReset().mockImplementation(async () => { administrator = { id: 'admin', revision: 2, username: 'owner', must_change_password: false }; return administrator })
   vi.mocked(api.fetchLocationsPage).mockReset().mockImplementation(async () => ({ data: Array.from(records.values()), next_cursor: null }))
   vi.mocked(api.fetchLocation).mockReset().mockImplementation(async (id) => { const record = records.get(id); if (!record) throw new ApiError('NOT_FOUND', { status: 404 }); return record })
+  vi.mocked(api.fetchLocationSummary).mockReset().mockImplementation(async (id) => {
+    const record = records.get(id)
+    if (!record) throw new ApiError('NOT_FOUND', { status: 404 })
+    return { revision: record.revision, value: { location_id: id, direct_units: 1, subtree_units: 3, distinct_item_count: 2,
+      direct_quantities: [{ base_unit: 'g', quantity_base: 400 }], subtree_quantities: [{ base_unit: 'g', quantity_base: 1500 }, { base_unit: 'ml', quantity_base: 1200 }] } }
+  })
   vi.mocked(api.createLocation).mockReset().mockImplementation(async (body) => {
     const record: api.Location = { kind: 'other', sort_order: 0, description: '', ...body, parent_id: body.parent_id ?? null, id: 'new-location', revision: 1, status: 'active' }
     records.set(record.id, record)
@@ -83,6 +90,168 @@ async function confirm(user: ReturnType<typeof userEvent.setup>, label: string) 
   await screen.findByText(text.done, { exact: true })
   await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
 }
+
+it('shows current direct and subtree physical summary without mixing base units', async () => {
+  mount('/locations/room')
+  const region = await screen.findByRole('region', { name: '位置內容統計' })
+  expect(await within(region).findByText('1500')).toBeVisible()
+  expect(within(region).getByText('400')).toBeVisible()
+  expect(within(region).getByText('1200')).toBeVisible()
+  expect(within(region).getAllByText('g')).toHaveLength(2)
+  expect(within(region).getByText('ml')).toBeVisible()
+  expect(within(region).getByText('此位置的個體')).toBeVisible()
+  expect(within(region).getByText('此位置及下層的個體')).toBeVisible()
+  expect(within(region).getByText(/不代表實際所在位置/)).toBeVisible()
+  expect(api.fetchLocationSummary).toHaveBeenCalledWith('room', expect.any(AbortSignal))
+  expect(auth.fetchCSRF).not.toHaveBeenCalled()
+})
+
+it('withholds a mismatched summary until an explicit fresh read matches the Location', async () => {
+  vi.mocked(api.fetchLocationSummary).mockResolvedValueOnce({ revision: 4, value: { location_id: 'room', direct_units: 1,
+    subtree_units: 1, distinct_item_count: 1, direct_quantities: [], subtree_quantities: [] } })
+  mount('/locations/room')
+  expect(await screen.findByText('位置或內容已變更；請重新讀取後再查看統計。')).toBeVisible()
+  expect(screen.queryByText('1500')).not.toBeInTheDocument()
+  await userEvent.setup().click(screen.getByRole('button', { name: '重新讀取位置統計' }))
+  expect(await screen.findByText('1500')).toBeVisible()
+  expect(api.fetchLocationSummary).toHaveBeenCalledTimes(2)
+})
+
+it('does not silently retry a failed summary when authentication revalidates', async () => {
+  vi.mocked(api.fetchLocationSummary).mockRejectedValue(new ApiError('NETWORK_ERROR'))
+  const { client } = mount('/locations/room')
+  expect(await screen.findByText('無法讀取位置統計；請確認連線後重新讀取。')).toBeVisible()
+  expect(api.fetchLocationSummary).toHaveBeenCalledTimes(1)
+  await act(async () => { await client.invalidateQueries({ queryKey: ['auth', 'me'] }) })
+  expect(api.fetchLocationSummary).toHaveBeenCalledTimes(1)
+  expect(screen.queryByText('1500')).not.toBeInTheDocument()
+  vi.mocked(api.fetchLocationSummary).mockResolvedValueOnce({ revision: 3, value: { location_id: 'room', direct_units: 0,
+    subtree_units: 0, distinct_item_count: 0, direct_quantities: [], subtree_quantities: [] } })
+  await userEvent.setup().click(screen.getByRole('button', { name: '重新讀取位置統計' }))
+  expect(await screen.findByText('此位置的個體')).toBeVisible()
+  expect(api.fetchLocationSummary).toHaveBeenCalledTimes(2)
+})
+
+it('allows an explicit summary retry after a Location revalidation fails', async () => {
+  const user = userEvent.setup()
+  mount('/locations/room')
+  const region = await screen.findByRole('region', { name: text.summaryTitle })
+  expect(await within(region).findByText('1500')).toBeVisible()
+  vi.mocked(api.fetchLocation).mockRejectedValueOnce(new ApiError('NETWORK_ERROR'))
+  await user.click(within(region).getByRole('button', { name: text.summaryRefresh }))
+  expect(await within(region).findByText(text.summaryError)).toBeVisible()
+  expect(within(region).queryByText('1500')).not.toBeInTheDocument()
+  const retry = within(region).getByRole('button', { name: text.summaryRefresh })
+  expect(retry).toHaveAttribute('aria-disabled', 'false')
+  await user.click(retry)
+  expect(await within(region).findByText('1500')).toBeVisible()
+})
+
+it('keeps the refresh button focused and ignores repeated activation while revalidating', async () => {
+  const user = userEvent.setup()
+  mount('/locations/room')
+  expect(await screen.findByText('1500')).toBeVisible()
+  const checks = vi.mocked(auth.fetchAdmin).mock.calls.length
+  let release!: (value: auth.Admin) => void
+  vi.mocked(auth.fetchAdmin).mockImplementationOnce(() => new Promise((resolve) => { release = resolve }))
+  const button = screen.getByRole('button', { name: '重新讀取位置統計' })
+  await user.click(button)
+  await waitFor(() => expect(release).toBeTypeOf('function'))
+  expect(button).toHaveFocus()
+  expect(button).toHaveAttribute('aria-disabled', 'true')
+  fireEvent.click(button)
+  expect(auth.fetchAdmin).toHaveBeenCalledTimes(checks + 1)
+  await act(async () => { release(administrator!) })
+  expect(await screen.findByText('1500')).toBeVisible()
+  expect(button).toHaveFocus()
+  expect(api.fetchLocationSummary).toHaveBeenCalledTimes(2)
+})
+
+it.each([false, true])('restores focus after continuation only when the user has not moved it (moved=%s)', async (moved) => {
+  const user = userEvent.setup()
+  mount('/locations/room')
+  expect(await screen.findByText('1500')).toBeVisible()
+  act(() => { window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true })) })
+  act(() => { window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })) })
+  let release!: (value: auth.Admin) => void
+  vi.mocked(auth.fetchAdmin).mockImplementationOnce(() => new Promise((resolve) => { release = resolve }))
+  const button = screen.getByRole('button', { name: '確認登入並重新讀取' })
+  await user.click(button)
+  await waitFor(() => expect(release).toBeTypeOf('function'))
+  expect(button).toHaveFocus()
+  expect(button).toHaveAttribute('aria-disabled', 'true')
+  fireEvent.click(button)
+  const other = screen.getByRole('link', { name: text.back })
+  if (moved) act(() => { other.focus() })
+  await act(async () => { release(administrator!) })
+  expect(await screen.findByText('1500')).toBeVisible()
+  expect(moved ? other : screen.getByRole('heading', { name: '位置內容統計' })).toHaveFocus()
+  expect(api.fetchLocationSummary).toHaveBeenCalledTimes(2)
+})
+
+it('purges a pending summary on session-clear and ignores its late result', async () => {
+  let release!: (value: api.LocationSummaryRead) => void
+  vi.mocked(api.fetchLocationSummary).mockImplementation(() => new Promise((resolve) => { release = resolve }))
+  const { client } = mount('/locations/room')
+  await waitFor(() => expect(api.fetchLocationSummary).toHaveBeenCalledOnce())
+  act(() => { notifyPageSuspended() })
+  expect(await screen.findByText('登入狀態已變更，位置統計已清除。')).toBeVisible()
+  expect(client.getQueryData(['locations', 'summary', 'room'])).toBeUndefined()
+  await act(async () => { release({ revision: 3, value: { location_id: 'room', direct_units: 0, subtree_units: 0,
+    distinct_item_count: 0, direct_quantities: [], subtree_quantities: [] } }) })
+  expect(screen.getByText('登入狀態已變更，位置統計已清除。')).toBeVisible()
+  expect(screen.queryByText('此位置的個體')).not.toBeInTheDocument()
+})
+
+it('hides a cached summary offline without sending a mutation', async () => {
+  mount('/locations/room')
+  expect(await screen.findByText('1500')).toBeVisible()
+  Object.defineProperty(navigator, 'onLine', { configurable: true, value: false })
+  fireEvent(window, new Event('offline'))
+  expect(screen.getByText('離線時無法確認目前位置統計。')).toBeVisible()
+  expect(screen.queryByText('1500')).not.toBeInTheDocument()
+  expect(api.createLocation).not.toHaveBeenCalled(); expect(auth.fetchCSRF).not.toHaveBeenCalled()
+})
+
+it('navigates to login when the summary detects an expired session', async () => {
+  vi.mocked(api.fetchLocationSummary).mockRejectedValue(new ApiError('AUTHENTICATION_REQUIRED', { status: 401 }))
+  const { router, client } = mount('/locations/room')
+  expect(await screen.findByRole('heading', { name: messages.auth.loginHeading })).toBeVisible()
+  expect(router.state.location.state.returnTo).toBe('/locations/room')
+  expect(client.getQueryData(['locations', 'summary', 'room'])).toBeUndefined()
+})
+
+it('does not resume a restored summary after session-clear during revalidation', async () => {
+  mount('/locations/room')
+  expect(await screen.findByText('1500')).toBeVisible()
+  act(() => { window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true })) })
+  act(() => { window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })) })
+  let release!: (value: auth.Admin) => void
+  vi.mocked(auth.fetchAdmin).mockImplementationOnce(() => new Promise((resolve) => { release = resolve }))
+  await userEvent.setup().click(screen.getByRole('button', { name: '確認登入並重新讀取' }))
+  await waitFor(() => expect(release).toBeTypeOf('function'))
+  act(() => { notifyPageSuspended() })
+  await act(async () => { release(administrator!) })
+  expect(screen.getByText('登入狀態已變更，位置統計已清除。')).toBeVisible()
+  expect(screen.queryByText('1500')).not.toBeInTheDocument()
+  expect(api.fetchLocationSummary).toHaveBeenCalledTimes(1)
+})
+
+it('redacts summary before pagehide and requires fresh session plus explicit continuation after restoration', async () => {
+  const { client } = mount('/locations/room')
+  expect(await screen.findByText('1500')).toBeVisible()
+  const checks = vi.mocked(auth.fetchAdmin).mock.calls.length
+  act(() => { window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true })) })
+  expect(screen.queryByText('1500')).not.toBeInTheDocument()
+  expect(client.getQueryData(['locations', 'summary', 'room'])).toBeUndefined()
+  act(() => { window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })) })
+  expect(screen.getByText('離開前的位置統計已清除。重新確認登入後再讀取。')).toBeVisible()
+  expect(api.fetchLocationSummary).toHaveBeenCalledTimes(1)
+  await userEvent.setup().click(screen.getByRole('button', { name: '確認登入並重新讀取' }))
+  expect(await screen.findByText('1500')).toBeVisible()
+  expect(vi.mocked(auth.fetchAdmin).mock.calls.length).toBeGreaterThan(checks)
+  expect(api.fetchLocationSummary).toHaveBeenCalledTimes(2)
+})
 
 it('loads actual metadata and keeps hierarchy navigation read-only', async () => {
   const user = userEvent.setup()

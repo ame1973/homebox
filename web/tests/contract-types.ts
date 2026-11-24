@@ -63,6 +63,18 @@ const unprovenChild = createLocation({ name: 'Box', code: 'BOX-2', parent_id: 'p
 // @ts-expect-error Root creation cannot silently attach an unrelated If-Match.
 const unrelatedRootProof = createLocation({ name: 'Box', code: 'BOX-1' }, { ...writeContext, expectedRevision: 3 })
 
+const locationSummary = { location_id: 'location', direct_units: 1, subtree_units: 1, distinct_item_count: 2,
+  direct_quantities: [], subtree_quantities: [{ base_unit: 'g', quantity_base: 1500 }] } satisfies components['schemas']['LocationSummary']
+// @ts-expect-error Both dimensioned quantity arrays are explicit, even when empty.
+const incompleteLocationSummary: components['schemas']['LocationSummary'] = { location_id: 'location', direct_units: 0, subtree_units: 0, distinct_item_count: 0 }
+// @ts-expect-error Item quantities are integer base amounts, not unit-free strings.
+const textLocationQuantity: components['schemas']['QuantityGroup'] = { base_unit: 'g', quantity_base: '1500' }
+declare const readLocationSummary: typeof import('../src/lib/api/locations').fetchLocationSummary
+const locationSummaryRead = readLocationSummary('location', new AbortController().signal)
+// @ts-expect-error Live reads require caller-owned cancellation.
+const uncancellableLocationSummary = readLocationSummary('location')
+void [locationSummary, incompleteLocationSummary, textLocationQuantity, locationSummaryRead, uncancellableLocationSummary]
+
 type CategoryCreateHeaders = operations['post_categories']['parameters']['header']
 const rootCategoryHeaders = { ...authHeaders } satisfies CategoryCreateHeaders
 const childCategoryHeaders = { ...authHeaders, 'If-Match': '"3"' } satisfies CategoryCreateHeaders

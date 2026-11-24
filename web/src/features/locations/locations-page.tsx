@@ -18,6 +18,7 @@ import { LocationBreadcrumbs } from './breadcrumbs'
 import { LocationEditor } from './editor'
 import { isKnownKind } from './form'
 import { LocationError } from './location-error'
+import { LocationSummaryPanel } from './location-summary-panel'
 import { LocationMutationNotice, LocationReviewDialog } from './review-dialog'
 import { readLocationTree } from './tree'
 import { LocationTreeView } from './tree-view'
@@ -83,6 +84,12 @@ export default function LocationsPage({ mode }: { mode: Mode }) {
   async function readCurrent() {
     return Promise.all([auth.refetch(), treeQuery.refetch(), ...(needRecord ? [recordQuery.refetch()] : [])])
   }
+  async function revalidateSummary(): Promise<boolean> {
+    const session = await auth.refetch()
+    if (session.isError || !session.data || session.data.must_change_password || !navigator.onLine) return false
+    const [freshTree, freshRecord] = await Promise.all([treeQuery.refetch(), recordQuery.refetch()])
+    return !freshTree.isError && !freshRecord.isError && !!freshRecord.data && freshTree.data?.byID.get(id)?.revision === freshRecord.data.revision
+  }
   if (!transitioning && online && credentialFailure instanceof ApiError) return <Navigate to={credentialFailure.code === 'PASSWORD_CHANGE_REQUIRED' ? '/settings/account' : '/login'} replace state={{ ...(credentialFailure.code === 'PASSWORD_CHANGE_REQUIRED' ? {} : { notice: 'expired' }), returnTo }} />
   if (!transitioning && online && !auth.isFetching) {
     if (auth.data === null) return <Navigate to="/login" replace state={{ notice: 'expired', returnTo }} />
@@ -110,7 +117,7 @@ export default function LocationsPage({ mode }: { mode: Mode }) {
       <div className="flex max-w-full flex-wrap gap-2">
         {mode === 'list' && (canWrite ? <Button asChild className={`${control} gap-2`}><Link to="/locations/new"><Plus aria-hidden="true" />{text.create}</Link></Button> : <Button disabled className={control}>{text.create}</Button>)}
         {mode !== 'list' && <Button asChild variant="outline" className={control}><Link to="/locations">{text.back}</Link></Button>}
-        <Button type="button" variant="outline" disabled={!online || isReading || transitioning} className={`${control} gap-2`} onClick={() => { void readCurrent() }}><RefreshCw className={`size-4 ${isReading ? 'animate-spin motion-reduce:animate-none' : ''}`} aria-hidden="true" />{text.refresh}</Button>
+        <Button type="button" variant="outline" disabled={!online || isReading || transitioning} className={`${control} max-w-full gap-2 [overflow-wrap:anywhere]`} onClick={() => { void readCurrent() }}><RefreshCw className={`size-4 ${isReading ? 'animate-spin motion-reduce:animate-none' : ''}`} aria-hidden="true" />{text.refresh}</Button>
       </div>
     </header>
     {!online && <Alert role="status" className="p-4"><WifiOff aria-hidden="true" /><AlertTitle>{text.offline}</AlertTitle><AlertDescription className="text-base leading-relaxed">{text.offlineHelp}</AlertDescription></Alert>}
@@ -131,6 +138,9 @@ export default function LocationsPage({ mode }: { mode: Mode }) {
                       <dl className="space-y-4 rounded-lg border bg-card p-5">
                         {[[text.status, record.status === 'active' ? text.active : text.archived], [text.kind, isKnownKind(record.kind) ? text.kinds[record.kind] : record.kind], [text.sortOrder, String(record.sort_order)], [text.version, String(record.revision)], [text.description, record.description || text.emptyValue]].map(([label, value]) => <div key={label} className="space-y-1"><dt className="text-sm text-muted-foreground">{label}</dt><dd className="whitespace-pre-wrap text-base leading-relaxed [overflow-wrap:anywhere]">{value}</dd></div>)}
                       </dl>
+                      <LocationSummaryPanel key={`summary:${record.id}`} id={record.id} revision={record.revision} online={online} checked={authorized && auth.isFetchedAfterMount}
+                        checking={isReading} invalid={!!readError || inconsistentRecord} revalidate={revalidateSummary}
+                        onSessionLost={(mandatory) => { allowNavigation(); sessionLost(mandatory) }} />
                       <Button asChild variant="outline" className={control}><Link to={mediaOwnerRoute({ kind: 'location', id: record.id })}>{messages.media.nav}</Link></Button>
                       <LocationActions key={record.id} location={record} tree={tree} operation={operation} online={online} canWrite={canWrite} />
                     </section>

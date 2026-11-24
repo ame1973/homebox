@@ -1,10 +1,13 @@
 import { z } from 'zod'
 import { apiClient, requestData } from './client'
-import { createHeaders, cursorSchema, deleteAckSchema, idSchema, input, pageQuerySchema, pathIDSchema, resourceRequest, revisionHeaders, revisionSchema, text,
+import { itemMeasurementFields } from './catalog'
+import { createHeaders, cursorSchema, deleteAckSchema, idSchema, input, pageQuerySchema, parseSafeCount, pathIDSchema, resourceRequest, revisionHeaders, revisionSchema, text,
   type CreateContext, type RevisionWriteContext, type RootWriteContext } from './domain'
 import type { components, operations } from './schema'
 
 export type Location = components['schemas']['Location']
+export type LocationSummary = components['schemas']['LocationSummary']
+export type LocationSummaryRead = Readonly<{ value: LocationSummary; revision: number }>
 export type LocationsPage = components['schemas']['LocationList']
 export type LocationPageQuery = NonNullable<operations['get_locations_tree']['parameters']['query']>
 export type LocationWriteContext = RevisionWriteContext
@@ -31,9 +34,53 @@ const archiveSchema: z.ZodType<components['schemas']['LocationArchiveInput']> = 
 const pageSchema: z.ZodType<LocationsPage> = z.strictObject({ data: z.array(locationSchema).max(100), next_cursor: cursorSchema().nullable().optional() })
   .refine((page) => new Set(page.data.map((location) => location.id)).size === page.data.length)
 
+// Check the unparsed keys too: Zod can drop an own __proto__ key before strict
+// object validation. No arbitrary server field belongs in this derived read.
+function rawSummaryKeys(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  if (Object.keys(value).some((key) => !['location_id', 'direct_units', 'subtree_units', 'distinct_item_count', 'direct_quantities', 'subtree_quantities'].includes(key))) return false
+  const record = value as Record<string, unknown>
+  for (const key of ['direct_quantities', 'subtree_quantities'] as const) {
+    const groups = record[key]
+    if (!Array.isArray(groups)) return false
+    if (groups.some((group: unknown) => !group || typeof group !== 'object' || Array.isArray(group) ||
+      Object.keys(group).some((field) => field !== 'base_unit' && field !== 'quantity_base'))) return false
+  }
+  return true
+}
+const quantityGroupSchema = z.strictObject({ base_unit: itemMeasurementFields.base_unit, quantity_base: z.int().min(1) })
+const summarySchema: z.ZodType<LocationSummary> = z.unknown().refine(rawSummaryKeys).pipe(z.strictObject({
+  location_id: idSchema, direct_units: z.int().min(0), subtree_units: z.int().min(0), distinct_item_count: z.int().min(0),
+  direct_quantities: z.array(quantityGroupSchema).max(500), subtree_quantities: z.array(quantityGroupSchema).max(500),
+}).refine((value) => {
+  if (value.direct_units > value.subtree_units) return false
+  const ordered = (groups: readonly { base_unit: string }[]) => groups.every((group, index) => index === 0 || groups[index - 1]!.base_unit < group.base_unit)
+  if (!ordered(value.direct_quantities) || !ordered(value.subtree_quantities)) return false
+  const subtree = new Map(value.subtree_quantities.map((group) => [group.base_unit, group.quantity_base]))
+  if (value.direct_quantities.some((group) => group.quantity_base > (subtree.get(group.base_unit) ?? 0))) return false
+  const present = value.subtree_units > 0 || value.subtree_quantities.length > 0
+  if (present !== (value.distinct_item_count > 0)) return false
+  const maximumItems = value.subtree_quantities.reduce((total, group) => total + BigInt(group.quantity_base), BigInt(value.subtree_units))
+  return BigInt(value.distinct_item_count) <= maximumItems
+}))
+
 export async function fetchLocation(id: string, signal: AbortSignal): Promise<Location> {
   const resourceID = input(locationPathIDSchema, id)
   return resourceRequest(locationSchema, signal, (signal) => apiClient.GET('/locations/{id}', { signal, params: { path: { id: resourceID } } }), { id: resourceID }, 8_000)
+}
+
+// The aggregate revision identifies the live Location read, not an individual
+// Unit/Stock proof or a frozen snapshot. The caller owns refresh and comparison.
+export async function fetchLocationSummary(id: string, signal: AbortSignal): Promise<LocationSummaryRead> {
+  const resourceID = input(locationPathIDSchema, id)
+  let revision = 0
+  const value = await requestData(signal, (signal) => apiClient.GET('/locations/{id}/summary', { signal, params: { path: { id: resourceID } } }), summarySchema, 8_000,
+    (result, response) => {
+      const etag = response.headers.get('ETag')
+      revision = etag?.startsWith('"') && etag.endsWith('"') ? parseSafeCount(etag.slice(1, -1), 1) ?? 0 : 0
+      return result.location_id === resourceID && revision > 0
+    })
+  return { value, revision }
 }
 
 // The caller explicitly requests each page. No hidden pagination, token refresh,

@@ -28,6 +28,9 @@ func locationRoute(path string) (route, id, allow string) {
 	if len(parts) == 2 && parts[0] != "" && (parts[1] == "move" || parts[1] == "archive") {
 		return parts[1], parts[0], http.MethodPost
 	}
+	if len(parts) == 2 && parts[0] != "" && parts[1] == "summary" {
+		return "summary", parts[0], http.MethodGet
+	}
 	return "", "", ""
 }
 
@@ -70,6 +73,16 @@ func (a *authAPI) serveLocations(w http.ResponseWriter, r *http.Request, request
 	}
 	if r.Method == http.MethodGet {
 		if !requireNoBody(w, r, requestID) {
+			return true
+		}
+		if route == "summary" {
+			summary, err := a.locations.Summary(r.Context(), token, id)
+			if err != nil {
+				writeLocationError(w, err, requestID)
+				return true
+			}
+			w.Header().Set("ETag", strconv.Quote(strconv.FormatInt(summary.Revision, 10)))
+			writeJSON(w, summary)
 			return true
 		}
 		location, err := a.locations.Get(r.Context(), token, id)

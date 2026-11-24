@@ -1165,7 +1165,10 @@ export interface paths {
             readonly path?: never;
             readonly cookie?: never;
         };
-        /** Location summary */
+        /**
+         * Location summary
+         * @description Read actual current holdings for the location and its entire nondeleted subtree after completed-session authorization and activity. Validate all underlying locations, Units and Stock rows, including disposed and zero-retained rows, and reject an inconsistent or unsafe total without a partial response. The ETag is the actual Location aggregate revision, not a physical-mutation proof. No request body or query parameters are accepted.
+         */
         readonly get: operations["get_locations_id_summary"];
         readonly put?: never;
         readonly post?: never;
@@ -3140,12 +3143,19 @@ export interface components {
         readonly LocationMove: {
             readonly target_parent_id: (string | null) & unknown;
         };
+        /** @description Current recorded-holding counts for one actual location and its complete nondeleted subtree. Exclude disposed Units and zero Stock from presence, count each distinct Item once across the subtree, and keep positive quantity Stock grouped by exact base unit without conversion. Retained absent holdings are still validated. This is a live read, not physical-presence evidence, a frozen replica or write proof. */
         readonly LocationSummary: {
-            readonly direct_quantities?: readonly components["schemas"]["QuantityGroup"][];
+            /** @description Positive direct Stock quantities grouped once per exact base unit, ordered by that unit's bytewise ASCII spelling. An empty array means no positive direct Stock. */
+            readonly direct_quantities: readonly (components["schemas"]["QuantityGroup"] & {
+                readonly quantity_base?: number;
+            })[];
             readonly direct_units: number;
             readonly distinct_item_count: number;
             readonly location_id: string;
-            readonly subtree_quantities?: readonly components["schemas"]["QuantityGroup"][];
+            /** @description Positive subtree Stock quantities grouped once per exact base unit, ordered by that unit's bytewise ASCII spelling. An empty array means no positive subtree Stock. */
+            readonly subtree_quantities: readonly (components["schemas"]["QuantityGroup"] & {
+                readonly quantity_base?: number;
+            })[];
             readonly subtree_units: number;
         };
         /** @description Omitted fields are unchanged. An explicit null parent moves the location to the root. Archiving via PATCH never implicitly archives active descendants; use the reviewed archive action for a subtree. */
@@ -7585,8 +7595,8 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
-                    readonly ETag?: string;
+                    /** @description Quoted actual aggregate Location revision at the completed read, at most 9007199254740991; this is not a Unit or Stock write proof. */
+                    readonly ETag: string;
                     readonly [name: string]: unknown;
                 };
                 content: {
