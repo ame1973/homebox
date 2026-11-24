@@ -20,6 +20,25 @@ const acquire = vi.fn(async () => {
   tracks.push(track)
   return { getTracks: () => [track], getVideoTracks: () => [track], getAudioTracks: () => [] } as unknown as MediaStream
 })
+class PhotoWorker {
+  static instances: PhotoWorker[] = []
+  static replies: unknown[] = []
+  static hold = false
+  onmessage: ((event: MessageEvent<unknown>) => void) | null = null
+  onerror: ((event: ErrorEvent) => void) | null = null
+  onmessageerror: (() => void) | null = null
+  terminated = false
+  readonly messages: unknown[] = []
+  constructor(_url: URL, _options: WorkerOptions) { PhotoWorker.instances.push(this) }
+  postMessage(message: unknown) {
+    this.messages.push(message)
+    const reply = PhotoWorker.replies.shift() ?? { type: 'result', kind: 'prepared', mime: 'image/png', width: 4, height: 3,
+      orientation: 1, blob: new Blob(['minimized'], { type: 'image/png' }) }
+    if (!PhotoWorker.hold) queueMicrotask(() => this.emit(reply))
+  }
+  emit(value: unknown) { this.onmessage?.({ data: value } as MessageEvent<unknown>) }
+  terminate() { this.terminated = true }
+}
 const createURL = vi.fn(), revokeURL = vi.fn()
 const disposers: (() => void)[] = []
 const oldDevices = Object.getOwnPropertyDescriptor(navigator, 'mediaDevices')
@@ -30,6 +49,9 @@ let visibility: ReturnType<typeof vi.spyOn>, encoding: ReturnType<typeof vi.spyO
 
 beforeEach(() => {
   tracks.length = 0; created = 0; acquire.mockClear(); createURL.mockReset(); revokeURL.mockReset()
+  PhotoWorker.instances = []; PhotoWorker.replies = []; PhotoWorker.hold = false
+  vi.stubGlobal('Worker', PhotoWorker)
+  vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ width: 4, height: 3, close: vi.fn() })))
   createURL.mockImplementation(() => `blob:homebox-test/${++created}`)
   Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: createURL })
   Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, writable: true, value: revokeURL })
@@ -42,8 +64,8 @@ beforeEach(() => {
   vi.spyOn(HTMLVideoElement.prototype, 'videoHeight', 'get').mockReturnValue(480)
   vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue()
   vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
-  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((() => ({ drawImage: vi.fn() } as unknown as CanvasRenderingContext2D)) as unknown as typeof HTMLCanvasElement.prototype.getContext)
-  encoding = vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback) => callback(new Blob(['jpeg'], { type: 'image/jpeg' })))
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((() => ({ drawImage: vi.fn(), setTransform: vi.fn(), imageSmoothingEnabled: false } as unknown as CanvasRenderingContext2D)) as unknown as typeof HTMLCanvasElement.prototype.getContext)
+  encoding = vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback, type) => callback(new Blob(['image'], { type: type ?? 'image/png' })))
 })
 afterEach(() => {
   for (const dispose of disposers.splice(0)) dispose()
@@ -71,6 +93,171 @@ async function openAndCapture() {
   await screen.findByRole('img', { name: text.preview })
 }
 function previewImage() { return screen.getByRole('img', { name: text.preview }).querySelector('image')! }
+
+const selectedFile = (name = 'PRIVATE-NAME.png') => new File(['selected image bytes'], name, { type: 'image/png', lastModified: 123 })
+
+it('offers explicit local file selection as a secondary camera fallback and imports multiple photos', async () => {
+  mount()
+  const user = userEvent.setup(), input = screen.getByLabelText(text.fileInput)
+  expect(input).toHaveAttribute('type', 'file'); expect(input).toHaveAttribute('multiple')
+  expect(input).toHaveAttribute('accept', 'image/jpeg,image/png,image/webp')
+  expect(screen.getByText(text.fileQuality)).toBeVisible()
+  expect(acquire).not.toHaveBeenCalled(); expect(PhotoWorker.instances).toHaveLength(0)
+  await user.upload(input, [selectedFile('private-one.png'), selectedFile('private-two.png')])
+  await waitFor(() => expect(within(screen.getByRole('list', { name: text.album })).getAllByRole('button')).toHaveLength(2))
+  expect(input).toHaveValue(''); expect(PhotoWorker.instances).toHaveLength(2)
+  expect(PhotoWorker.instances.every((worker) => worker.terminated)).toBe(true)
+  expect(acquire).not.toHaveBeenCalled(); expect(createURL).toHaveBeenCalledTimes(2)
+  expect(screen.getByRole('img', { name: text.preview })).toHaveAttribute('viewBox', '0 0 4 3')
+  expect(document.body).not.toHaveTextContent('private-one.png'); expect(document.body).not.toHaveTextContent('private-two.png')
+  expect(screen.getByText(`${text.filesAdded}2`)).toBeVisible()
+})
+
+it('stops a partially successful batch on an invalid file without automatically processing the rest', async () => {
+  const good = { type: 'result', kind: 'prepared', mime: 'image/png', width: 4, height: 3, orientation: 1, blob: new Blob(['minimized'], { type: 'image/png' }) }
+  PhotoWorker.replies = [good, { type: 'result', kind: 'unsupported' }, good]
+  mount()
+  const user = userEvent.setup(), input = screen.getByLabelText(text.fileInput)
+  await user.upload(input, [selectedFile('one.png'), selectedFile('two.png'), selectedFile('three.png')])
+  expect(await screen.findByText(text.fileErrors.unsupported)).toBeVisible()
+  expect(within(screen.getByRole('list', { name: text.album })).getAllByRole('button')).toHaveLength(1)
+  expect(screen.getByText(text.fileRemaining)).toBeVisible()
+  expect(PhotoWorker.instances).toHaveLength(2); expect(createURL).toHaveBeenCalledTimes(1)
+  expect(document.body).not.toHaveTextContent('two.png')
+  await user.upload(input, selectedFile('three.png'))
+  await waitFor(() => expect(within(screen.getByRole('list', { name: text.album })).getAllByRole('button')).toHaveLength(2))
+  expect(PhotoWorker.instances).toHaveLength(3)
+})
+
+it('rejects an oversized selection before starting any worker and retains camera access', async () => {
+  mount()
+  const input = screen.getByLabelText(text.fileInput), files = Array.from({ length: 11 }, (_, index) => selectedFile(`${index}.png`))
+  await userEvent.setup().upload(input, files)
+  expect(await screen.findByText(text.fileErrors['count-limit'])).toBeVisible()
+  expect(PhotoWorker.instances).toHaveLength(0); expect(acquire).not.toHaveBeenCalled()
+  expect(screen.getByRole('button', { name: camera.cameraStart })).toBeEnabled()
+})
+
+it('bounds FileList references before copying an oversized selection', () => {
+  mount()
+  const input = screen.getByLabelText(text.fileInput)
+  Object.defineProperty(input, 'files', { configurable: true, value: { length: 11, [Symbol.iterator]() { throw new Error('Selection must not be copied') } } })
+  fireEvent.change(input)
+  expect(screen.getByText(text.fileErrors['count-limit'])).toBeVisible()
+  expect(PhotoWorker.instances).toHaveLength(0)
+})
+
+it('rejects an empty file before reading it', async () => {
+  mount()
+  await userEvent.setup().upload(screen.getByLabelText(text.fileInput), new File([], 'empty.png', { type: 'image/png' }))
+  expect(await screen.findByText(text.fileErrors.invalid)).toBeVisible()
+  expect(PhotoWorker.instances).toHaveLength(0)
+})
+
+it('rejects an oversized individual file before reading it', async () => {
+  mount()
+  const file = selectedFile('private-too-large.png')
+  Object.defineProperty(file, 'size', { value: frames.maxFrameBytes + 1 })
+  await userEvent.setup().upload(screen.getByLabelText(text.fileInput), file)
+  expect(await screen.findByText(text.fileErrors['too-large'])).toBeVisible()
+  expect(PhotoWorker.instances).toHaveLength(0); expect(createURL).not.toHaveBeenCalled()
+  expect(document.body).not.toHaveTextContent('private-too-large.png')
+})
+
+it('disables the file fallback while the live camera is running', async () => {
+  mount()
+  const user = userEvent.setup(), input = screen.getByLabelText(text.fileInput)
+  await user.click(screen.getByRole('button', { name: camera.cameraStart }))
+  expect(await screen.findByRole('button', { name: camera.cameraStop })).toBeVisible()
+  expect(input).toBeDisabled()
+  await user.click(screen.getByRole('button', { name: camera.cameraStop }))
+  expect(input).toBeEnabled(); expect(PhotoWorker.instances).toHaveLength(0)
+})
+
+it('can explicitly select the same file again after a successful import', async () => {
+  mount()
+  const user = userEvent.setup(), input = screen.getByLabelText(text.fileInput), file = selectedFile()
+  await user.upload(input, file)
+  await waitFor(() => expect(within(screen.getByRole('list', { name: text.album })).getAllByRole('button')).toHaveLength(1))
+  await user.upload(input, file)
+  await waitFor(() => expect(within(screen.getByRole('list', { name: text.album })).getAllByRole('button')).toHaveLength(2))
+  expect(PhotoWorker.instances).toHaveLength(2)
+})
+
+it('does not steal focus moved elsewhere while a selected file is processing', async () => {
+  PhotoWorker.hold = true; mount()
+  const user = userEvent.setup()
+  await user.upload(screen.getByLabelText(text.fileInput), selectedFile())
+  const elsewhere = screen.getByRole('button', { name: 'Outside focus' }); elsewhere.focus()
+  expect(elsewhere).toHaveFocus()
+  act(() => { PhotoWorker.instances[0]!.emit({ type: 'result', kind: 'prepared', mime: 'image/png', width: 4, height: 3, orientation: 1, blob: new Blob(['minimized'], { type: 'image/png' }) }) })
+  expect(await screen.findByRole('img', { name: text.preview })).toBeVisible()
+  expect(elsewhere).toHaveFocus()
+})
+
+it('does not move focus back after a pointer interaction outside the processing controls', async () => {
+  PhotoWorker.hold = true; mount()
+  const input = screen.getByLabelText(text.fileInput)
+  input.focus()
+  fireEvent.change(input, { target: { files: [selectedFile()] } })
+  const elsewhere = screen.getByRole('button', { name: 'Outside focus' })
+  elsewhere.focus(); elsewhere.blur(); fireEvent.pointerDown(document.body)
+  expect(document.body).toHaveFocus()
+  act(() => { PhotoWorker.instances[0]!.emit({ type: 'result', kind: 'prepared', mime: 'image/png', width: 4, height: 3, orientation: 1, blob: new Blob(['minimized'], { type: 'image/png' }) }) })
+  expect(await screen.findByRole('img', { name: text.preview })).toBeVisible()
+  expect(document.body).toHaveFocus()
+})
+
+it('cancels selected-file processing on session revalidation without replaying it', async () => {
+  PhotoWorker.hold = true; mount()
+  const user = userEvent.setup()
+  await user.upload(screen.getByLabelText(text.fileInput), selectedFile())
+  const worker = PhotoWorker.instances[0]!
+  await user.click(screen.getByRole('button', { name: 'Toggle session check' }))
+  expect(worker.terminated).toBe(true); expect(screen.getByText(text.inactive)).toBeVisible()
+  await user.click(screen.getByRole('button', { name: 'Toggle session check' }))
+  expect(screen.getByText(text.fileCancelled)).toBeVisible()
+  expect(PhotoWorker.instances).toHaveLength(1); expect(createURL).not.toHaveBeenCalled()
+})
+
+it('discards an uncancelable late decoded bitmap after file cancellation', async () => {
+  let release!: (value: ImageBitmap) => void
+  const closed = vi.fn(), pendingBitmap = new Promise<ImageBitmap>((resolve) => { release = resolve })
+  vi.mocked(createImageBitmap).mockReturnValueOnce(pendingBitmap)
+  mount()
+  const user = userEvent.setup()
+  await user.upload(screen.getByLabelText(text.fileInput), selectedFile())
+  await waitFor(() => expect(createImageBitmap).toHaveBeenCalledOnce())
+  await user.click(screen.getByRole('button', { name: text.fileCancel }))
+  expect(screen.getByText(text.empty)).toBeVisible()
+  await act(async () => { release({ width: 4, height: 3, close: closed } as unknown as ImageBitmap) })
+  await waitFor(() => expect(closed).toHaveBeenCalledOnce())
+  expect(createURL).not.toHaveBeenCalled()
+})
+
+it('cancels a pending selected file, ignores late worker replies and restores focus', async () => {
+  PhotoWorker.hold = true; mount()
+  const user = userEvent.setup(), input = screen.getByLabelText(text.fileInput)
+  await user.upload(input, selectedFile())
+  expect(await screen.findByText(/1\s*\/\s*1/)).toBeVisible()
+  const worker = PhotoWorker.instances[0]!, cancel = screen.getByRole('button', { name: text.fileCancel })
+  await user.click(cancel)
+  expect(worker.terminated).toBe(true); expect(input).toHaveFocus()
+  act(() => { worker.emit({ type: 'result', kind: 'prepared', mime: 'image/png', width: 4, height: 3, orientation: 1, blob: new Blob(['late'], { type: 'image/png' }) }) })
+  expect(createURL).not.toHaveBeenCalled(); expect(screen.getByText(text.empty)).toBeVisible()
+})
+
+it('clears prior photos and pending selected files on a delivered session-clear signal', async () => {
+  mount(); await openAndCapture()
+  PhotoWorker.hold = true
+  await userEvent.setup().upload(screen.getByLabelText(text.fileInput), selectedFile())
+  const worker = PhotoWorker.instances[0]!
+  act(() => { notifyPageSuspended() })
+  expect(worker.terminated).toBe(true); expect(revokeURL).toHaveBeenCalledWith('blob:homebox-test/1')
+  expect(screen.queryByRole('img', { name: text.preview })).not.toBeInTheDocument()
+  act(() => { worker.emit({ type: 'result', kind: 'prepared', mime: 'image/png', width: 4, height: 3, orientation: 1, blob: new Blob(['late'], { type: 'image/png' }) }) })
+  expect(createURL).toHaveBeenCalledOnce()
+})
 
 it('requires a gesture and edits exact original-pixel crop and rotation without another encode', async () => {
   mount()

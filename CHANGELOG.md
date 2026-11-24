@@ -29,15 +29,17 @@
 
 ### Added
 
-- Extend the volatile photo-album model and original-pixel renderer to independently branded camera and imported frames, keeping one combined budget and preserving PNG transparency at canvas precision. The visible file picker and upload remain unfinished.
+- Offer an explicit JPEG/PNG/static-WebP file-selection fallback on the volatile photo screen. Process files locally with bounded sequential admission, preserve orientation and transparency at browser-canvas precision, disclose possible quality changes, and discard pending results on session or page suspension. Photos remain unsaved and are never uploaded.
 
-- Normalize a worker-prepared image into a volatile, separately branded canvas frame, applying EXIF orientation and retaining transparency at browser-canvas precision. Native decoding is shared with camera-photo rendering and may alter color/precision; the file picker and upload remain unfinished.
+- Extend the volatile photo-album model and original-pixel renderer to independently branded camera and imported frames, keeping one combined budget and preserving PNG transparency at canvas precision. The model itself does not save or upload photos.
+
+- Normalize a worker-prepared image into a volatile, separately branded canvas frame, applying EXIF orientation and retaining transparency at browser-canvas precision. Native decoding is shared with camera-photo rendering and may alter color/precision; the helper does not upload or save photos.
 
 - Add a cancellable same-origin worker for bounded selected-image preparation, without filenames or raw errors. It is internal groundwork, not an image picker, final decoder or upload.
 
 - Prepare a metadata-minimized intermediate for future JPEG/PNG/static-WebP browser decoding while retaining orientation and transparency information. This is not a sanitized photo, a file picker or an upload.
 
-- Add an internal bounded JPEG/PNG/static-WebP container preflight for future photo selection. It reads dimensions and EXIF orientation and rejects ambiguous framing and animation without claiming complete decoding, sanitization, upload or an implemented file picker.
+- Add an internal bounded JPEG/PNG/static-WebP container preflight for photo selection. It reads dimensions and EXIF orientation and rejects ambiguous framing and animation; the helper is not itself a complete decoder, sanitizer, picker or upload.
 
 - Compare a selected current offline search payload against freshly derived approved Item/Unit and financial source without reading search caches or rewriting historical frozen changes. This private check does not enable bootstrap, authorize a read or prove full backfill.
 
@@ -61,7 +63,7 @@
 
 - Read a bounded Media recovery snapshot through the completed-session transaction, including a safe unavailable state when no service is running. Revalidate the session after activity, keep private file names out of status, and coordinate the read with Media shutdown. This is an internal Go operation, not an HTTP or retry endpoint.
 
-- Add an owner-scoped, volatile photo-capture screen with real gesture-started camera, original-pixel crop/rotation preview, up to ten photos, ordering, explicit cover and description. Warn that photos are not saved or uploaded; clear them and stop camera tracks on suspension or delivered session loss. File selection, persistent drafts, upload and physical-device acceptance remain unfinished.
+- Add an owner-scoped, volatile photo-capture screen with real gesture-started camera, original-pixel crop/rotation preview, up to ten photos, ordering, explicit cover and description. Warn that photos are not saved or uploaded; clear them and stop camera tracks on suspension or delivered session loss. Persistent drafts, upload and physical-device acceptance remain unfinished.
 
 - Add an explicitly started, Store-owned Media file service that notifies the recovery worker after successful, failed or canceled upload attempts. The Store waits for admitted uploads and the worker before closing Media storage and SQLite. Recovery failure remains latched until explicit retry; uploads can still publish while blocked and leave pending cleanup. This service is not yet wired to HTTP or server startup.
 
@@ -81,7 +83,7 @@
 
 - Process one explicitly requested, validated batch of up to 100 pending Media recovery rows under the same storage lock. Each object commits separately; stop on the first error, report only acknowledged completions and require an explicit retry. This is an internal primitive, not automatic startup recovery or an HTTP endpoint.
 
-- Render a crop and quarter-turn from the original in-memory camera capture into a bounded JPEG, without repeatedly encoding intermediate edits. Verify captured-source identity and decoded dimensions, discard pending results on suspension/session clear, and retain a single decoder/encoder slot until completion or reload after timeout. Synthetic-video/real-JPEG and actual BFCache/logout tests cover this internal helper; the photo editor, file import and upload remain unfinished.
+- Render a crop and quarter-turn from the original in-memory camera capture into a bounded JPEG, without repeatedly encoding intermediate edits. Verify captured-source identity and decoded dimensions, discard pending results on suspension/session clear, and retain a single decoder/encoder slot until completion or reload after timeout. Synthetic-video/real-JPEG and actual BFCache/logout tests cover this internal helper; saved photo editing and upload remain unfinished.
 
 - Use a bounded, terminable local ZXing worker for QR/EAN/UPC/Code 128 formats missing from the browser-native scanner. Show actual native and fallback coverage, retain independent EAN-13/UPC-A interpretations and require explicit result selection and lookup. Real-Go/Chromium tests exercise synthetic fake-camera pixels and session/BFCache cleanup; image-file scanning and physical-device acceptance remain unfinished.
 

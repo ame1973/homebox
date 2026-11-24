@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { flushSync } from 'react-dom'
 import { Camera, RotateCcw, RotateCw, SwitchCamera } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -10,7 +10,7 @@ import { DraftLeaveGuard } from '@/components/draft-leave-guard'
 import { mutationControl as control } from '@/components/mutation-review'
 import { validText } from '@/lib/api/client'
 import { parseSafeCount } from '@/lib/api/domain'
-import { captureVideoFrame, type FrameCaptureResult } from '@/lib/capture-frame'
+import { captureVideoFrame, maxFrameBytes, type FrameCaptureResult } from '@/lib/capture-frame'
 import { messages } from '@/lib/messages'
 import { subscribeSessionCleared } from '@/lib/session-lifecycle'
 import { useCameraStream } from '@/lib/use-camera-stream'
@@ -20,11 +20,15 @@ import {
   replaceCapturedPhoto, resetCapturedPhotoGeometry, rotateCapturedPhoto, type CaptureAlbum,
 } from './album'
 import { photoDisplaySize, type PhotoGeometry } from './geometry'
+import { normalizeSelectedImage } from './image-normalize'
+import { prepareSelectedImage } from './image-prepare-client'
 
 const text = messages.capture, cameraText = messages.scan
 
 type CropDraft = { x: string; y: string; width: string; height: string }
 type Confirmation = 'remove' | 'retake'
+type FileError = keyof typeof text.fileErrors
+type Pending = { kind: 'capture'; controller: AbortController } | { kind: 'files'; controller: AbortController; files: File[]; added: number; focusMoved: boolean }
 const emptyCrop = (): CropDraft => ({ x: '', y: '', width: '', height: '' })
 
 function previewTransform(value: PhotoGeometry): string {
@@ -46,33 +50,39 @@ export function CaptureWorkspace({ active }: { active: boolean }) {
   const [cropError, setCropError] = useState(false)
   const [capturing, setCapturing] = useState(false)
   const [captureError, setCaptureError] = useState<keyof typeof text.frameErrors>()
+  const [fileProgress, setFileProgress] = useState<{ current: number; total: number }>()
+  const [fileError, setFileError] = useState<FileError>()
+  const [fileRemaining, setFileRemaining] = useState(false), [fileTimedOut, setFileTimedOut] = useState(false)
   const [notice, setNotice] = useState<string>()
   const [playbackError, setPlaybackError] = useState(false)
   const [confirmation, setConfirmation] = useState<Confirmation>()
   const [timedOut, setTimedOut] = useState(false)
   const albumRef = useRef(album), urlRefs = useRef(new Map<number, string>())
   const mounted = useRef(false), enabled = useRef(false), sessionClosed = useRef(false), allowLeaving = useRef(false)
-  const generation = useRef(0), nextID = useRef(1), pending = useRef<AbortController | undefined>(undefined)
-  const retakeID = useRef<number | null>(null), video = useRef<HTMLVideoElement>(null)
+  const generation = useRef(0), nextID = useRef(1), pending = useRef<Pending | undefined>(undefined)
+  const retakeID = useRef<number | null>(null), video = useRef<HTMLVideoElement>(null), fileInput = useRef<HTMLInputElement>(null), fileCancel = useRef<HTMLButtonElement>(null)
   const cameraControls = useRef<HTMLDivElement>(null), previewHeading = useRef<HTMLHeadingElement>(null), cameraHeading = useRef<HTMLHeadingElement>(null), startButton = useRef<HTMLButtonElement>(null)
   const confirmationHeading = useRef<HTMLHeadingElement>(null), confirmationTrigger = useRef<HTMLButtonElement | null>(null), confirmedAction = useRef<Confirmation | undefined>(undefined)
-  const restoreFocus = useRef<'preview' | 'start' | 'camera' | undefined>(undefined)
+  const restoreFocus = useRef<'preview' | 'start' | 'camera' | 'file' | undefined>(undefined)
   const stopCamera = camera.stop, stream = camera.stream
   const selected = album.photos.find((photo) => photo.id === selectedID)
   const size = selected && photoDisplaySize(selected.geometry)
   const crop = selectedID === undefined ? emptyCrop() : crops[selectedID] ?? emptyCrop()
-  const locked = capturing || camera.status === 'active' || camera.status === 'requesting'
+  const locked = capturing || !!fileProgress || camera.status === 'active' || camera.status === 'requesting'
 
   const cancelPending = useCallback(() => {
     generation.current++
-    pending.current?.abort()
+    const current = pending.current
     pending.current = undefined
-    if (mounted.current) setCapturing(false)
+    if (current?.kind === 'files') current.files.length = 0
+    current?.controller.abort()
+    if (mounted.current) { setCapturing(false); setFileProgress(undefined) }
   }, [])
   const discard = useCallback(() => {
     cancelPending()
     stopCamera()
     retakeID.current = null
+    try { if (fileInput.current) fileInput.current.value = '' } catch { /* The input is still discarded. */ }
     allowLeaving.current = true
     albumRef.current = emptyCaptureAlbum()
     for (const url of urlRefs.current.values()) {
@@ -81,7 +91,7 @@ export function CaptureWorkspace({ active }: { active: boolean }) {
     urlRefs.current.clear()
     if (mounted.current) {
       setAlbum(albumRef.current); setSelectedID(undefined); setURLs({}); setCrops({}); setCropError(false)
-      setCaptureError(undefined); setConfirmation(undefined); setPlaybackError(false)
+      setCaptureError(undefined); setFileError(undefined); setFileRemaining(false); setConfirmation(undefined); setPlaybackError(false)
     }
   }, [cancelPending, stopCamera])
 
@@ -93,17 +103,25 @@ export function CaptureWorkspace({ active }: { active: boolean }) {
       flushSync(() => { discard(); if (lost) setNotice(text.backgroundCleared) })
     }
     const pagehide = () => { flushSync(discard) }
+    const interaction = (event: Event) => {
+      const task = pending.current, target = event.target
+      if (task?.kind === 'files' && target instanceof Node && !fileInput.current?.contains(target) && !fileCancel.current?.contains(target)) task.focusMoved = true
+    }
     const cleared = (source: 'local' | 'remote') => {
       sessionClosed.current = true; enabled.current = false
       if (source === 'remote') flushSync(discard)
       else discard()
     }
     document.addEventListener('visibilitychange', visibility)
+    document.addEventListener('pointerdown', interaction, true)
+    document.addEventListener('focusin', interaction, true)
     window.addEventListener('pagehide', pagehide)
     const unsubscribe = subscribeSessionCleared(cleared)
     return () => {
       mounted.current = false
       document.removeEventListener('visibilitychange', visibility)
+      document.removeEventListener('pointerdown', interaction, true)
+      document.removeEventListener('focusin', interaction, true)
       window.removeEventListener('pagehide', pagehide)
       unsubscribe()
       discard()
@@ -111,15 +129,20 @@ export function CaptureWorkspace({ active }: { active: boolean }) {
   }, [discard])
   useLayoutEffect(() => {
     enabled.current = active && !sessionClosed.current
-    if (!enabled.current) { cancelPending(); stopCamera() }
+    if (!enabled.current) {
+      const filesInterrupted = pending.current?.kind === 'files'
+      cancelPending(); stopCamera()
+      if (filesInterrupted && !sessionClosed.current) setNotice(text.fileCancelled)
+    }
   }, [active, cancelPending, stopCamera])
   useLayoutEffect(() => {
     if (stream) return
-    if (pending.current) cancelPending()
+    if (pending.current?.kind === 'capture') cancelPending()
   }, [stream, cancelPending])
   useLayoutEffect(() => {
     if (!restoreFocus.current || locked) return
-    const destination = restoreFocus.current === 'preview' ? previewHeading.current : restoreFocus.current === 'start' ? startButton.current : cameraHeading.current
+    const destination = restoreFocus.current === 'preview' ? previewHeading.current : restoreFocus.current === 'start' ? startButton.current
+      : restoreFocus.current === 'file' && fileInput.current && !fileInput.current.disabled ? fileInput.current : cameraHeading.current
     if (destination) { restoreFocus.current = undefined; destination.focus() }
   }, [locked, selectedID, album])
   useEffect(() => {
@@ -141,7 +164,7 @@ export function CaptureWorkspace({ active }: { active: boolean }) {
     setURLs(Object.fromEntries(urlRefs.current))
   }
   function start(id: number | null) {
-    if (!enabled.current || document.visibilityState !== 'visible' || capturing || timedOut) return
+    if (!enabled.current || document.visibilityState !== 'visible' || pending.current || capturing || timedOut) return
     if (id === null && albumRef.current.photos.length >= maxCapturePhotos) return
     if (id !== null && !albumRef.current.photos.some((photo) => photo.id === id)) return
     cancelPending(); retakeID.current = id; setCaptureError(undefined); setNotice(undefined); setPlaybackError(false)
@@ -167,11 +190,12 @@ export function CaptureWorkspace({ active }: { active: boolean }) {
     const element = video.current, original = stream
     if (!enabled.current || !element || !original || pending.current || timedOut || document.visibilityState !== 'visible') return
     const controller = new AbortController(), current = ++generation.current, id = retakeID.current
-    pending.current = controller; setCapturing(true); setCaptureError(undefined)
+    const task: Pending = { kind: 'capture', controller }
+    pending.current = task; setCapturing(true); setCaptureError(undefined)
     let result: FrameCaptureResult
     try { result = await captureVideoFrame(element, original, controller.signal) }
     catch { result = { kind: 'failed' } }
-    if (!mounted.current || !enabled.current || controller.signal.aborted || pending.current !== controller || generation.current !== current ||
+    if (!mounted.current || !enabled.current || controller.signal.aborted || pending.current !== task || generation.current !== current ||
       document.visibilityState !== 'visible' || video.current?.srcObject !== original) return
     const focus = !!cameraControls.current?.contains(document.activeElement)
     pending.current = undefined; setCapturing(false); stopCamera(); retakeID.current = null
@@ -193,6 +217,66 @@ export function CaptureWorkspace({ active }: { active: boolean }) {
     updateURL(photoID, result.blob); apply(change.album); setSelectedID(photoID); setCropError(false)
     setCrops((previous) => { const next = { ...previous }; delete next[photoID]; return next })
     if (focus) restoreFocus.current = 'preview'
+  }
+  async function importFiles(task: Extract<Pending, { kind: 'files' }>, current: number, originFocused: boolean) {
+    const total = task.files.length
+    const valid = () => mounted.current && enabled.current && !task.controller.signal.aborted && pending.current === task &&
+      generation.current === current && document.visibilityState === 'visible'
+    let error: FileError | undefined
+    try {
+      while (task.files.length && valid()) {
+        const file = task.files.shift()!
+        setFileProgress({ current: total - task.files.length, total })
+        const prepared = await prepareSelectedImage(file, task.controller.signal).catch(() => ({ kind: 'failed' as const }))
+        if (!valid()) return
+        if (prepared.kind !== 'prepared') { error = prepared.kind; break }
+        const normalized = await normalizeSelectedImage(prepared, task.controller.signal).catch(() => ({ kind: 'failed' as const }))
+        if (!valid()) return
+        if (normalized.kind !== 'imported') {
+          if (normalized.kind === 'timeout') { setFileTimedOut(true); error = 'reload-required' }
+          else error = normalized.kind
+          break
+        }
+        const id = nextID.current, change = addCapturedPhoto(albumRef.current, id, normalized)
+        if (change.kind !== 'changed') {
+          error = change.kind === 'count-limit' || change.kind === 'bytes-limit' ? change.kind : 'invalid'
+          break
+        }
+        nextID.current++; task.added++; allowLeaving.current = false
+        updateURL(id, normalized.blob); apply(change.album); setSelectedID(id); setCropError(false)
+      }
+    } catch { error = 'failed' }
+    const remaining = task.files.length > 0
+    task.files.length = 0
+    if (!valid()) return
+    const focus = fileInput.current === document.activeElement || fileCancel.current === document.activeElement ||
+      originFocused && !task.focusMoved && document.activeElement === document.body
+    pending.current = undefined; setFileProgress(undefined); setFileError(error); setFileRemaining(!!error && remaining)
+    if (task.added) setNotice(`${text.filesAdded}${task.added}`)
+    if (focus) restoreFocus.current = error || !task.added ? 'file' : 'preview'
+  }
+  function chooseFiles(event: ChangeEvent<HTMLInputElement>) {
+    const element = event.currentTarget, originFocused = document.activeElement === element, selection = element.files
+    const count = selection?.length ?? 0, available = maxCapturePhotos - albumRef.current.photos.length
+    const canChoose = enabled.current && !pending.current && !fileTimedOut && camera.status !== 'active' && camera.status !== 'requesting' && document.visibilityState === 'visible'
+    // Bound the File references before copying them out of the live FileList.
+    const files = canChoose && count <= available && selection ? Array.from(selection) : []
+    try { element.value = '' } catch { /* Invalid input is not retained as a draft. */ }
+    if (!count || !canChoose) return
+    setFileError(undefined); setFileRemaining(false); setNotice(undefined)
+    if (count > available) { setFileError('count-limit'); return }
+    if (files.some((file) => !Number.isSafeInteger(file.size) || file.size < 1)) { files.length = 0; setFileError('invalid'); return }
+    if (files.some((file) => file.size > maxFrameBytes)) { files.length = 0; setFileError('too-large'); return }
+    const task: Extract<Pending, { kind: 'files' }> = { kind: 'files', controller: new AbortController(), files, added: 0, focusMoved: false }
+    pending.current = task
+    setFileProgress({ current: 1, total: files.length })
+    void importFiles(task, ++generation.current, originFocused)
+  }
+  function cancelFiles() {
+    if (pending.current?.kind !== 'files') return
+    const focus = document.activeElement === fileCancel.current
+    cancelPending(); setFileError(undefined); setFileRemaining(false); setNotice(text.fileCancelled)
+    if (focus) restoreFocus.current = 'file'
   }
   function select(id: number) { if (!locked) { setSelectedID(id); setCropError(false); setCaptureError(undefined) } }
   function move(direction: 'earlier' | 'later') {
@@ -231,7 +315,11 @@ export function CaptureWorkspace({ active }: { active: boolean }) {
   }
   const canLeave = useCallback(() => allowLeaving.current, [])
   const leave = useCallback(() => { allowLeaving.current = true; discard() }, [discard])
-  const blocked = useCallback(() => { cancelPending(); stopCamera() }, [cancelPending, stopCamera])
+  const blocked = useCallback(() => {
+    const filesInterrupted = pending.current?.kind === 'files'
+    cancelPending(); stopCamera()
+    if (filesInterrupted) setNotice(text.fileCancelled)
+  }, [cancelPending, stopCamera])
   const stay = useCallback(() => {}, [])
 
   const index = selected ? album.photos.findIndex((photo) => photo.id === selected.id) : -1
@@ -252,10 +340,23 @@ export function CaptureWorkspace({ active }: { active: boolean }) {
         </>}
         {capturing && <p role="status">{text.taking}</p>}
         <div ref={cameraControls} className="flex flex-wrap gap-2">
-          {camera.status === 'idle' || camera.status === 'error' ? <Button ref={startButton} type="button" disabled={album.photos.length >= maxCapturePhotos || timedOut} className={`${control} gap-2`} onClick={() => start(null)}><Camera aria-hidden="true" />{cameraText.cameraStart}</Button>
+          {camera.status === 'idle' || camera.status === 'error' ? <Button ref={startButton} type="button" disabled={album.photos.length >= maxCapturePhotos || timedOut || !!fileProgress} className={`${control} gap-2`} onClick={() => start(null)}><Camera aria-hidden="true" />{cameraText.cameraStart}</Button>
             : <Button type="button" variant="outline" className={control} onClick={stop}>{cameraText.cameraStop}</Button>}
           {camera.status === 'active' && <><Button type="button" disabled={capturing || timedOut || playbackError} className={control} onClick={() => { void capture() }}>{text.take}</Button>
             <Button type="button" variant="outline" disabled={capturing} className={`${control} gap-2`} onClick={switchCamera}><SwitchCamera aria-hidden="true" />{cameraText.cameraSwitch}</Button></>}
+        </div>
+        <div className="min-w-0 space-y-3 border-t pt-5">
+          <h3 className="text-lg font-semibold">{text.fileTitle}</h3>
+          <p id="capture-file-help" className="text-sm leading-relaxed text-muted-foreground">{text.fileHelp}</p>
+          <p id="capture-file-quality" className="text-sm leading-relaxed">{text.fileQuality}</p>
+          <label htmlFor="capture-file-input" className="block text-base font-medium">{text.fileInput}</label>
+          <Input ref={fileInput} id="capture-file-input" type="file" accept="image/jpeg,image/png,image/webp" multiple
+            disabled={locked || album.photos.length >= maxCapturePhotos || fileTimedOut} onChange={chooseFiles}
+            aria-describedby={`capture-file-help capture-file-quality${fileError ? ' capture-file-error' : ''}`}
+            aria-invalid={!!fileError} className="h-auto min-h-12 max-w-full py-2 text-[0px]! file:mr-0 file:h-auto file:min-h-10 file:max-w-full file:whitespace-normal file:text-base" />
+          {fileProgress && <div className="flex flex-wrap items-center gap-3"><p role="status" className="text-sm">{text.fileProcessing} {fileProgress.current} / {fileProgress.total}</p>
+            <Button ref={fileCancel} type="button" variant="outline" className={control} onClick={cancelFiles}>{text.fileCancel}</Button></div>}
+          {fileError && <Alert role="alert" className="p-4"><AlertDescription id="capture-file-error" className="space-y-2 text-base"><p>{text.fileErrors[fileError]}</p>{fileRemaining && <p>{text.fileRemaining}</p>}</AlertDescription></Alert>}
         </div>
       </section>
       <section aria-labelledby="capture-album-title" className="min-w-0 space-y-4">
