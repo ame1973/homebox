@@ -80,7 +80,7 @@ it.each([
   expect(HTMLCanvasElement.prototype.toBlob).toHaveBeenLastCalledWith(expect.any(Function), 'image/png')
   const blob = png(); callbacks.shift()?.(blob)
   const result = await pending
-  expect(result).toEqual({ kind: 'imported', blob, width, height })
+  expect(result).toEqual({ kind: 'imported', blob, mime: 'image/png', width, height })
   expect(isImportedFrame(result)).toBe(true); expect(Object.isFrozen(result)).toBe(true)
   expect(isImportedFrame({ ...result })).toBe(false)
   expect(canvases[0]?.width).toBe(0); expect(canvases[0]?.height).toBe(0)

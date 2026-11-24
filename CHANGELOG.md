@@ -29,6 +29,8 @@
 
 ### Added
 
+- Extend the volatile photo-album model and original-pixel renderer to independently branded camera and imported frames, keeping one combined budget and preserving PNG transparency at canvas precision. The visible file picker and upload remain unfinished.
+
 - Normalize a worker-prepared image into a volatile, separately branded canvas frame, applying EXIF orientation and retaining transparency at browser-canvas precision. Native decoding is shared with camera-photo rendering and may alter color/precision; the file picker and upload remain unfinished.
 
 - Add a cancellable same-origin worker for bounded selected-image preparation, without filenames or raw errors. It is internal groundwork, not an image picker, final decoder or upload.

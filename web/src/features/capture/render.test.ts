@@ -2,6 +2,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { captureVideoFrame, maxFrameBytes, type CapturedFrame } from '@/lib/capture-frame'
 import { notifyPageSuspended } from '@/lib/session-lifecycle'
 import { newPhotoGeometry, type PhotoGeometry } from './geometry'
+import { normalizeSelectedImage, type ImportedFrame } from './image-normalize'
+import { prepareSelectedImage } from './image-prepare-client'
 import { renderCapturedPhoto } from './render'
 
 const draw = vi.fn(), transform = vi.fn(), closeBitmap = vi.fn()
@@ -41,6 +43,27 @@ async function capture(captureFrame = captureVideoFrame): Promise<CapturedFrame>
   draw.mockClear(); transform.mockClear(); canvases = []
   return frame
 }
+async function imported(mime: 'image/jpeg' | 'image/png'): Promise<ImportedFrame> {
+  class WorkerFixture {
+    onmessage: ((event: MessageEvent<unknown>) => void) | null = null
+    postMessage() {
+      queueMicrotask(() => this.onmessage?.({ data: { type: 'result', kind: 'prepared', mime, width: 4, height: 3,
+        orientation: 1, blob: new Blob(['minimized'], { type: mime }) } } as MessageEvent<unknown>))
+    }
+    terminate() {}
+  }
+  vi.stubGlobal('Worker', WorkerFixture)
+  const source = await prepareSelectedImage(new Blob(['selected image bytes']), new AbortController().signal)
+  if (source.kind !== 'prepared') throw new Error('Preparation failed')
+  const pending = normalizeSelectedImage(source, new AbortController().signal)
+  await waitForEncoder()
+  callbacks.shift()?.(new Blob(['frame'], { type: mime }))
+  const result = await pending
+  if (result.kind !== 'imported') throw new Error('Normalization failed')
+  draw.mockClear(); transform.mockClear(); closeBitmap.mockClear(); canvases = []
+  vi.mocked(createImageBitmap).mockClear(); vi.mocked(HTMLCanvasElement.prototype.getContext).mockClear()
+  return result
+}
 function geometry(turns: 0 | 1 | 2 | 3 = 0): PhotoGeometry {
   const source = newPhotoGeometry(4, 3)
   if (!source) throw new Error('Geometry fixture failed')
@@ -65,6 +88,29 @@ it.each([
   expect(await pending).toEqual({ kind: 'rendered', blob, width, height })
   expect(canvases[0]?.width).toBe(0); expect(canvases[0]?.height).toBe(0)
   expect(source).toEqual(geometry(turns))
+})
+
+it.each([['image/png', true], ['image/jpeg', false]] as const)('renders branded imported %s from original pixels without losing transparency intent', async (mime, alpha) => {
+  const frame = await imported(mime), pending = renderCapturedPhoto(frame, geometry(1), new AbortController().signal)
+  await waitForEncoder()
+  expect(createImageBitmap).toHaveBeenCalledExactlyOnceWith(frame.blob, { imageOrientation: 'none' })
+  expect(HTMLCanvasElement.prototype.getContext).toHaveBeenCalledExactlyOnceWith('2d', { alpha })
+  expect(transform).toHaveBeenCalledExactlyOnceWith(0, 1, -1, 0, 2, 0)
+  expect(draw).toHaveBeenCalledExactlyOnceWith(bitmap, 1, 1, 3, 2, 0, 0, 3, 2)
+  if (mime === 'image/png') expect(HTMLCanvasElement.prototype.toBlob).toHaveBeenLastCalledWith(expect.any(Function), mime)
+  else expect(HTMLCanvasElement.prototype.toBlob).toHaveBeenLastCalledWith(expect.any(Function), mime, 0.9)
+  const blob = new Blob(['output'], { type: mime }); callbacks.shift()?.(blob)
+  expect(await pending).toEqual({ kind: 'rendered', blob, width: 2, height: 3 })
+  expect(await renderCapturedPhoto({ ...frame }, geometry(), new AbortController().signal)).toEqual({ kind: 'invalid' })
+})
+
+it('refuses an altered imported MIME instead of flattening transparent pixels', async () => {
+  const frame = await imported('image/png')
+  Object.defineProperty(frame.blob, 'type', { value: 'image/jpeg', configurable: true })
+  const pending = renderCapturedPhoto(frame, geometry(), new AbortController().signal)
+  await Promise.resolve(); callbacks.shift()?.(jpeg())
+  expect(await pending).toEqual({ kind: 'invalid' })
+  expect(createImageBitmap).not.toHaveBeenCalled()
 })
 
 it('accepts only the unchanged camera capture and matching valid source geometry', async () => {

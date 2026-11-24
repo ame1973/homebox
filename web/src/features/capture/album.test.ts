@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { captureVideoFrame, maxFrameBytes, type CapturedFrame } from '@/lib/capture-frame'
 import { photoDisplaySize } from './geometry'
+import { normalizeSelectedImage, type ImportedFrame } from './image-normalize'
+import { prepareSelectedImage } from './image-prepare-client'
 import {
   addCapturedPhoto, chooseCaptureCover, cropCapturedPhoto, describeCapturedPhoto, emptyCaptureAlbum,
   maxCaptureAlbumBytes, maxCaptureDescriptionUnits, maxCapturePhotos, moveCapturedPhoto, removeCapturedPhoto,
@@ -27,6 +29,27 @@ async function capture(size = 1, width = 4, height = 3): Promise<CapturedFrame> 
   return result
 }
 
+async function imported(size = 1): Promise<ImportedFrame> {
+  class WorkerFixture {
+    onmessage: ((event: MessageEvent<unknown>) => void) | null = null
+    postMessage() {
+      queueMicrotask(() => this.onmessage?.({ data: { type: 'result', kind: 'prepared', mime: 'image/png', width: 4, height: 3,
+        orientation: 1, blob: new Blob(['minimized'], { type: 'image/png' }) } } as MessageEvent<unknown>))
+    }
+    terminate() {}
+  }
+  vi.stubGlobal('Worker', WorkerFixture)
+  vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ width: 4, height: 3, close: vi.fn() })))
+  vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue({ drawImage: vi.fn(), setTransform: vi.fn(), imageSmoothingEnabled: false } as unknown as CanvasRenderingContext2D)
+  const source = await prepareSelectedImage(new Blob(['selected image bytes']), new AbortController().signal)
+  if (source.kind !== 'prepared') throw new Error(`Preparation failed: ${source.kind}`)
+  blob = new Blob(['png'], { type: 'image/png' })
+  Object.defineProperty(blob, 'size', { value: size, configurable: true })
+  const result = await normalizeSelectedImage(source, new AbortController().signal)
+  if (result.kind !== 'imported') throw new Error(`Normalization failed: ${result.kind}`)
+  return result
+}
+
 function changed(result: CaptureAlbumResult): CaptureAlbum {
   if (result.kind !== 'changed') throw new Error(`Album fixture failed: ${result.kind}`)
   return result.album
@@ -49,6 +72,47 @@ describe('volatile capture album', () => {
       expect(addCapturedPhoto(second, id, frame)).toEqual({ kind: 'invalid' })
     }
     expect(addCapturedPhoto(second, 3, { ...frame })).toEqual({ kind: 'invalid' })
+  })
+
+  it('keeps distinct camera and imported photo identities, geometry, cover and descriptions', async () => {
+    const camera = await capture(), file = await imported()
+    let album = changed(addCapturedPhoto(emptyCaptureAlbum(), 1, camera))
+    album = changed(addCapturedPhoto(album, 2, file))
+    expect(album.photos.map((photo) => photo.frame.kind)).toEqual(['captured', 'imported'])
+    expect(album.photos[1]?.frame).toBe(file)
+    expect(addCapturedPhoto(album, 3, { ...file })).toEqual({ kind: 'invalid' })
+    album = required(chooseCaptureCover(album, 2))
+    album = required(describeCapturedPhoto(album, 2, 'keep\n\ud800'))
+    album = required(cropCapturedPhoto(album, 2, { x: 1, y: 1, width: 3, height: 2 }))
+    album = required(rotateCapturedPhoto(album, 2, 'clockwise'))
+    expect(photoDisplaySize(album.photos[1]!.geometry)).toEqual({ width: 2, height: 3 })
+    expect(album.photos[1]?.frame).toBe(file)
+    const retake = await capture(2, 7, 5)
+    album = changed(replaceCapturedPhoto(album, 2, retake))
+    expect(album.coverID).toBe(2); expect(album.photos[1]?.description).toBe('keep\n\ud800')
+    expect(album.photos[1]?.geometry).toEqual({ sourceWidth: 7, sourceHeight: 5, crop: { x: 0, y: 0, width: 7, height: 5 }, turns: 0 })
+    album = changed(replaceCapturedPhoto(album, 2, file))
+    expect(album.coverID).toBe(2); expect(album.photos[1]?.description).toBe('keep\n\ud800')
+    expect(album.photos[1]?.frame).toBe(file)
+  })
+
+  it('rejects a changed imported MIME instead of silently discarding transparency', async () => {
+    const file = await imported(), album = changed(addCapturedPhoto(emptyCaptureAlbum(), 1, file))
+    Object.defineProperty(file.blob, 'type', { value: 'image/jpeg', configurable: true })
+    expect(addCapturedPhoto(emptyCaptureAlbum(), 2, file)).toEqual({ kind: 'invalid' })
+    expect(addCapturedPhoto(album, 2, await capture())).toEqual({ kind: 'invalid' })
+    expect(resetCapturedPhotoGeometry(album, 1)).toBeUndefined()
+  })
+
+  it('enforces one combined encoded-byte budget across camera and imported photos', async () => {
+    const camera = await capture(maxFrameBytes), file = await imported(maxFrameBytes), extra = await capture()
+    let album = changed(addCapturedPhoto(emptyCaptureAlbum(), 1, camera))
+    album = changed(addCapturedPhoto(album, 2, file))
+    expect(album.photos.reduce((sum, photo) => sum + photo.frame.blob.size, 0)).toBe(maxCaptureAlbumBytes)
+    expect(addCapturedPhoto(album, 3, extra)).toEqual({ kind: 'bytes-limit' })
+    Object.defineProperty(file.blob, 'size', { value: Number.NaN, configurable: true })
+    expect(addCapturedPhoto(album, 3, extra)).toEqual({ kind: 'invalid' })
+    expect(replaceCapturedPhoto(album, 2, camera)).toEqual({ kind: 'invalid' })
   })
 
   it('enforces explicit photo-count and encoded-byte budgets without truncation', async () => {

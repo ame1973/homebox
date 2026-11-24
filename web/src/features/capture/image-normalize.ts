@@ -3,7 +3,7 @@ import { subscribeSessionCleared } from '@/lib/session-lifecycle'
 import { isPreparedSelectedImage, type PreparedSelectedImage } from './image-prepare-client'
 import { acquirePhotoProcessing } from './photo-processing-slot'
 
-export type ImportedFrame = Readonly<{ kind: 'imported'; blob: Blob; width: number; height: number }>
+export type ImportedFrame = Readonly<{ kind: 'imported'; blob: Blob; mime: 'image/jpeg' | 'image/png'; width: number; height: number }>
 export type ImageNormalizationResult = ImportedFrame | Readonly<{ kind: 'invalid' | 'failed' | 'too-large' | 'cancelled' | 'busy' | 'timeout' }>
 const importedFrames = new WeakSet<object>()
 
@@ -94,7 +94,7 @@ export async function normalizeSelectedImage(source: PreparedSelectedImage, sign
           if (!valid()) { finish({ kind: 'cancelled' }); return }
           if (!blob || blob.type !== output || !Number.isSafeInteger(blob.size) || blob.size < 1) { finish({ kind: 'failed' }); return }
           if (blob.size > maxFrameBytes) { finish({ kind: 'too-large' }); return }
-          const frame: ImportedFrame = Object.freeze({ kind: 'imported', blob, width, height })
+          const frame: ImportedFrame = Object.freeze({ kind: 'imported', blob, mime: output, width, height })
           importedFrames.add(frame)
           finish(frame)
         }

@@ -1,13 +1,15 @@
 import { isCapturedFrame, maxFrameBytes, type CapturedFrame } from '@/lib/capture-frame'
 import { cropPhotoGeometry, newPhotoGeometry, rotatePhotoGeometry, type PhotoGeometry, type PhotoRect } from './geometry'
+import { isImportedFrame, type ImportedFrame } from './image-normalize'
 
 export const maxCapturePhotos = 10
 export const maxCaptureAlbumBytes = 64 * 1024 * 1024
 export const maxCaptureDescriptionUnits = 20_000
 
+export type AlbumFrame = CapturedFrame | ImportedFrame
 export type CapturePhoto = Readonly<{
   id: number
-  frame: CapturedFrame
+  frame: AlbumFrame
   geometry: PhotoGeometry
   description: string
 }>
@@ -27,8 +29,9 @@ function validLocalID(id: number): boolean {
   return Number.isSafeInteger(id) && id > 0
 }
 
-function frameBytes(frame: CapturedFrame): number | undefined {
-  if (!isCapturedFrame(frame)) return undefined
+function frameBytes(frame: AlbumFrame): number | undefined {
+  if (!isCapturedFrame(frame) && !isImportedFrame(frame)) return undefined
+  if (frame.kind === 'imported' && frame.blob.type !== frame.mime) return undefined
   const size = frame.blob.size
   return Number.isSafeInteger(size) && size >= 1 && size <= maxFrameBytes ? size : undefined
 }
@@ -43,11 +46,11 @@ function albumBytes(album: CaptureAlbum): number | undefined {
   return total
 }
 
-function frameGeometry(frame: CapturedFrame): PhotoGeometry | undefined {
+function frameGeometry(frame: AlbumFrame): PhotoGeometry | undefined {
   return frameBytes(frame) === undefined ? undefined : newPhotoGeometry(frame.width, frame.height)
 }
 
-export function addCapturedPhoto(album: CaptureAlbum, id: number, frame: CapturedFrame): CaptureAlbumResult {
+export function addCapturedPhoto(album: CaptureAlbum, id: number, frame: AlbumFrame): CaptureAlbumResult {
   if (!validLocalID(id)) return { kind: 'invalid' }
   const geometry = frameGeometry(frame)
   if (!geometry) return { kind: 'invalid' }
@@ -61,7 +64,7 @@ export function addCapturedPhoto(album: CaptureAlbum, id: number, frame: Capture
 
 // Retaking replaces only the selected source and geometry; the local order,
 // explicit cover choice and raw description are not silently changed.
-export function replaceCapturedPhoto(album: CaptureAlbum, id: number, frame: CapturedFrame): CaptureAlbumResult {
+export function replaceCapturedPhoto(album: CaptureAlbum, id: number, frame: AlbumFrame): CaptureAlbumResult {
   const index = album.photos.findIndex((photo) => photo.id === id)
   if (index < 0) return { kind: 'missing' }
   const geometry = frameGeometry(frame)

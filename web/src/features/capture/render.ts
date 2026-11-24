@@ -1,6 +1,8 @@
-import { isCapturedFrame, maxFrameBytes, type CapturedFrame } from '@/lib/capture-frame'
+import { isCapturedFrame, maxFrameBytes } from '@/lib/capture-frame'
 import { subscribeSessionCleared } from '@/lib/session-lifecycle'
+import type { AlbumFrame } from './album'
 import { photoDisplaySize, type PhotoGeometry } from './geometry'
+import { isImportedFrame } from './image-normalize'
 import { acquirePhotoProcessing } from './photo-processing-slot'
 
 export type PhotoRenderResult =
@@ -16,14 +18,15 @@ function closeBitmap(bitmap: ImageBitmap | undefined) {
 
 // Call after a completed-session check and an explicit action. The caller must
 // recheck its own session/generation after awaiting, clear any returned Blob on
-// suspension or departure, and retain the original capture for later edits.
-// This does not accept selected files, persist drafts, upload or sanitize bytes.
-export async function renderCapturedPhoto(frame: CapturedFrame, value: PhotoGeometry, signal: AbortSignal): Promise<PhotoRenderResult> {
+// suspension or departure, and retain the original frame for later edits.
+// It accepts only branded camera or normalized imported frames, not raw files;
+// it does not persist drafts, upload or establish server-side image safety.
+export async function renderCapturedPhoto(frame: AlbumFrame, value: PhotoGeometry, signal: AbortSignal): Promise<PhotoRenderResult> {
   if (signal.aborted) return { kind: 'cancelled' }
   const slot = acquirePhotoProcessing()
   if (slot.kind !== 'held') return { kind: slot.kind }
   if (document.visibilityState !== 'visible') { slot.release(); return { kind: 'cancelled' } }
-  if (!isCapturedFrame(frame)) { slot.release(); return { kind: 'invalid' } }
+  if (!isCapturedFrame(frame) && !isImportedFrame(frame) || frame.kind === 'imported' && frame.blob.type !== frame.mime) { slot.release(); return { kind: 'invalid' } }
   let geometry: PhotoGeometry
   try {
     geometry = { sourceWidth: value.sourceWidth, sourceHeight: value.sourceHeight, crop: { ...value.crop }, turns: value.turns }
@@ -31,6 +34,7 @@ export async function renderCapturedPhoto(frame: CapturedFrame, value: PhotoGeom
   const size = photoDisplaySize(geometry)
   if (!size || frame.width !== geometry.sourceWidth || frame.height !== geometry.sourceHeight) { slot.release(); return { kind: 'invalid' } }
   const { width, height } = size
+  const output = frame.kind === 'imported' ? frame.mime : 'image/jpeg'
   if (typeof createImageBitmap !== 'function') { slot.release(); return { kind: 'failed' } }
 
   return await new Promise<PhotoRenderResult>((resolve) => {
@@ -63,15 +67,15 @@ export async function renderCapturedPhoto(frame: CapturedFrame, value: PhotoGeom
       let bitmap: ImageBitmap | undefined
       try {
         if (!valid()) { release(); finish({ kind: 'cancelled' }); return }
-        // The source was produced by canvas capture, so its pixels already
-        // have the intended orientation. Ignore any image orientation metadata.
+        // Both trusted local frame variants already have their orientation
+        // baked into pixels. Do not apply image orientation metadata again.
         bitmap = await createImageBitmap(frame.blob, { imageOrientation: 'none' })
         if (!valid()) { release(); finish({ kind: 'cancelled' }); return }
         if (bitmap.width !== frame.width || bitmap.height !== frame.height) { release(); finish({ kind: 'invalid' }); return }
         canvas = document.createElement('canvas')
         canvas.width = width; canvas.height = height
         if (canvas.width !== width || canvas.height !== height) throw new Error('Canvas dimensions unavailable')
-        const context = canvas.getContext('2d', { alpha: false })
+        const context = canvas.getContext('2d', { alpha: output === 'image/png' })
         if (!context || typeof canvas.toBlob !== 'function') throw new Error('Canvas unavailable')
         context.imageSmoothingEnabled = false
         const { crop, turns } = geometry
@@ -82,13 +86,15 @@ export async function renderCapturedPhoto(frame: CapturedFrame, value: PhotoGeom
         context.drawImage(bitmap, crop.x, crop.y, crop.width, crop.height, 0, 0, crop.width, crop.height)
         closeBitmap(bitmap); bitmap = undefined
         if (!valid()) { release(); finish({ kind: 'cancelled' }); return }
-        canvas.toBlob((blob) => {
+        const encoded = (blob: Blob | null) => {
           if (!release() || finished) return
           if (!valid()) { finish({ kind: 'cancelled' }); return }
-          if (!blob || blob.type !== 'image/jpeg' || !blob.size) { finish({ kind: 'failed' }); return }
+          if (!blob || blob.type !== output || !Number.isSafeInteger(blob.size) || blob.size < 1) { finish({ kind: 'failed' }); return }
           if (blob.size > maxFrameBytes) { finish({ kind: 'too-large' }); return }
           finish({ kind: 'rendered', blob, width, height })
-        }, 'image/jpeg', 0.9)
+        }
+        if (output === 'image/jpeg') canvas.toBlob(encoded, output, 0.9)
+        else canvas.toBlob(encoded, output)
       } catch {
         release(); finish({ kind: 'failed' })
       } finally { closeBitmap(bitmap) }

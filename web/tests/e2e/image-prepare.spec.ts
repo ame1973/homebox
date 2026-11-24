@@ -22,7 +22,9 @@ const test = applicationTest.extend<{}, { prepareBundle: Bundle }>({
       const entry = join(directory, 'entry.ts'), output = join(directory, 'out')
       const client = fileURLToPath(new URL('../../src/features/capture/image-prepare-client.ts', import.meta.url))
       const normalize = fileURLToPath(new URL('../../src/features/capture/image-normalize.ts', import.meta.url))
-      writeFileSync(entry, `export * from ${JSON.stringify(client)}; export * from ${JSON.stringify(normalize)};\n`)
+      const album = fileURLToPath(new URL('../../src/features/capture/album.ts', import.meta.url))
+      const render = fileURLToPath(new URL('../../src/features/capture/render.ts', import.meta.url))
+      writeFileSync(entry, `export * from ${JSON.stringify(client)}; export * from ${JSON.stringify(normalize)}; export * from ${JSON.stringify(album)}; export * from ${JSON.stringify(render)};\n`)
       await build({ configFile: false, logLevel: 'silent', resolve: { alias: { '@': fileURLToPath(new URL('../../src', import.meta.url)) } },
         build: { outDir: output, minify: false, rollupOptions: { preserveEntrySignatures: 'strict', input: entry, output: { entryFileNames: 'assets/image-prepare-private.js' } } } })
       const assets = join(output, 'assets'), names = readdirSync(assets), workers = names.filter((name) => /^image-prepare-worker-.*\.js$/.test(name))
@@ -202,8 +204,26 @@ test('normalizes real transparent pixels in all eight EXIF orientations without 
         return Math.abs(expected - got) <= (channel === 3 ? 0 : 2)
       }))
       const privateMetadata = new TextDecoder().decode(await frame.blob.arrayBuffer()).includes('PRIVATE_GPS')
+      let cropped: { width: number; height: number; mime: string; matches: boolean; cover: number | null; description: string } | null = null
+      if (item.mime === 'image/png' && item.orientation === 6) {
+        const added = api.addCapturedPhoto(api.emptyCaptureAlbum(), 1, frame)
+        if (added.kind !== 'changed') throw new Error(`Album failed: ${added.kind}`)
+        let album = api.chooseCaptureCover(added.album, 1)
+        album = api.describeCapturedPhoto(album, 1, 'original description')
+        album = api.cropCapturedPhoto(album, 1, { x: 1, y: 0, width: 2, height: 2 })
+        album = api.rotateCapturedPhoto(album, 1, 'clockwise')
+        const photo = album.photos[0]
+        const rendered = await api.renderCapturedPhoto(photo.frame, photo.geometry, new AbortController().signal)
+        if (rendered.kind !== 'rendered') throw new Error(`Rendering failed: ${rendered.kind}`)
+        const output = await pixels(rendered.blob), selected = [3, 2, 1, 0]
+        cropped = { width: output.width, height: output.height, mime: rendered.blob.type, cover: album.coverID, description: photo.description,
+          matches: selected.every((sourceIndex, index) => [0, 1, 2, 3].every((channel) => {
+            const expected = source.values[sourceIndex * 4 + channel]!, got = output.values[index * 4 + channel]!
+            return Math.abs(expected - got) <= (channel === 3 ? 0 : 2)
+          })) }
+      }
       results.push({ orientation: item.orientation, kind: frame.kind, width: frame.width, height: frame.height, mime: frame.blob.type,
-        decodedWidth: actual.width, decodedHeight: actual.height, matches, privateMetadata,
+        decodedWidth: actual.width, decodedHeight: actual.height, matches, privateMetadata, cropped,
         branded: api.isImportedFrame(frame), clonedBrand: api.isImportedFrame({ ...frame }) })
     }
     return results
@@ -213,6 +233,8 @@ test('normalizes real transparent pixels in all eight EXIF orientations without 
     const size = result.orientation >= 5 ? [3, 2] : [2, 3]
     expect([result.width, result.height]).toEqual(size); expect([result.decodedWidth, result.decodedHeight]).toEqual(size)
     expect(result).toMatchObject({ kind: 'imported', mime: 'image/png', matches: true, privateMetadata: false, branded: true, clonedBrand: false })
+    if (result.orientation === 6) expect(result.cropped).toEqual({ width: 2, height: 2, mime: 'image/png', matches: true, cover: 1, description: 'original description' })
+    else expect(result.cropped).toBeNull()
   }
   const probe = await page.evaluate(() => ({ urls: window.__prepareProbe.urls, terminated: window.__prepareProbe.terminated }))
   expect(probe.urls).toHaveLength(9); expect(probe.terminated).toBe(9)
@@ -262,12 +284,21 @@ test('rotates a real JPEG once and re-encodes without its private EXIF data', as
       return [0, 1, 2].every((channel) => Math.abs(before.data[source * 4 + channel]! - after.data[target * 4 + channel]!) <= 20)
     })
     const privateMetadata = new TextDecoder().decode(await frame.blob.arrayBuffer()).includes('PRIVATE_GPS')
+    const added = api.addCapturedPhoto(api.emptyCaptureAlbum(), 1, frame)
+    if (added.kind !== 'changed') throw new Error(`Album failed: ${added.kind}`)
+    let album = api.cropCapturedPhoto(added.album, 1, { x: 0, y: 0, width: 16, height: 24 })
+    album = api.rotateCapturedPhoto(album, 1, 'clockwise')
+    const photo = album.photos[0], rendered = await api.renderCapturedPhoto(photo.frame, photo.geometry, new AbortController().signal)
+    if (rendered.kind !== 'rendered') throw new Error(`Rendering failed: ${rendered.kind}`)
+    const cropped = await pixels(rendered.blob), sourceIndex = (24 * before.width + 12) * 4, targetIndex = (8 * cropped.width + 12) * 4
+    const cropMatches = [0, 1, 2].every((channel) => Math.abs(before.data[sourceIndex + channel]! - cropped.data[targetIndex + channel]!) <= 20)
     canvas.width = 0; canvas.height = 0
     return { kind: frame.kind, width: frame.width, height: frame.height, mime: frame.blob.type,
-      decodedWidth: after.width, decodedHeight: after.height, samples, privateMetadata }
+      decodedWidth: after.width, decodedHeight: after.height, samples, privateMetadata,
+      crop: { width: cropped.width, height: cropped.height, mime: rendered.blob.type, matches: cropMatches } }
   })
   expect(result).toEqual({ kind: 'imported', width: 32, height: 48, mime: 'image/jpeg', decodedWidth: 32, decodedHeight: 48,
-    samples: [true, true, true, true], privateMetadata: false })
+    samples: [true, true, true, true], privateMetadata: false, crop: { width: 24, height: 16, mime: 'image/jpeg', matches: true } })
   expect(writes).toEqual([])
 })
 
