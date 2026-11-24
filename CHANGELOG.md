@@ -29,6 +29,8 @@
 
 ### Added
 
+- Add an internal bounded JPEG/PNG/static-WebP container preflight for future photo selection. It reads dimensions and EXIF orientation and rejects ambiguous framing and animation without claiming complete decoding, sanitization, upload or an implemented file picker.
+
 - Compare a selected current offline search payload against freshly derived approved Item/Unit and financial source without reading search caches or rewriting historical frozen changes. This private check does not enable bootstrap, authorize a read or prove full backfill.
 
 - Check private frozen-sync record identities, safe revisions and tombstone payload absence against the supported version-one payloads. This structural check does not establish source provenance or enable sync.
