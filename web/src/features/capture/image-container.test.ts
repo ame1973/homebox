@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { maxFrameBytes } from '@/lib/capture-frame'
 import { inspectImageContainer } from './image-container'
+import { prepareImageDecodeInput } from './image-decode-input'
 
 // Independently encoded by Pillow 10.2.0; WebP samples use Pillow/libwebp 1.3.2.
 const png = 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAADCAYAAAC56t6BAAAAHElEQVR4nAXBAQEAMAjAIHwyo9l8B5EcqnhhtB+Pawm7X97uPgAAAABJRU5ErkJggg=='
@@ -50,10 +51,13 @@ function exif(orientation: number, little: boolean): Uint8Array {
   view.setUint32(14, 1, little); view.setUint16(18, orientation, little)
   return data
 }
+function jpegSegment(marker: number, body: Uint8Array): Uint8Array {
+  const segment = new Uint8Array(body.length + 4)
+  segment.set([0xff, marker]); new DataView(segment.buffer).setUint16(2, body.length + 2); segment.set(body, 4)
+  return segment
+}
 function jpegEXIF(raw: Uint8Array, data: Uint8Array): Uint8Array {
-  const body = concat(ascii('Exif\0\0'), data), segment = new Uint8Array(body.length + 4)
-  segment.set([0xff, 0xe1]); new DataView(segment.buffer).setUint16(2, body.length + 2); segment.set(body, 4)
-  return concat(raw.subarray(0, 2), segment, raw.subarray(2))
+  return concat(raw.subarray(0, 2), jpegSegment(0xe1, concat(ascii('Exif\0\0'), data)), raw.subarray(2))
 }
 function pngEXIF(raw: Uint8Array, data: Uint8Array): Uint8Array {
   return concat(raw.subarray(0, 33), pngChunk('eXIf', data), raw.subarray(33))
@@ -62,6 +66,88 @@ function webpEXIF(raw: Uint8Array, data: Uint8Array): Uint8Array {
   return webpContainer(webpChunk('VP8X', new Uint8Array([0x18, 0, 0, 0, 1, 0, 0, 2, 0, 0])), raw.subarray(12), webpChunk('EXIF', data))
 }
 const expected = (mime: string, orientation = 1) => ({ kind: 'inspected', mime, width: 2, height: 3, orientation })
+
+describe('metadata-minimized browser decoder input', () => {
+  it.each([jpeg, progressiveJPEG])('removes JPEG private segments while retaining all scans', (encoded) => {
+    const original = bytes(encoded), tagged = jpegEXIF(original, concat(exif(7, true), ascii('private GPS')))
+    const raw = concat(tagged.subarray(0, 2), jpegSegment(0xe2, ascii('private ICC')),
+      jpegSegment(0xed, ascii('private IPTC')), jpegSegment(0xfe, ascii('private comment')), tagged.subarray(2))
+    const snapshot = raw.slice(), result = prepareImageDecodeInput(raw)
+    expect(result.kind).toBe('prepared')
+    if (result.kind !== 'prepared') throw new Error('Expected prepared JPEG')
+    expect(result).toMatchObject({ mime: 'image/jpeg', width: 2, height: 3, orientation: 7 })
+    expect(result.bytes).toEqual(original)
+    expect(result.bytes.buffer).not.toBe(raw.buffer)
+    expect(raw).toEqual(snapshot)
+    expect(inspectImageContainer(result.bytes)).toEqual(expected('image/jpeg'))
+  })
+
+  it('removes JFIF thumbnail and Adobe extension bytes but retains the color-transform headers', () => {
+    const original = bytes(jpeg), jfif = concat(ascii('JFIF\0'), new Uint8Array([1, 2, 0, 0, 1, 0, 1, 1, 1]), ascii('private thumbnail'))
+    const adobe = concat(ascii('Adobe'), new Uint8Array([0, 100, 0, 0, 0, 0, 1]), ascii('private extension'))
+    const raw = concat(original.subarray(0, 2), jpegSegment(0xe0, jfif), jpegSegment(0xee, adobe), original.subarray(2))
+    const result = prepareImageDecodeInput(raw)
+    expect(result.kind).toBe('prepared')
+    if (result.kind !== 'prepared') throw new Error('Expected prepared JPEG')
+    const text = new TextDecoder().decode(result.bytes)
+    expect(text).toContain('JFIF\0'); expect(text).toContain('Adobe'); expect(text).not.toContain('private')
+    const resultJFIF = result.bytes.indexOf(0xe0)
+    expect(result.bytes.subarray(resultJFIF + 1, resultJFIF + 3)).toEqual(new Uint8Array([0, 16]))
+    expect(inspectImageContainer(result.bytes)).toEqual(expected('image/jpeg'))
+  })
+
+  it('removes PNG private ancillary chunks while preserving exact encoded image chunks', () => {
+    const original = bytes(png), tagged = pngEXIF(original, concat(exif(6, false), ascii('private GPS')))
+    const raw = concat(tagged.subarray(0, 33), pngChunk('tEXt', ascii('private text')),
+      pngChunk('iCCP', ascii('private compressed profile')), tagged.subarray(33))
+    const result = prepareImageDecodeInput(raw)
+    expect(result.kind).toBe('prepared')
+    if (result.kind !== 'prepared') throw new Error('Expected prepared PNG')
+    expect(result).toMatchObject({ mime: 'image/png', width: 2, height: 3, orientation: 6 })
+    expect(result.bytes).toEqual(original)
+    expect(inspectImageContainer(result.bytes)).toEqual(expected('image/png'))
+  })
+
+  it('retains bounded PNG transparency and refuses ambiguous or misplaced transparency chunks', () => {
+    const original = bytes(png), header = original.subarray(16, 29).slice(), prefix = original.subarray(0, 8), rest = original.subarray(33)
+    header[8] = 8; header[9] = 3
+    const palette = pngChunk('PLTE', new Uint8Array([255, 0, 0, 0, 255, 0])), transparency = pngChunk('tRNS', new Uint8Array([255, 0]))
+    const source = (...chunks: Uint8Array[]) => concat(prefix, pngChunk('IHDR', header), ...chunks, rest)
+    const valid = source(palette, transparency, pngChunk('tEXt', ascii('private'))), result = prepareImageDecodeInput(valid)
+    expect(result.kind).toBe('prepared')
+    if (result.kind !== 'prepared') throw new Error('Expected prepared indexed PNG')
+    expect(result.bytes).toEqual(source(palette, transparency))
+    for (const raw of [source(palette, transparency, transparency), source(transparency, palette), source(palette, pngChunk('tRNS', new Uint8Array(3))),
+      concat(prefix, pngChunk('IHDR', header), palette, rest.subarray(0, rest.length - 12), transparency, rest.subarray(rest.length - 12))]) {
+      expect(prepareImageDecodeInput(raw)).toEqual({ kind: 'invalid' })
+    }
+    expect(prepareImageDecodeInput(concat(original.subarray(0, 33), transparency, rest))).toEqual({ kind: 'invalid' })
+  })
+
+  it('removes WebP metadata and rewrites RIFF size/flags without changing the image bitstream', () => {
+    const body = bytes(webpLossless).subarray(12), header = (flags: number) => webpChunk('VP8X', new Uint8Array([flags, 0, 0, 0, 1, 0, 0, 2, 0, 0]))
+    const raw = webpContainer(header(0x3c), webpChunk('ICCP', ascii('private ICC')), body,
+      webpChunk('EXIF', concat(exif(8, true), ascii('private GPS'))), webpChunk('XMP ', ascii('private XMP')))
+    const result = prepareImageDecodeInput(raw)
+    expect(result.kind).toBe('prepared')
+    if (result.kind !== 'prepared') throw new Error('Expected prepared WebP')
+    expect(result).toMatchObject({ mime: 'image/webp', width: 2, height: 3, orientation: 8 })
+    expect(result.bytes).toEqual(webpContainer(header(0x10), body))
+    expect(inspectImageContainer(result.bytes)).toEqual(expected('image/webp'))
+    const alpha = bytes(webpAlpha), alphaResult = prepareImageDecodeInput(alpha)
+    expect(alphaResult.kind).toBe('prepared')
+    if (alphaResult.kind !== 'prepared') throw new Error('Expected prepared alpha WebP')
+    expect(alphaResult.bytes).toEqual(alpha)
+  })
+
+  it('does not prepare invalid, oversized, unsupported or concurrently shared input', () => {
+    expect(prepareImageDecodeInput(bytes(webpAnimated))).toEqual({ kind: 'invalid' })
+    expect(prepareImageDecodeInput(ascii('<svg/>'))).toEqual({ kind: 'unsupported' })
+    expect(prepareImageDecodeInput(new Uint8Array(maxFrameBytes + 1))).toEqual({ kind: 'too-large' })
+    const source = bytes(png), shared = new Uint8Array(new SharedArrayBuffer(source.length)); shared.set(source)
+    expect(prepareImageDecodeInput(shared)).toEqual({ kind: 'invalid' })
+  })
+})
 
 describe('bounded selected-image container preflight', () => {
   it.each([
@@ -218,7 +304,13 @@ describe('bounded selected-image container preflight', () => {
           candidate[index] = candidate[index]! ^ (random() & 255)
         }
         const before = candidate.slice(), result = inspectImageContainer(candidate)
+        const prepared = prepareImageDecodeInput(candidate)
         expect(candidate).toEqual(before)
+        if (prepared.kind === 'prepared') {
+          expect(prepared.bytes.length).toBeLessThanOrEqual(candidate.length)
+          expect(inspectImageContainer(prepared.bytes)).toEqual({ kind: 'inspected', mime: prepared.mime, width: prepared.width, height: prepared.height, orientation: 1 })
+          expect(new Uint8Array(prepared.bytes.buffer, prepared.bytes.byteOffset + prepared.bytes.byteLength).every((value) => value === 0)).toBe(true)
+        }
         if (result.kind === 'inspected') {
           expect(result.width).toBeGreaterThan(0); expect(result.width).toBeLessThanOrEqual(16_384)
           expect(result.height).toBeGreaterThan(0); expect(result.height).toBeLessThanOrEqual(16_384)

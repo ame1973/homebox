@@ -29,6 +29,8 @@
 
 ### Added
 
+- Prepare a metadata-minimized intermediate for future JPEG/PNG/static-WebP browser decoding while retaining orientation and transparency information. This is not a sanitized photo, a file picker or an upload.
+
 - Add an internal bounded JPEG/PNG/static-WebP container preflight for future photo selection. It reads dimensions and EXIF orientation and rejects ambiguous framing and animation without claiming complete decoding, sanitization, upload or an implemented file picker.
 
 - Compare a selected current offline search payload against freshly derived approved Item/Unit and financial source without reading search caches or rewriting historical frozen changes. This private check does not enable bootstrap, authorize a read or prove full backfill.
