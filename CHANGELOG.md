@@ -29,6 +29,8 @@
 
 ### Added
 
+- Add an internal bounded Location contents read over actual Unit, Stock and sub-location source, with a revision-bound signed continuation and validation of each page and its lookahead. Retained disposed Units and zero Stock remain visible as records. The contents HTTP operation, pagination contract and browser workflow are not yet implemented.
+
 - Expose a protected current Location summary with direct/subtree recorded-holding counts and separately grouped base quantities. Validate real location/Unit/Stock authority, retained zeros and disposed Units, fail closed on unsafe totals, and return the actual Location aggregate ETag. The stateless browser adapter validates the reply without retries. Location detail displays the summary only after matching live Location reads and hides it during errors, session changes and page suspension; complete paged contents remain separate.
 
 - Offer an explicit JPEG/PNG/static-WebP file-selection fallback on the volatile photo screen. Process files locally with bounded sequential admission, preserve orientation and transparency at browser-canvas precision, disclose possible quality changes, and discard pending results on session or page suspension. Photos remain unsaved and are never uploaded.

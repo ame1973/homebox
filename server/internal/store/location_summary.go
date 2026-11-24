@@ -68,39 +68,53 @@ func (l *Locations) Summary(ctx context.Context, token, id string) (LocationSumm
 	return value, nil
 }
 
-func readLocationSummary(ctx context.Context, tx *sql.Tx, id string) (LocationSummary, error) {
+func validatedLocationRoot(ctx context.Context, tx *sql.Tx, id string) (Location, error) {
 	location, err := loadLocation(ctx, tx, id)
 	if err != nil {
-		return LocationSummary{}, err
+		return Location{}, err
 	}
-	// A reachable descendant has one parent. Checking the root's full ancestor
-	// chain rejects cycles or deleted ancestors without a depth limit; scanning
-	// every descendant below validates its actual source and retained counter.
 	if _, err = holdingLocationPath(ctx, tx, id, false); err != nil {
-		return LocationSummary{}, err
+		return Location{}, err
 	}
+	return location, nil
+}
+
+func validateLocationSubtree(ctx context.Context, tx *sql.Tx, id string) error {
 	rows, err := tx.QueryContext(ctx, subtreeCTE+locationSelect+" JOIN subtree s ON s.id=l.id ORDER BY l.id", id)
 	if err != nil {
-		return LocationSummary{}, err
+		return err
 	}
 	seenRoot := false
 	for rows.Next() {
 		value, scanErr := scanLocation(rows)
 		if scanErr != nil {
-			return LocationSummary{}, errors.Join(scanErr, rows.Close())
+			return errors.Join(scanErr, rows.Close())
 		}
 		if value.ID == id {
 			seenRoot = true
 		}
 	}
 	if err = errors.Join(rows.Err(), rows.Close()); err != nil {
-		return LocationSummary{}, err
+		return err
 	}
 	if !seenRoot {
-		return LocationSummary{}, ErrDomainState
+		return ErrDomainState
+	}
+	return nil
+}
+
+func readLocationSummary(ctx context.Context, tx *sql.Tx, id string) (LocationSummary, error) {
+	location, err := validatedLocationRoot(ctx, tx, id)
+	if err != nil {
+		return LocationSummary{}, err
+	}
+	// A reachable descendant has one parent. The root's full ancestor chain
+	// rejects cycles, and every descendant has its real source and counter.
+	if err = validateLocationSubtree(ctx, tx, id); err != nil {
+		return LocationSummary{}, err
 	}
 	value := LocationSummary{LocationID: id, Revision: location.Revision}
-	rows, err = tx.QueryContext(ctx, subtreeCTE+unitSelect+" WHERE u.location_id IN (SELECT id FROM subtree) ORDER BY u.id", id)
+	rows, err := tx.QueryContext(ctx, subtreeCTE+unitSelect+" WHERE u.location_id IN (SELECT id FROM subtree) ORDER BY u.id", id)
 	if err != nil {
 		return LocationSummary{}, err
 	}
