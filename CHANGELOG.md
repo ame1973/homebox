@@ -29,6 +29,8 @@
 
 ### Added
 
+- Add a cancellable same-origin worker for bounded selected-image preparation, without filenames or raw errors. It is internal groundwork, not an image picker, final decoder or upload.
+
 - Prepare a metadata-minimized intermediate for future JPEG/PNG/static-WebP browser decoding while retaining orientation and transparency information. This is not a sanitized photo, a file picker or an upload.
 
 - Add an internal bounded JPEG/PNG/static-WebP container preflight for future photo selection. It reads dimensions and EXIF orientation and rejects ambiguous framing and animation without claiming complete decoding, sanitization, upload or an implemented file picker.
