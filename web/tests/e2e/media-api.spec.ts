@@ -344,29 +344,41 @@ test.describe('global Media attachment picker', () => {
     expect(streams).toEqual([])
   })
 
-  test('selects an exact discovered ID for actual Item, Unit and Location owners', async ({ page, application }) => {
+  const ownerScopes = [
+    { kind: 'item', id: empty, field: 'item_id' },
+    { kind: 'unit', id: 'legacy/unit\0😀', field: 'item_unit_id' },
+    { kind: 'location', id: 'tree', field: 'location_id' },
+  ] as const
+  for (const [index, selected] of ownerScopes.entries()) test(`selects an exact discovered ID for an actual ${selected.kind} owner`, async ({ page, application }) => {
     await provision(page, application)
-    const writes = watchDomainWrites(page, ['/api/v1/media'])
-    const scopes = [['item', empty], ['unit', 'legacy/unit\0😀'], ['location', 'tree']] as const
-    for (const [kind, id] of scopes) {
-      await page.goto(`/photos/attach?${new URLSearchParams({ owner_type: kind, owner_id: id })}`)
-      await openPicker(page)
-      await page.getByRole('button', { name: choose(firstID) }).click()
-      await expect(page.getByRole('heading', { name: messages.media.selectedMedia })).toBeVisible()
-      await page.getByRole('button', { name: messages.media.reviewAttach }).click()
-      await page.getByRole('alertdialog').getByRole('button', { name: messages.media.confirmAttach }).click()
-      await expect(page.getByText(messages.mutations.done, { exact: true })).toBeVisible()
+    if (index > 0) {
+      const first = await writeContext(page, application.url)
+      for (const [priorIndex, prior] of ownerScopes.slice(0, index).entries()) {
+        const response = await page.request.post(exactMembership(firstID), {
+          headers: { ...first, 'Idempotency-Key': crypto.randomUUID(), 'If-Match': JSON.stringify(String(priorIndex + 1)) },
+          data: { [prior.field]: prior.id, owner_revision: 1, is_cover: false, sort_order: 0, description: '' },
+        })
+        expect(response.status()).toBe(200)
+        expect(await response.json()).toMatchObject({ media_id: firstID, owner_type: prior.kind, owner_id: prior.id, revision: 1 })
+      }
     }
-    expect(writes).toHaveLength(3)
-    expect(writes.map((write) => write.proof)).toEqual(['"1"', '"2"', '"3"'])
-    expect(writes.map((write) => JSON.parse(write.body!))).toEqual([
-      { item_id: empty, owner_revision: 1, is_cover: false, sort_order: 0, description: '' },
-      { item_unit_id: 'legacy/unit\0😀', owner_revision: 1, is_cover: false, sort_order: 0, description: '' },
-      { location_id: 'tree', owner_revision: 1, is_cover: false, sort_order: 0, description: '' },
-    ])
-    const links = await (await page.request.get(exactMembership(firstID))).json()
-    expect(links.data).toHaveLength(3)
-    expect(links.data.map((link: { owner_type: string }) => link.owner_type).sort()).toEqual(['item', 'location', 'unit'])
+    const writes = watchDomainWrites(page, ['/api/v1/media'])
+    await page.goto(`/photos/attach?${new URLSearchParams({ owner_type: selected.kind, owner_id: selected.id })}`)
+    await openPicker(page)
+    await page.getByRole('button', { name: choose(firstID) }).click()
+    await expect(page.getByRole('heading', { name: messages.media.selectedMedia })).toBeVisible()
+    await page.getByRole('button', { name: messages.media.reviewAttach }).click()
+    await page.getByRole('alertdialog').getByRole('button', { name: messages.media.confirmAttach }).click()
+    await expect(page.getByText(messages.mutations.done, { exact: true })).toBeVisible()
+    await expect(page.getByText(`${messages.media.total}${index === 0 ? 1 : 2}`, { exact: true })).toBeVisible()
+    expect(writes).toHaveLength(1)
+    expect(writes[0]?.proof).toBe(JSON.stringify(String(index + 1)))
+    expect(JSON.parse(writes[0]!.body!)).toEqual({ [selected.field]: selected.id, owner_revision: 1, is_cover: false, sort_order: 0, description: '' })
+    const response = await page.request.get(exactMembership(firstID))
+    expect(response.status()).toBe(200)
+    const links = await response.json()
+    expect(links.data).toHaveLength(index + 1)
+    expect(links.data.map((link: { owner_type: string }) => link.owner_type).sort()).toEqual(ownerScopes.slice(0, index + 1).map((scope) => scope.kind).sort())
   })
 
   test('withholds duplicate and cyclic live pages, then restarts without losing the draft', async ({ page, application }) => {
