@@ -31,6 +31,8 @@
 
 ### Added
 
+- Index retained search-change and snapshot revisions by exact search identity for the private single-source backfill. Existing frozen payloads and proof bytes remain unchanged; query-plan tests do not establish NAS performance.
+
 - Add an explicitly authorized, private single-Item or single-Unit search backfill for missing current projections. Validate retained counters and approved source, consume a session-bound reauthentication grant atomically, and leave valid existing projections unchanged; batch coverage and public sync remain unavailable.
 
 - Verify stored, dataset-bound search proofs when privately reading frozen delta pages, including lookahead, without comparing historical text to today's source. Withhold the whole page for missing or invalid provenance; public sync and complete backfill remain unavailable.
