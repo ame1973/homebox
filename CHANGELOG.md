@@ -29,6 +29,8 @@
 
 ### Added
 
+- Read actual retained Location movement records through a private, revision-scoped Store page and an owner/ID index. Preserve historical parent IDs and exact legacy time text, including for logically deleted locations; reject missing source, counters or invalid lookahead. Public movement history and full audit history remain unfinished.
+
 - Browse recorded Location contents in explicit direct/subtree pages, retaining disposed Units and zero Stock and offering safe detail links. Hide inconsistent or failed pages, require restart after changed revisions or offline reconnection, and clear the local trail on delivered session changes and page suspension. These live pages do not prove physical presence or constitute a frozen snapshot.
 
 - Expose protected, bounded Location contents pages over actual Unit, Stock and sub-location source. The revision-bound signed continuation validates scope and page size; retained disposed Units and zero Stock remain visible as records. A stateless browser adapter validates each combined page and aggregate Location ETag without hidden retries or pagination.
