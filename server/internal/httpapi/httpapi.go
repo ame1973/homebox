@@ -169,7 +169,10 @@ func serveApp(w http.ResponseWriter, r *http.Request, assets fs.FS, requestID st
 		// The operating system's MIME database may not recognize web manifests.
 		w.Header().Set("Content-Type", "application/manifest+json; charset=utf-8")
 	}
-	if name != "index.html" {
+	if name == "pwa-version.json" {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	}
+	if name != "index.html" && name != "pwa-version.json" {
 		w.Header().Set("Cache-Control", "no-cache")
 		if hashedAsset.MatchString(path.Base(name)) {
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
@@ -179,7 +182,7 @@ func serveApp(w http.ResponseWriter, r *http.Request, assets fs.FS, requestID st
 }
 
 func publicAsset(name, extension string) bool {
-	if name == "index.html" {
+	if name == "index.html" || name == "pwa-version.json" {
 		return true
 	}
 	switch extension {

@@ -46,6 +46,7 @@ test('private, encoded, cross-origin and non-GET requests are not handled', () =
     { url: 'https://other.test/locations', method: 'GET' },
     { url: 'https://homebox.test/locations', method: 'POST' },
     { url: 'https://homebox.test/api/v1/items', method: 'GET', mode: 'cors' },
+    { url: 'https://homebox.test/pwa-version.json', method: 'GET', mode: 'cors' },
   ]) {
     assert.equal(worker.dispatch({ mode: 'navigate', signal, headers: new Headers(), cache: 'default', ...request }), undefined)
   }

@@ -21,6 +21,8 @@ func fixture(t *testing.T) http.Handler {
 		"assets/site-a1b2c3d4.css":               {Data: []byte("body { color: black }")},
 		"favicon.svg":                            {Data: []byte("<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>")},
 		"manifest.webmanifest":                   {Data: []byte(`{"name":"HomeBox"}`)},
+		"pwa-version.json":                       {Data: []byte("{\"worker\":\"/pwa-worker-0123456789abcdef01234567.js\"}\n")},
+		"assets/private.json":                    {Data: []byte("must not be served")},
 		"assets/private.sqlite":                  {Data: []byte("must not be served")},
 		"assets/app-a1b2c3d4.js.map":             {Data: []byte("must not be served")},
 		"data/private.css":                       {Data: []byte("must not be served")},
@@ -83,7 +85,7 @@ func TestPrivateNamespacesTraversalAndUnknownAssetsNeverFallBackToHTML(t *testin
 		"/backups/backup.sqlite", "/exports/data.csv", "/worker/claim", "/data/private.css",
 		"/secrets/private.js", "/dev/README.md", "/.git/config", "/.env", "/assets/../favicon.svg",
 		"/assets/%2e%2e/favicon.svg", "/assets/%5cprivate.js", "/assets/%00private.js",
-		"/assets/private.sqlite", "/assets/app-a1b2c3d4.js.map", "/nested/private.html",
+		"/assets/private.sqlite", "/assets/private.json", "/assets/app-a1b2c3d4.js.map", "/nested/private.html",
 		"/assets/missing.js", "//api/v1/items",
 	} {
 		t.Run(target, func(t *testing.T) {
@@ -122,10 +124,22 @@ func TestOnlyContentHashedPublicAssetsReceiveImmutableCaching(t *testing.T) {
 		"/assets/site-a1b2c3d4.css": "public, max-age=31536000, immutable",
 		"/favicon.svg":              "no-cache",
 		"/manifest.webmanifest":     "no-cache",
+		"/pwa-version.json":         "no-store",
 	} {
 		response := request(t, handler, http.MethodGet, target)
 		if response.Code != http.StatusOK || response.Header().Get("Cache-Control") != cache {
 			t.Fatalf("asset policy %s: %d, %q", target, response.Code, response.Header().Get("Cache-Control"))
+		}
+		if target == "/pwa-version.json" {
+			for _, method := range []string{http.MethodGet, http.MethodHead} {
+				version := request(t, handler, method, target)
+				if version.Code != http.StatusOK || version.Header().Get("Content-Type") != "application/json; charset=utf-8" || version.Header().Get("Cache-Control") != "no-store" {
+					t.Fatalf("version %s has unexpected headers: %d %v", method, version.Code, version.Header())
+				}
+				if method == http.MethodHead && version.Body.Len() != 0 {
+					t.Fatal("version HEAD returned a response body")
+				}
+			}
 		}
 		if target == "/manifest.webmanifest" {
 			for _, method := range []string{http.MethodGet, http.MethodHead} {

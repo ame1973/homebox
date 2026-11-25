@@ -31,6 +31,8 @@
 
 ### Added
 
+- Publish a network-only, non-cacheable public shell version descriptor alongside the generated worker and HTML. This is not an API compatibility handshake or an atomic deployment guarantee.
+
 - Build an integrity-checked public shell worker with bounded, credential-free asset installation, network-only private requests and update waiting. It is not yet registered by the application and does not enable offline replicas or drafts.
 
 - Advertise a stable same-origin web app manifest with scalable and device-sized icons, including maskable artwork, and serve manifests with the correct media type independently of the host MIME database. Installation remains browser-dependent; offline startup, replicas and service-worker updates are not yet available.

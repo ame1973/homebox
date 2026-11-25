@@ -81,6 +81,13 @@ assets.sort((left, right) => left.path < right.path ? -1 : left.path > right.pat
 const config = { cacheName: `homebox-shell-v1-${version}`, assets }
 const worker = workerSource.replace('__HOMEBOX_SHELL_CONFIG__', JSON.stringify(config))
 assert(gzipSync(worker).length <= 150 * 1024, 'Shell worker exceeds 150 KiB gzip')
+const versionURL = new URL('pwa-version.json', dist)
+const occupied = await lstat(versionURL).then(() => true, (error) => {
+  if (error.code === 'ENOENT') return false
+  throw error
+})
+assert(!occupied, 'Shell version descriptor already exists')
 await writeFile(new URL(workerPath.slice(1), dist), worker, { flag: 'wx' })
+await writeFile(versionURL, `${JSON.stringify({ worker: workerPath })}\n`, { flag: 'wx' })
 await writeFile(indexURL, html)
 console.log(`Private shell worker: ${workerPath}; ${assets.length} verified public resources (${total + htmlEntry.size} bytes).`)

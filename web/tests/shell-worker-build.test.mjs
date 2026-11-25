@@ -39,8 +39,9 @@ function built(root) {
   assert.ok(path, 'missing versioned root worker URL')
   const worker = readFileSync(join(root, 'dist', path), 'utf8')
   const config = JSON.parse(worker.match(/^const shellConfig = (.+)$/m)?.[1] ?? 'null')
+  const version = readFileSync(join(root, 'dist', 'pwa-version.json'), 'utf8')
   assert.ok(config)
-  return { html, path, worker, config }
+  return { html, path, worker, config, version }
 }
 
 test('builds a deterministic integrity-bound private shell worker', (t) => {
@@ -51,6 +52,8 @@ test('builds a deterministic integrity-bound private shell worker', (t) => {
   assert.equal(result.path, other.path)
   assert.equal(result.html, other.html)
   assert.equal(result.worker, other.worker)
+  assert.equal(result.version, other.version)
+  assert.equal(result.version, `${JSON.stringify({ worker: result.path })}\n`)
   assert.equal(result.config.cacheName, `homebox-shell-v1-${result.path.slice('/pwa-worker-'.length, -'.js'.length)}`)
   assert.deepEqual(result.config.assets.map((entry) => entry.path), [
     '/assets/index-1234abcd.css', '/assets/index-AbCd1234.js', '/assets/lazy-AbCd1234.js', '/assets/worker-AbCd1234.js',
@@ -75,7 +78,7 @@ test('changes its worker identity when a shell file or worker changes', (t) => {
 })
 
 test('rejects unsafe, missing or oversized files without publishing a worker', (t) => {
-  for (const scenario of ['path traversal', 'absolute path', 'unhashed asset', 'missing file', 'oversized file', 'missing dependency', 'too many files', 'missing placeholder', 'duplicate placeholder']) {
+  for (const scenario of ['path traversal', 'absolute path', 'unhashed asset', 'missing file', 'oversized file', 'missing dependency', 'too many files', 'missing placeholder', 'duplicate placeholder', 'occupied version']) {
     const f = fixture(t)
     if (scenario === 'path traversal') f.manifest.lazy.file = 'assets/../../secrets.js'
     if (scenario === 'absolute path') f.manifest.lazy.file = '/api/v1/private.js'
@@ -88,10 +91,13 @@ test('rejects unsafe, missing or oversized files without publishing a worker', (
     }
     if (scenario === 'missing placeholder') writeFileSync(join(f.root, 'dist', 'index.html'), '<!doctype html>')
     if (scenario === 'duplicate placeholder') writeFileSync(join(f.root, 'dist', 'index.html'), '__HOMEBOX_SHELL_WORKER__ __HOMEBOX_SHELL_WORKER__')
+    if (scenario === 'occupied version') writeFileSync(join(f.root, 'dist', 'pwa-version.json'), 'existing version')
     writeFileSync(f.manifestPath, JSON.stringify(f.manifest))
     const before = readFileSync(join(f.root, 'dist', 'index.html'))
     assert.throws(f.run, undefined, scenario)
     assert.ok(readFileSync(join(f.root, 'dist', 'index.html')).equals(before), scenario)
     assert.ok(readdirSync(join(f.root, 'dist')).every((name) => !name.startsWith('pwa-worker-')), scenario)
+    if (scenario === 'occupied version') assert.equal(readFileSync(join(f.root, 'dist', 'pwa-version.json'), 'utf8'), 'existing version')
+    else assert.ok(!readdirSync(join(f.root, 'dist')).includes('pwa-version.json'), scenario)
   }
 })

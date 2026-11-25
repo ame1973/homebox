@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -59,6 +59,11 @@ applicationTest('privately installs only verified public shell assets without ca
   })
   expect(installed.state, JSON.stringify(installedKeys)).toBe('activated')
   expect(installed.scope).toBe(`${application.url}/`)
+  const versionResponse = await page.request.get('/pwa-version.json')
+  expect(versionResponse.status()).toBe(200)
+  expect(versionResponse.headers()['cache-control']).toBe('no-store')
+  expect(versionResponse.headers()['content-type']).toBe('application/json; charset=utf-8')
+  expect(await versionResponse.json()).toEqual({ worker: installed.path })
   const workerResponse = await page.request.get(installed.path)
   expect(workerResponse.status()).toBe(200)
   expect(workerResponse.headers()['cache-control']).toBe('public, max-age=31536000, immutable')
@@ -117,6 +122,7 @@ applicationTest('privately installs only verified public shell assets without ca
       publicAsset: await outcome(path),
       queryAsset: await outcome(`${path}?never-cached=private`),
       noStoreAsset: await outcome(path, { cache: 'no-store' }),
+      version: await outcome('/pwa-version.json', { cache: 'no-store' }),
       health: await outcome('/api/v1/health/live'),
       account: await outcome('/api/v1/auth/me'),
       item: await outcome('/api/v1/items?limit=50'),
@@ -124,7 +130,7 @@ applicationTest('privately installs only verified public shell assets without ca
       head: await outcome(path, { method: 'HEAD', cache: 'no-store' }),
     }
   }, entry!)
-  expect(offline).toEqual({ publicAsset: 200, queryAsset: 'network-error', noStoreAsset: 'network-error', health: 'network-error', account: 'network-error', item: 'network-error', write: 'network-error', head: 'network-error' })
+  expect(offline).toEqual({ publicAsset: 200, queryAsset: 'network-error', noStoreAsset: 'network-error', version: 'network-error', health: 'network-error', account: 'network-error', item: 'network-error', write: 'network-error', head: 'network-error' })
   const poisoned = await page.evaluate(async ({ cacheName, path }) => {
     const cache = await caches.open(cacheName)
     const original = await cache.match(path)
@@ -314,6 +320,9 @@ upgradeTest('keeps a new verified worker waiting while two tabs retain unsaved f
   manifest['private-upgrade-test'] = { file: 'assets/shell-extra-AbCd1234.js', isDynamicEntry: true }
   writeFileSync(join(applicationWebDirectory, 'assets', 'shell-extra-AbCd1234.js'), 'export const privateUpgradeTest = true')
   writeFileSync(manifestPath, JSON.stringify(manifest))
+  const versionPath = join(applicationWebDirectory, 'pwa-version.json')
+  expect(JSON.parse(readFileSync(versionPath, 'utf8'))).toEqual({ worker: first.path })
+  unlinkSync(versionPath)
   execFileSync(process.execPath, [join(root, 'scripts', 'build-shell-worker.mjs')], { stdio: 'pipe' })
   const nextPath = readFileSync(indexPath, 'utf8').match(/name="homebox-shell-worker" content="(\/pwa-worker-[a-f0-9]{24}\.js)"/)?.[1]
   expect(nextPath).toBeTruthy()
