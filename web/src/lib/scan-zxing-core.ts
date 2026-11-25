@@ -49,8 +49,16 @@ export function decodeZXing(pixels: Uint8ClampedArray, width: number, height: nu
     return result
   }
   const found = read(pixels, width, height, readers)
-  if (found.length || readers.every(({ format }) => format === 'QR_CODE')) return found
+  const retry = found.length ? readers.filter(({ format }) => format === 'QR_CODE' && !found.some((value) => value.format === 'QR_CODE')) : readers
+  if (!retry.length) return found
   const rotated = new Uint8ClampedArray(pixels.length)
   for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) rotated[(width - 1 - x) * height + y] = pixels[y * width + x]!
-  return read(rotated, height, width, readers.filter(({ format }) => format !== 'QR_CODE'))
+  const sideways = read(rotated, height, width, retry)
+  found.push(...sideways)
+  const qr = retry.filter(({ format }) => format === 'QR_CODE' && !sideways.some((value) => value.format === 'QR_CODE'))
+  if (!qr.length) return found
+  // ZXing's finder can accept a data pattern before the third real finder.
+  // A different scan direction can locate it without assuming a pure image.
+  for (let i = 0; i < pixels.length; i++) rotated[i] = pixels[pixels.length - 1 - i]!
+  return [...found, ...read(rotated, width, height, qr)]
 }

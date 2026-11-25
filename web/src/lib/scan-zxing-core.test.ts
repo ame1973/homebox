@@ -3,6 +3,7 @@ import BarcodeFormat from '@zxing/library/esm/core/BarcodeFormat'
 import EncodeHintType from '@zxing/library/esm/core/EncodeHintType'
 import QRCodeWriter from '@zxing/library/esm/core/qrcode/QRCodeWriter'
 import { decodeZXing } from './scan-zxing-core'
+import { encodeQRLabel } from './qr-label-encode'
 
 // Independent GS1 module patterns keep these fixtures separate from ZXing's
 // readers. The digits/checks include the server's fixed UPC-E test vectors.
@@ -80,6 +81,20 @@ describe('ZXing pixel decoder', () => {
     expect(decodeZXing(bad.pixels, bad.width, bad.height, ['UPC_E'])).toEqual([])
     const vertical = rotated(frame(ean13('5901234123457')))
     expect(decodeZXing(vertical.pixels, vertical.width, vertical.height, ['EAN_13'])).toEqual([{ format: 'EAN_13', rawValue: '5901234123457' }])
+  })
+
+  it('retains an independently decoded barcode while retrying a QR in the same frame', () => {
+    const qr = encodeQRLabel('unit', '62aca93f-e021-426f-86d9-000000000013', 'http://127.0.0.1:35917')
+    const barcode = frame(ean13('0042100005264')), width = 620, height = 420
+    const pixels = new Uint8ClampedArray(width * height).fill(255)
+    for (let y = 0; y < qr.size * 4; y++) for (let x = 0; x < qr.size * 4; x++) {
+      pixels[(y + 8) * width + x + 350] = qr.modules[Math.floor(y / 4) * qr.size + Math.floor(x / 4)] ? 0 : 255
+    }
+    for (let y = 0; y < barcode.height; y++) pixels.set(barcode.pixels.subarray(y * barcode.width, (y + 1) * barcode.width), (y + 200) * width)
+    expect(decodeZXing(pixels, width, height, ['QR_CODE', 'EAN_13', 'UPC_A'])).toEqual([
+      { format: 'EAN_13', rawValue: '0042100005264' }, { format: 'UPC_A', rawValue: '042100005264' },
+      { format: 'QR_CODE', rawValue: qr.target.url },
+    ])
   })
 
   it('decodes a QR raster, retaining exact Unicode and query text', () => {
