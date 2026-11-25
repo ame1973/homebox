@@ -165,6 +165,10 @@ func serveApp(w http.ResponseWriter, r *http.Request, assets fs.FS, requestID st
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "The resource does not exist.", requestID)
 		return
 	}
+	if extension == ".webmanifest" {
+		// The operating system's MIME database may not recognize web manifests.
+		w.Header().Set("Content-Type", "application/manifest+json; charset=utf-8")
+	}
 	if name != "index.html" {
 		w.Header().Set("Cache-Control", "no-cache")
 		if hashedAsset.MatchString(path.Base(name)) {

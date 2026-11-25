@@ -127,6 +127,14 @@ func TestOnlyContentHashedPublicAssetsReceiveImmutableCaching(t *testing.T) {
 		if response.Code != http.StatusOK || response.Header().Get("Cache-Control") != cache {
 			t.Fatalf("asset policy %s: %d, %q", target, response.Code, response.Header().Get("Cache-Control"))
 		}
+		if target == "/manifest.webmanifest" {
+			for _, method := range []string{http.MethodGet, http.MethodHead} {
+				manifest := request(t, handler, method, target)
+				if manifest.Code != http.StatusOK || manifest.Header().Get("Content-Type") != "application/manifest+json; charset=utf-8" {
+					t.Fatalf("manifest %s has an unexpected content type: %q", method, manifest.Header().Get("Content-Type"))
+				}
+			}
+		}
 	}
 	response := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/assets/app-a1b2c3d4.js", nil)

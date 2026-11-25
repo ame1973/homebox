@@ -31,6 +31,8 @@
 
 ### Added
 
+- Advertise a stable same-origin web app manifest with scalable and device-sized icons, including maskable artwork, and serve manifests with the correct media type independently of the host MIME database. Installation remains browser-dependent; offline startup, replicas and service-worker updates are not yet available.
+
 - Locate current or missing Item/Unit search projections in private live pages with actual source, counter and lookahead validation. Scope continuations to the observed dataset and revisions; these pages do not certify full coverage or enable public sync.
 
 - Index retained search-change and snapshot revisions by exact search identity for the private single-source backfill. Existing frozen payloads and proof bytes remain unchanged; query-plan tests do not establish NAS performance.

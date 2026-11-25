@@ -1,0 +1,17 @@
+{
+  "id": "/",
+  "name": "HomeBox 家庭物品管理",
+  "short_name": "HomeBox",
+  "description": "家庭物品、位置與使用紀錄",
+  "lang": "zh-Hant",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "theme_color": "#28548c",
+  "background_color": "#f7f9fc",
+  "icons": [
+    { "src": "/icons/homebox-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/homebox-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icons/homebox.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
