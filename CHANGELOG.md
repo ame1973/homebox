@@ -31,6 +31,8 @@
 
 ### Added
 
+- Read bounded frozen sync changes through a private completed-session transaction with scoped signed cursors, lookahead validation, durable watermarks and exact tombstones. Withhold historical search upserts until approved-source provenance is established; public bootstrap/delta and offline readiness remain unavailable.
+
 - Print a locally generated Location or Unit QR label in an isolated document, or download its SVG image. Clear the temporary download URL and still-controlled print document on session or page suspension; already handed-off outputs cannot be recalled. Browser tests intercept printing and do not claim physical printer or scanner acceptance.
 
 - Preview local Location and Unit QR labels after fresh completed-session and source reads before and after worker generation. Withhold changed or unsafe identities and clear the preview on offline, backgrounding, session-clear or page suspension. Printing/download and the contracted server SVG endpoints remain unfinished.

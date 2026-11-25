@@ -62,17 +62,37 @@ func (a *Auth) ReadSyncStatus(ctx context.Context, token string) (SyncStatus, er
 	return value, nil
 }
 
+type syncDataset struct {
+	Epoch, Instance string
+	Version, Floor  int64
+}
+
+func readSyncDataset(ctx context.Context, tx *sql.Tx) (syncDataset, error) {
+	var value syncDataset
+	var epoch, instance sql.NullString
+	err := tx.QueryRowContext(ctx, `SELECT
+ CASE WHEN length(CAST(dataset_epoch AS BLOB))<=512 THEN dataset_epoch END,
+ CASE WHEN length(CAST(server_instance_id AS BLOB))<=32 THEN server_instance_id END,
+ projection_version,min_retained_seq FROM sync_state WHERE singleton=1`).Scan(&epoch, &instance, &value.Version, &value.Floor)
+	if errors.Is(err, sql.ErrNoRows) || err == nil && (!epoch.Valid || !instance.Valid || !authString(epoch.String, 1, 128) || !validMediaInstance(instance.String) ||
+		value.Version != 1 || value.Floor < 0 || value.Floor > maxSafeInteger) {
+		return syncDataset{}, ErrDomainState
+	}
+	if err != nil {
+		return syncDataset{}, err
+	}
+	value.Epoch, value.Instance = epoch.String, instance.String
+	return value, nil
+}
+
 func readSyncStatus(ctx context.Context, tx *sql.Tx) (SyncStatus, error) {
 	value := SyncStatus{Counts: make(map[string]int64), CountsScope: "materialized_projections", RetentionDays: 30}
-	err := tx.QueryRowContext(ctx, `SELECT dataset_epoch,server_instance_id,projection_version,min_retained_seq
- FROM sync_state WHERE singleton=1`).Scan(&value.DatasetEpoch, &value.ServerInstanceID, &value.ProjectionVersion, &value.MinRetainedSeq)
-	if errors.Is(err, sql.ErrNoRows) || err == nil && (!authString(value.DatasetEpoch, 1, 128) || !validMediaInstance(value.ServerInstanceID) ||
-		value.ProjectionVersion != 1 || value.MinRetainedSeq < 0 || value.MinRetainedSeq > maxSafeInteger) {
-		return SyncStatus{}, ErrDomainState
-	}
+	dataset, err := readSyncDataset(ctx, tx)
 	if err != nil {
 		return SyncStatus{}, err
 	}
+	value.DatasetEpoch, value.ServerInstanceID = dataset.Epoch, dataset.Instance
+	value.ProjectionVersion, value.MinRetainedSeq = dataset.Version, dataset.Floor
 	value.HighWatermark, value.LastChangeAt, err = readSyncWatermark(ctx, tx, value.MinRetainedSeq)
 	if err != nil {
 		return SyncStatus{}, err
@@ -142,12 +162,12 @@ func readSyncWatermark(ctx context.Context, tx *sql.Tx, floor int64) (int64, *st
 	if !last.Valid {
 		return watermark, nil, nil
 	}
-	var created string
-	if err = tx.QueryRowContext(ctx, "SELECT created_at FROM sync_changes WHERE seq=?", last.Int64).Scan(&created); err != nil {
+	var created sql.NullString
+	if err = tx.QueryRowContext(ctx, "SELECT CASE WHEN length(CAST(created_at AS BLOB))<=35 THEN created_at END FROM sync_changes WHERE seq=?", last.Int64).Scan(&created); err != nil {
 		return 0, nil, err
 	}
-	if !validPurchaseInstant(created) {
+	if !created.Valid || !validPurchaseInstant(created.String) {
 		return 0, nil, ErrDomainState
 	}
-	return watermark, &created, nil
+	return watermark, &created.String, nil
 }
