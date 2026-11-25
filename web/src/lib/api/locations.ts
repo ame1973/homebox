@@ -1,11 +1,15 @@
 import { z } from 'zod'
 import { apiClient, requestData } from './client'
 import { itemMeasurementFields } from './catalog'
+import { stockSchema, unitSchema } from './holdings'
 import { createHeaders, cursorSchema, deleteAckSchema, idSchema, input, pageQuerySchema, parseSafeCount, pathIDSchema, resourceRequest, revisionHeaders, revisionSchema, text,
   type CreateContext, type RevisionWriteContext, type RootWriteContext } from './domain'
 import type { components, operations } from './schema'
 
 export type Location = components['schemas']['Location']
+export type LocationContents = components['schemas']['LocationContents']
+export type LocationContentsRead = Readonly<{ value: LocationContents; revision: number }>
+export type LocationContentsQuery = NonNullable<operations['get_locations_id_contents']['parameters']['query']>
 export type LocationSummary = components['schemas']['LocationSummary']
 export type LocationSummaryRead = Readonly<{ value: LocationSummary; revision: number }>
 export type LocationsPage = components['schemas']['LocationList']
@@ -21,6 +25,32 @@ const fields = {
 }
 export const locationSchema: z.ZodType<Location> = z.strictObject({ id: idSchema, revision: revisionSchema, ...fields })
   .refine((location) => location.parent_id !== location.id)
+const contentsQuerySchema: z.ZodType<LocationContentsQuery> = z.strictObject({
+  ...pageQuerySchema.shape, cursor: cursorSchema(4096).optional(), scope: z.enum(['direct', 'subtree']).optional(),
+})
+
+function onlyRawKeys(value: unknown, allowed: readonly string[]): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).every((key) => allowed.includes(key))
+}
+function rawContentsKeys(value: unknown): boolean {
+  if (!onlyRawKeys(value, ['location_id', 'scope', 'units', 'stock', 'sub_locations', 'next_cursor'])) return false
+  const groups = [
+    ['units', ['id', 'item_id', 'location_id', 'asset_code', 'status', 'serial_number', 'notes', 'revision']],
+    ['stock', ['item_id', 'location_id', 'quantity_base', 'unit_code', 'base_unit', 'scale_factor', 'revision']],
+    ['sub_locations', ['id', 'parent_id', 'name', 'code', 'kind', 'status', 'sort_order', 'description', 'revision']],
+  ] as const
+  return groups.every(([key, allowed]) => {
+    const rows = value[key]
+    return Array.isArray(rows) && rows.every((row: unknown) => onlyRawKeys(row, allowed))
+  })
+}
+const contentsSchema: z.ZodType<LocationContents> = z.unknown().refine(rawContentsKeys).pipe(z.strictObject({
+  location_id: idSchema, scope: z.enum(['direct', 'subtree']), units: z.array(unitSchema).max(100), stock: z.array(stockSchema).max(100),
+  sub_locations: z.array(locationSchema).max(100), next_cursor: cursorSchema(4096).nullable(),
+}).refine((page) => page.units.every((unit) => unit.location_id !== null) && page.sub_locations.every((location) => location.id !== page.location_id) &&
+  new Set(page.units.map((unit) => unit.id)).size === page.units.length &&
+  new Set(page.stock.map((stock) => JSON.stringify([stock.item_id, stock.location_id]))).size === page.stock.length &&
+  new Set(page.sub_locations.map((location) => location.id)).size === page.sub_locations.length))
 export const locationCreateSchema: z.ZodType<components['schemas']['LocationCreate']> = z.strictObject({
   parent_id: fields.parent_id.optional(), name: fields.name, code: fields.code, kind: fields.kind.optional(),
   status: fields.status.optional(), sort_order: fields.sort_order.optional(), description: fields.description.optional(),
@@ -69,6 +99,11 @@ export async function fetchLocation(id: string, signal: AbortSignal): Promise<Lo
   return resourceRequest(locationSchema, signal, (signal) => apiClient.GET('/locations/{id}', { signal, params: { path: { id: resourceID } } }), { id: resourceID }, 8_000)
 }
 
+function locationReadRevision(response: Response): number {
+  const etag = response.headers.get('ETag')
+  return etag?.startsWith('"') && etag.endsWith('"') ? parseSafeCount(etag.slice(1, -1), 1) ?? 0 : 0
+}
+
 // The aggregate revision identifies the live Location read, not an individual
 // Unit/Stock proof or a frozen snapshot. The caller owns refresh and comparison.
 export async function fetchLocationSummary(id: string, signal: AbortSignal): Promise<LocationSummaryRead> {
@@ -76,9 +111,27 @@ export async function fetchLocationSummary(id: string, signal: AbortSignal): Pro
   let revision = 0
   const value = await requestData(signal, (signal) => apiClient.GET('/locations/{id}/summary', { signal, params: { path: { id: resourceID } } }), summarySchema, 8_000,
     (result, response) => {
-      const etag = response.headers.get('ETag')
-      revision = etag?.startsWith('"') && etag.endsWith('"') ? parseSafeCount(etag.slice(1, -1), 1) ?? 0 : 0
+      revision = locationReadRevision(response)
       return result.location_id === resourceID && revision > 0
+    })
+  return { value, revision }
+}
+
+// One bounded live page only. A Location aggregate revision and cursor never
+// prove physical presence, authorize a write or establish a frozen collection.
+export async function fetchLocationContents(id: string, query: LocationContentsQuery, signal: AbortSignal): Promise<LocationContentsRead> {
+  const resourceID = input(locationPathIDSchema, id)
+  const values = input(contentsQuerySchema, query)
+  const scope = values.scope ?? 'subtree', limit = values.limit ?? 50
+  let revision = 0
+  const value = await requestData(signal, (signal) => apiClient.GET('/locations/{id}/contents', { signal, params: { path: { id: resourceID }, query: values } }), contentsSchema, 8_000,
+    (result, response) => {
+      revision = locationReadRevision(response)
+      const count = result.units.length + result.stock.length + result.sub_locations.length
+      return revision > 0 && result.location_id === resourceID && result.scope === scope && count <= limit &&
+        (result.next_cursor === null || count === limit && result.next_cursor !== values.cursor) &&
+        (scope !== 'direct' || result.units.every((unit) => unit.location_id === resourceID) &&
+          result.stock.every((stock) => stock.location_id === resourceID) && result.sub_locations.every((location) => location.parent_id === resourceID))
     })
   return { value, revision }
 }

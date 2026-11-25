@@ -573,6 +573,29 @@ class OpenAPIContractTests(unittest.TestCase):
             with self.subTest(change=change), self.assertRaises(ValidationError):
                 validator("LocationSummary").validate({**value, **change})
 
+    def test_location_contents_requires_bounded_combined_paging(self):
+        contents = SCHEMAS["LocationContents"]
+        self.assertEqual({"location_id", "scope", "units", "stock", "sub_locations", "next_cursor"}, set(contents["required"]))
+        for field in ("units", "stock", "sub_locations"):
+            self.assertEqual(100, contents["properties"][field]["maxItems"])
+        operation = API["paths"]["/locations/{id}/contents"]["get"]
+        self.assertEqual(0, operation["x-max-body-bytes"])
+        params = {p["name"]: p["schema"] for p in operation["parameters"] if p["in"] == "query"}
+        self.assertEqual({"scope", "limit", "cursor"}, set(params))
+        self.assertEqual("subtree", params["scope"]["default"])
+        self.assertEqual((50, 100), (params["limit"]["default"], params["limit"]["maximum"]))
+        self.assertEqual(4096, params["cursor"]["maxLength"])
+        self.assertTrue(operation["responses"]["200"]["headers"]["ETag"]["required"])
+        value = {"location_id": "location", "scope": "direct", "units": [], "stock": [], "sub_locations": [], "next_cursor": None}
+        validator("LocationContents").validate(value)
+        for field in contents["required"]:
+            with self.subTest(missing=field), self.assertRaises(ValidationError):
+                validator("LocationContents").validate({key: item for key, item in value.items() if key != field})
+        for change in ({"location_id": "x" * 129}, {"scope": "other"}, {"units": None}, {"next_cursor": ""},
+                       {"next_cursor": "x" * 4097}, {"revision": 1}):
+            with self.subTest(change=change), self.assertRaises(ValidationError):
+                validator("LocationContents").validate({**value, **change})
+
     def test_taxonomy_creation_patch_and_nullable_parent_are_distinct(self):
         validator("CategoryCreate").validate({"name": "  分類 😀  "})
         validator("CategoryCreate").validate({"name": "分類", "parent_id": None})

@@ -1031,6 +1031,8 @@ paths:
     get:
       operationId: get_locations_id_contents
       summary: Location contents
+      description: Read one live page of actual Unit, Stock and sub-location records in that order. Direct scope selects the target's holdings and immediate children; subtree scope selects the target and all nondeleted descendants. Retained disposed Units and zero Stock remain visible. The three arrays share one total page-size limit. A continuation binds the administrator, dataset epoch, exact Location/scope, page size and aggregate Location revision; restart if the branch changes. The ETag is the actual Location aggregate revision, not an individual write proof or a frozen snapshot. No request body is accepted.
+      x-max-body-bytes: 0
       tags:
       - locations
       responses:
@@ -1046,11 +1048,13 @@ paths:
                 const: no-store
               description: Protected API data is never cached by the service worker.
             ETag:
+              required: true
               schema:
                 type: string
                 minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
+                maxLength: 18
+                pattern: '^"[1-9][0-9]*"(?![\s\S])'
+              description: Actual aggregate Location revision, quoted and at most 9007199254740991; not a Unit or Stock mutation proof.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -1082,9 +1086,25 @@ paths:
       - name: scope
         in: query
         schema:
+          type: string
           enum:
           - direct
           - subtree
+          default: subtree
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+      - name: cursor
+        in: query
+        description: Opaque live continuation of at most 4096 UTF-8 bytes; not encrypted and not a credential.
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 4096
   /locations/{id}/summary:
     get:
       operationId: get_locations_id_summary
@@ -16199,10 +16219,11 @@ components:
       - date_basis
       - filters
     LocationContents:
+      description: One bounded live page; the combined length of units, stock and sub_locations is at most the requested limit. A non-null continuation requires a full page and is valid only for the same Location aggregate revision and query scope.
       type: object
       additionalProperties: false
       properties:
-        location_id: *id018
+        location_id: *id001
         scope:
           type: string
           enum:
@@ -16210,22 +16231,33 @@ components:
           - subtree
         units:
           type: array
+          maxItems: 100
           items:
             $ref: '#/components/schemas/Unit'
         stock:
           type: array
+          maxItems: 100
           items:
             $ref: '#/components/schemas/Stock'
         sub_locations:
           type: array
+          maxItems: 100
           items:
             $ref: '#/components/schemas/Location'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+          minLength: 1
+          maxLength: 4096
+          description: Null at the end, otherwise a nonempty signed continuation of at most 4096 UTF-8 bytes.
       required:
       - location_id
       - scope
       - units
       - stock
       - sub_locations
+      - next_cursor
     LocationSummary:
       description: Current recorded-holding counts for one actual location and its complete nondeleted subtree. Exclude disposed Units and zero Stock from presence, count each distinct Item once across the subtree, and keep positive quantity Stock grouped by exact base unit without conversion. Retained absent holdings are still validated. This is a live read, not physical-presence evidence, a frozen replica or write proof.
       type: object

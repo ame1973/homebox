@@ -1111,7 +1111,10 @@ export interface paths {
             readonly path?: never;
             readonly cookie?: never;
         };
-        /** Location contents */
+        /**
+         * Location contents
+         * @description Read one live page of actual Unit, Stock and sub-location records in that order. Direct scope selects the target's holdings and immediate children; subtree scope selects the target and all nondeleted descendants. Retained disposed Units and zero Stock remain visible. The three arrays share one total page-size limit. A continuation binds the administrator, dataset epoch, exact Location/scope, page size and aggregate Location revision; restart if the branch changes. The ETag is the actual Location aggregate revision, not an individual write proof or a frozen snapshot. No request body is accepted.
+         */
         readonly get: operations["get_locations_id_contents"];
         readonly put?: never;
         readonly post?: never;
@@ -3112,8 +3115,11 @@ export interface components {
             readonly archive_children?: boolean;
             readonly reason?: string;
         };
+        /** @description One bounded live page; the combined length of units, stock and sub_locations is at most the requested limit. A non-null continuation requires a full page and is valid only for the same Location aggregate revision and query scope. */
         readonly LocationContents: {
             readonly location_id: string;
+            /** @description Null at the end, otherwise a nonempty signed continuation of at most 4096 UTF-8 bytes. */
+            readonly next_cursor: string | null;
             /** @enum {string} */
             readonly scope: "direct" | "subtree";
             readonly stock: readonly components["schemas"]["Stock"][];
@@ -7458,6 +7464,9 @@ export interface operations {
     readonly get_locations_id_contents: {
         readonly parameters: {
             readonly query?: {
+                /** @description Opaque live continuation of at most 4096 UTF-8 bytes; not encrypted and not a credential. */
+                readonly cursor?: string;
+                readonly limit?: number;
                 readonly scope?: "direct" | "subtree";
             };
             readonly header?: never;
@@ -7473,8 +7482,8 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
-                    readonly ETag?: string;
+                    /** @description Actual aggregate Location revision, quoted and at most 9007199254740991; not a Unit or Stock mutation proof. */
+                    readonly ETag: string;
                     readonly [name: string]: unknown;
                 };
                 content: {

@@ -3,6 +3,7 @@ package httpapi
 import (
 	"errors"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -28,8 +29,8 @@ func locationRoute(path string) (route, id, allow string) {
 	if len(parts) == 2 && parts[0] != "" && (parts[1] == "move" || parts[1] == "archive") {
 		return parts[1], parts[0], http.MethodPost
 	}
-	if len(parts) == 2 && parts[0] != "" && parts[1] == "summary" {
-		return "summary", parts[0], http.MethodGet
+	if len(parts) == 2 && parts[0] != "" && (parts[1] == "summary" || parts[1] == "contents") {
+		return parts[1], parts[0], http.MethodGet
 	}
 	return "", "", ""
 }
@@ -50,7 +51,7 @@ func (a *authAPI) serveLocations(w http.ResponseWriter, r *http.Request, request
 		return true
 	}
 	if r.URL.RawPath != "" || strings.ContainsAny(id, "\\\x00") || id == "." || id == ".." || id != "" && !boundedString(id, 1, 128) ||
-		route != "tree" && (r.URL.RawQuery != "" || r.URL.ForceQuery) {
+		route != "tree" && route != "contents" && (r.URL.RawQuery != "" || r.URL.ForceQuery) {
 		writeError(w, http.StatusBadRequest, "INVALID_LOCATION_URL", "Use an exact location path and only documented list parameters.", requestID)
 		return true
 	}
@@ -73,6 +74,20 @@ func (a *authAPI) serveLocations(w http.ResponseWriter, r *http.Request, request
 	}
 	if r.Method == http.MethodGet {
 		if !requireNoBody(w, r, requestID) {
+			return true
+		}
+		if route == "contents" {
+			cursor, limit, scope, ok := locationContentsQuery(w, r, requestID)
+			if !ok {
+				return true
+			}
+			contents, err := a.locations.PageContents(r.Context(), token, id, scope, cursor, limit)
+			if err != nil {
+				writeLocationError(w, err, requestID)
+				return true
+			}
+			w.Header().Set("ETag", strconv.Quote(strconv.FormatInt(contents.Revision, 10)))
+			writeJSON(w, contents)
 			return true
 		}
 		if route == "summary" {
@@ -149,6 +164,48 @@ func (a *authAPI) serveLocations(w http.ResponseWriter, r *http.Request, request
 		writeJSON(w, ack)
 	}
 	return true
+}
+
+func locationContentsQuery(w http.ResponseWriter, r *http.Request, requestID string) (string, int, string, bool) {
+	invalid := func() (string, int, string, bool) {
+		writeError(w, http.StatusBadRequest, "INVALID_QUERY", "Use one valid contents scope, bounded page size and opaque cursor.", requestID)
+		return "", 0, "", false
+	}
+	if len(r.URL.RawQuery) > 16<<10 {
+		return invalid()
+	}
+	values, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil {
+		return invalid()
+	}
+	cursor, limit, scope := "", 50, "subtree"
+	for name, entries := range values {
+		if len(entries) != 1 {
+			return invalid()
+		}
+		value := entries[0]
+		switch name {
+		case "scope":
+			if value != "direct" && value != "subtree" {
+				return invalid()
+			}
+			scope = value
+		case "limit":
+			parsed, err := strconv.Atoi(value)
+			if err != nil || parsed < 1 || parsed > 100 {
+				return invalid()
+			}
+			limit = parsed
+		case "cursor":
+			if !boundedString(value, 1, 4096) || len(value) > 4096 {
+				return invalid()
+			}
+			cursor = value
+		default:
+			return invalid()
+		}
+	}
+	return cursor, limit, scope, true
 }
 
 func writeLocationResult(w http.ResponseWriter, location store.Location, err error, requestID string) {

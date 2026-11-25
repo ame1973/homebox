@@ -75,6 +75,17 @@ const locationSummaryRead = readLocationSummary('location', new AbortController(
 const uncancellableLocationSummary = readLocationSummary('location')
 void [locationSummary, incompleteLocationSummary, textLocationQuantity, locationSummaryRead, uncancellableLocationSummary]
 
+const locationContents = { location_id: 'location', scope: 'direct', units: [], stock: [], sub_locations: [], next_cursor: null } satisfies components['schemas']['LocationContents']
+// @ts-expect-error A contents continuation is required even on an empty terminal page.
+const incompleteLocationContents: components['schemas']['LocationContents'] = { location_id: 'location', scope: 'direct', units: [], stock: [], sub_locations: [] }
+// @ts-expect-error Only the two documented scopes are accepted.
+const invalidLocationContentsScope: components['schemas']['LocationContents'] = { ...locationContents, scope: 'nearby' }
+declare const readLocationContents: typeof import('../src/lib/api/locations').fetchLocationContents
+const locationContentsRead = readLocationContents('location', { scope: 'subtree', limit: 20 }, new AbortController().signal)
+// @ts-expect-error A live contents read requires caller-owned cancellation.
+const uncancellableLocationContents = readLocationContents('location', {})
+void [locationContents, incompleteLocationContents, invalidLocationContentsScope, locationContentsRead, uncancellableLocationContents]
+
 type CategoryCreateHeaders = operations['post_categories']['parameters']['header']
 const rootCategoryHeaders = { ...authHeaders } satisfies CategoryCreateHeaders
 const childCategoryHeaders = { ...authHeaders, 'If-Match': '"3"' } satisfies CategoryCreateHeaders
