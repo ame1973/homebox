@@ -100,6 +100,36 @@ describe('public shell registration monitor', () => {
     expect(service.register).toHaveBeenCalledTimes(1)
   })
 
+  it.each(['current', 'installing', 'foreign'] as const)('checks a %s root installed between the two scope reads', async (kind) => {
+    service.getRegistration.mockImplementationOnce(async () => {
+      service.root = new RegistrationStub()
+      if (kind === 'installing') service.root.installing = new WorkerStub(current)
+      else service.root.active = new WorkerStub(kind === 'current' ? current : '/foreign-worker.js', 'activated')
+      return undefined
+    })
+    const { latest } = await start()
+    expect(latest()).toEqual({ phase: kind === 'current' ? 'ready' : kind, busy: false })
+    expect(service.register).not.toHaveBeenCalled()
+    if (kind === 'installing') { activate(service.root!); await settle(); expect(latest()?.phase).toBe('ready') }
+  })
+
+  it('withholds a nested registration appearing between the two scope reads', async () => {
+    const nested = new RegistrationStub(); nested.scope += 'items/'
+    service.getRegistration.mockResolvedValueOnce(undefined).mockResolvedValueOnce(nested)
+    const { latest } = await start()
+    expect(latest()?.phase).toBe('foreign')
+    expect(service.register).not.toHaveBeenCalled()
+  })
+
+  it('withholds a newly foreign root even if the earlier root was trusted', async () => {
+    const root = new RegistrationStub(); root.active = new WorkerStub(current, 'activated')
+    const foreign = new RegistrationStub(); foreign.active = new WorkerStub('/foreign-worker.js', 'activated')
+    service.getRegistration.mockResolvedValueOnce(root).mockResolvedValueOnce(foreign)
+    const { latest } = await start()
+    expect(latest()?.phase).toBe('foreign')
+    expect(service.register).not.toHaveBeenCalled()
+  })
+
   it('observes an existing active worker without re-registering and polls only after five minutes', async () => {
     service.root = new RegistrationStub(); service.root.active = new WorkerStub(current, 'activated')
     const { latest, monitor } = await start()

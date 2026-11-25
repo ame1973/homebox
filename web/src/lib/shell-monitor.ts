@@ -74,12 +74,14 @@ export function monitorShell(publish: (value: ShellObservation) => void) {
     const matching = await service.getRegistration(window.location.href)
     ensureCurrent(signal)
     const scope = `${window.location.origin}/`
-    if (root && root.scope !== scope || matching && matching.scope !== scope || matching && !root ||
-      [root?.installing, root?.waiting, root?.active].some((worker) => worker && !scriptPath(worker))) throw new ForeignRegistration()
+    if ([root, matching].some((value) => value && (value.scope !== scope ||
+      [value.installing, value.waiting, value.active].some((worker) => worker && !scriptPath(worker))))) throw new ForeignRegistration()
+    // Another tab can register the root between these two browser reads.
+    const currentRoot = matching ?? root
     const controller = service.controller
-    if (controller && (!scriptPath(controller) || !root?.active || controller.scriptURL !== root.active.scriptURL)) throw new ForeignRegistration()
-    watch(root)
-    return root
+    if (controller && (!scriptPath(controller) || !currentRoot?.active || controller.scriptURL !== currentRoot.active.scriptURL)) throw new ForeignRegistration()
+    watch(currentRoot)
+    return currentRoot
   }
 
   function phase(root: ServiceWorkerRegistration | undefined, live: string): ShellPhase {

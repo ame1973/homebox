@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Recognize a root-scoped public shell installed between the coordinator's two registration reads, while still rejecting foreign or nested workers.
+
 - Retry missed ZXing QR detection in two rotated orientations while retaining independently found barcode results. The fallback remains bounded and does not assume an isolated QR; synthetic same-library tests do not establish physical scanning acceptance.
 
 - Verify present catalog search projections against freshly derived approved source before matching. Reject source-inconsistent or lossy records without returning partial pages or repairing them; raw/unreviewed OCR cannot become a search match through a structurally valid stale projection.
