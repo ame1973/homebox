@@ -4,11 +4,13 @@ import { captureVideoFrame, maxFrameBytes, maxFrameDimension, maxFramePixels } f
 
 class Track {
   readyState: 'live' | 'ended' = 'live'
+  enabled = true
+  muted = false
 }
 function source() {
   const track = new Track()
   const stream = { getVideoTracks: () => [track], getAudioTracks: () => [] } as unknown as MediaStream
-  const video = { srcObject: stream, readyState: 2, videoWidth: 640, videoHeight: 480 } as HTMLVideoElement
+  const video = { srcObject: stream, readyState: 2, paused: false, videoWidth: 640, videoHeight: 480 } as HTMLVideoElement
   return { track, stream, video }
 }
 const drawing = vi.fn()
@@ -42,15 +44,21 @@ it('captures the current live video frame into a bounded JPEG without opening or
   expect(track.readyState).toBe('live')
 })
 
-it.each(['hidden', 'wrong stream', 'ended track', 'audio', 'not ready', 'empty width'] as const)('refuses a %s source without encoding', async (problem) => {
+it.each(['hidden', 'wrong stream', 'ended track', 'muted track', 'disabled track', 'paused video', 'ended video', 'audio', 'not ready', 'empty width'] as const)('refuses a %s source without encoding', async (problem) => {
   const { track, stream, video } = source()
   if (problem === 'hidden') visibility.mockReturnValue('hidden')
   if (problem === 'wrong stream') video.srcObject = null
   if (problem === 'ended track') track.readyState = 'ended'
+  if (problem === 'muted track') track.muted = true
+  if (problem === 'disabled track') track.enabled = false
+  if (problem === 'paused video') Reflect.set(video, 'paused', true)
+  if (problem === 'ended video') Reflect.set(video, 'ended', true)
   if (problem === 'audio') vi.spyOn(stream, 'getAudioTracks').mockReturnValue([{} as MediaStreamTrack])
   if (problem === 'not ready') Reflect.set(video, 'readyState', 1)
   if (problem === 'empty width') Reflect.set(video, 'videoWidth', 0)
-  expect(await captureVideoFrame(video, stream, new AbortController().signal)).toEqual({ kind: 'not-ready' })
+  const result = captureVideoFrame(video, stream, new AbortController().signal)
+  callback?.(jpeg())
+  expect(await result).toEqual({ kind: 'not-ready' })
   expect(drawing).not.toHaveBeenCalled()
   expect(HTMLCanvasElement.prototype.toBlob).not.toHaveBeenCalled()
 })
@@ -125,16 +133,30 @@ it('does not release a newer encoder slot when an old callback fires twice', asy
   expect((await second).kind).toBe('captured')
 })
 
-it.each(['hidden', 'pagehide', 'session', 'track stopped', 'stream changed'] as const)('discards a result returned after %s', async (reason) => {
+it.each(['hidden', 'pagehide', 'session', 'track stopped', 'muted track', 'disabled track', 'paused video', 'ended video', 'stream changed'] as const)('discards a result returned after %s', async (reason) => {
   const { track, stream, video } = source(), controller = new AbortController()
   const pending = captureVideoFrame(video, stream, controller.signal)
   if (reason === 'hidden') { visibility.mockReturnValue('hidden'); document.dispatchEvent(new Event('visibilitychange')); visibility.mockReturnValue('visible') }
   if (reason === 'pagehide') window.dispatchEvent(new Event('pagehide'))
   if (reason === 'session') notifyPageSuspended()
   if (reason === 'track stopped') track.readyState = 'ended'
+  if (reason === 'muted track') track.muted = true
+  if (reason === 'disabled track') track.enabled = false
+  if (reason === 'paused video') Reflect.set(video, 'paused', true)
+  if (reason === 'ended video') Reflect.set(video, 'ended', true)
   if (reason === 'stream changed') video.srcObject = null
   callback?.(jpeg())
   expect(await pending).toEqual({ kind: 'cancelled' })
+  expect(canvas?.width).toBe(0); expect(canvas?.height).toBe(0)
+})
+
+it('discards a frame when the video pauses during drawing', async () => {
+  const { stream, video } = source()
+  drawing.mockImplementationOnce(() => { Reflect.set(video, 'paused', true) })
+  const result = captureVideoFrame(video, stream, new AbortController().signal)
+  callback?.(jpeg())
+  expect(await result).toEqual({ kind: 'cancelled' })
+  expect(HTMLCanvasElement.prototype.toBlob).not.toHaveBeenCalled()
   expect(canvas?.width).toBe(0); expect(canvas?.height).toBe(0)
 })
 

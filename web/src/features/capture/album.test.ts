@@ -21,9 +21,9 @@ afterEach(() => { vi.restoreAllMocks() })
 async function capture(size = 1, width = 4, height = 3): Promise<CapturedFrame> {
   blob = new Blob([new Uint8Array([0xff])], { type: 'image/jpeg' })
   Object.defineProperty(blob, 'size', { value: size, configurable: true })
-  const track = { readyState: 'live' }
+  const track = { readyState: 'live', enabled: true, muted: false }
   const stream = { getVideoTracks: () => [track], getAudioTracks: () => [] } as unknown as MediaStream
-  const video = { srcObject: stream, readyState: 2, videoWidth: width, videoHeight: height } as HTMLVideoElement
+  const video = { srcObject: stream, readyState: 2, paused: false, videoWidth: width, videoHeight: height } as HTMLVideoElement
   const result = await captureVideoFrame(video, stream, new AbortController().signal)
   if (result.kind !== 'captured') throw new Error(`Capture fixture failed: ${result.kind}`)
   return result

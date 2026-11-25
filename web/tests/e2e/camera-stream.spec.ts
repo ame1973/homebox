@@ -219,17 +219,39 @@ test('encodes actual fake-camera video pixels into a bounded JPEG in the private
   page.on('request', (request) => { if (request.method() === 'POST' && new URL(request.url()).pathname.startsWith('/api/v1/media')) uploads.push(request.url()) })
   await page.getByRole('button', { name: 'Start camera' }).click()
   await expect(page.locator('[aria-label="Camera state"]')).toHaveText('active')
-  await expect.poll(() => page.locator('video[aria-label="Live camera"]').evaluate((video: HTMLVideoElement) => video.videoWidth)).toBeGreaterThan(0)
-  await expect.poll(() => page.locator('video[aria-label="Live camera"]').evaluate((video: HTMLVideoElement) => {
+  const video = page.locator('video[aria-label="Live camera"]')
+  await video.scrollIntoViewIfNeeded()
+  await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.videoWidth)).toBeGreaterThan(0)
+  await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.paused)).toBe(false)
+  await expect(video).not.toHaveAttribute('data-playback-error', 'true')
+  const colors = () => video.evaluate((element: HTMLVideoElement) => {
     const canvas = document.createElement('canvas')
-    canvas.width = video.videoWidth; canvas.height = video.videoHeight
+    canvas.width = element.videoWidth; canvas.height = element.videoHeight
     const context = canvas.getContext('2d')
     if (!context) return 0
-    context.drawImage(video, 0, 0)
-    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data, colors = new Set<string>()
-    for (let index = 0; index < pixels.length; index += 4 * 29) colors.add(`${pixels[index]! >> 4},${pixels[index + 1]! >> 4},${pixels[index + 2]! >> 4}`)
-    return colors.size
-  })).toBeGreaterThan(1)
+    context.drawImage(element, 0, 0)
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data, found = new Set<string>()
+    for (let index = 0; index < pixels.length; index += 4 * 29) found.add(`${pixels[index]! >> 4},${pixels[index + 1]! >> 4},${pixels[index + 2]! >> 4}`)
+    return found.size
+  })
+  await expect.poll(colors).toBeGreaterThan(1)
+  const unavailable = await page.evaluate(async () => {
+    const modulePath = '/assets/camera-harness.js', harness = await import(modulePath)
+    const element = document.querySelector<HTMLVideoElement>('video[aria-label="Live camera"]')
+    if (!element || !(element.srcObject instanceof MediaStream)) throw new Error('Missing live video stream')
+    const stream = element.srcObject, track = stream.getVideoTracks()[0]
+    if (!track) throw new Error('Missing video track')
+    element.pause()
+    const paused = await harness.captureVideoFrame(element, stream, new AbortController().signal)
+    await element.play()
+    track.enabled = false
+    try {
+      const disabled = await harness.captureVideoFrame(element, stream, new AbortController().signal)
+      return { paused: paused.kind, disabled: disabled.kind }
+    } finally { track.enabled = true }
+  })
+  expect(unavailable).toEqual({ paused: 'not-ready', disabled: 'not-ready' })
+  await expect.poll(colors).toBeGreaterThan(1)
   const result = await page.evaluate(async () => {
     const modulePath = '/assets/camera-harness.js'
     const harness = await import(modulePath)

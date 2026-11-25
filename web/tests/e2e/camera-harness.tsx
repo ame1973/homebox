@@ -9,10 +9,13 @@ export function CameraHarness({ client }: { client: QueryClient }) {
   const camera = useCameraStream(active)
   const video = useRef<HTMLVideoElement>(null)
   useEffect(() => {
-    const element = video.current
-    if (!element) return
-    element.srcObject = camera.stream
-    return () => { element.srcObject = null }
+    const element = video.current, stream = camera.stream
+    if (!element || !stream) return
+    let current = true
+    element.srcObject = stream
+    delete element.dataset.playbackError
+    void Promise.resolve().then(() => current ? element.play() : undefined).catch(() => { if (current) element.dataset.playbackError = 'true' })
+    return () => { current = false; element.pause(); if (element.srcObject === stream) element.srcObject = null }
   }, [camera.stream])
   return <section aria-label="Camera test">
     <output aria-label="Camera state">{camera.status}{camera.error ? `:${camera.error}` : ''}</output>

@@ -22,8 +22,8 @@ export function isCapturedFrame(value: unknown): value is CapturedFrame {
 function currentVideo(video: HTMLVideoElement, stream: MediaStream): boolean {
   try {
     const tracks = stream.getVideoTracks()
-    return document.visibilityState === 'visible' && video.srcObject === stream && video.readyState >= 2 &&
-      tracks.length > 0 && tracks.every((track) => track.readyState === 'live') && stream.getAudioTracks().length === 0
+    return document.visibilityState === 'visible' && video.srcObject === stream && video.readyState >= 2 && !video.paused && !video.ended &&
+      tracks.length > 0 && tracks.every((track) => track.readyState === 'live' && track.enabled && !track.muted) && stream.getAudioTracks().length === 0
   } catch { return false }
 }
 function clearCanvas(canvas: HTMLCanvasElement) {

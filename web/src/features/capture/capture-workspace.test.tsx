@@ -12,6 +12,8 @@ const text = messages.capture, camera = messages.scan
 class Track extends EventTarget {
   readonly kind = 'video'
   readyState: 'live' | 'ended' = 'live'
+  enabled = true
+  muted = false
   readonly stop = vi.fn(() => { this.readyState = 'ended' })
 }
 const tracks: Track[] = []
@@ -60,6 +62,7 @@ beforeEach(() => {
   vi.stubGlobal('isSecureContext', true)
   visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
   vi.spyOn(HTMLMediaElement.prototype, 'readyState', 'get').mockReturnValue(2)
+  vi.spyOn(HTMLMediaElement.prototype, 'paused', 'get').mockReturnValue(false)
   vi.spyOn(HTMLVideoElement.prototype, 'videoWidth', 'get').mockReturnValue(640)
   vi.spyOn(HTMLVideoElement.prototype, 'videoHeight', 'get').mockReturnValue(480)
   vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue()
@@ -95,6 +98,30 @@ async function openAndCapture() {
 function previewImage() { return screen.getByRole('img', { name: text.preview }).querySelector('image')! }
 
 const selectedFile = (name = 'PRIVATE-NAME.png') => new File(['selected image bytes'], name, { type: 'image/png', lastModified: 123 })
+
+it('stops the camera and asks for an explicit reopen when the preview is paused or its track is disabled', async () => {
+  mount()
+  const user = userEvent.setup()
+  await user.click(screen.getByRole('button', { name: camera.cameraStart }))
+  const take = await screen.findByRole('button', { name: text.take })
+  const paused = vi.spyOn(HTMLMediaElement.prototype, 'paused', 'get').mockReturnValue(true)
+  await user.click(take)
+  expect(await screen.findByText(text.frameErrors['not-ready'])).toBeVisible()
+  expect(screen.queryByRole('img', { name: text.preview })).not.toBeInTheDocument()
+  expect(tracks[0]?.readyState).toBe('ended')
+  paused.mockReturnValue(false)
+  await user.click(screen.getByRole('button', { name: camera.cameraStart }))
+  const secondTake = await screen.findByRole('button', { name: text.take })
+  tracks[1]!.enabled = false
+  await user.click(secondTake)
+  expect(await screen.findByText(text.frameErrors['not-ready'])).toBeVisible()
+  expect(screen.queryByRole('img', { name: text.preview })).not.toBeInTheDocument()
+  expect(tracks[1]?.readyState).toBe('ended')
+  await user.click(screen.getByRole('button', { name: camera.cameraStart }))
+  await user.click(await screen.findByRole('button', { name: text.take }))
+  expect(await screen.findByRole('img', { name: text.preview })).toBeVisible()
+  expect(tracks[2]?.readyState).toBe('ended')
+})
 
 it('offers explicit local file selection as a secondary camera fallback and imports multiple photos', async () => {
   mount()

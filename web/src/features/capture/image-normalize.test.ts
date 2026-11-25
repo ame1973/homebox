@@ -53,8 +53,8 @@ async function prepare(orientation = 1, mime = 'image/png', client = prepareSele
   return result
 }
 async function capture(client = captureVideoFrame): Promise<CapturedFrame> {
-  const track = { readyState: 'live' }, stream = { getVideoTracks: () => [track], getAudioTracks: () => [] } as unknown as MediaStream
-  const video = { srcObject: stream, readyState: 2, videoWidth: 4, videoHeight: 3 } as HTMLVideoElement
+  const track = { readyState: 'live', enabled: true, muted: false }, stream = { getVideoTracks: () => [track], getAudioTracks: () => [] } as unknown as MediaStream
+  const video = { srcObject: stream, readyState: 2, paused: false, videoWidth: 4, videoHeight: 3 } as HTMLVideoElement
   const pending = client(video, stream, new AbortController().signal); callbacks.shift()?.(jpeg())
   const result = await pending
   if (result.kind !== 'captured') throw new Error('Capture failed')

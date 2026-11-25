@@ -33,9 +33,9 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 async function capture(captureFrame = captureVideoFrame): Promise<CapturedFrame> {
-  const track = { readyState: 'live' }
+  const track = { readyState: 'live', enabled: true, muted: false }
   const stream = { getVideoTracks: () => [track], getAudioTracks: () => [] } as unknown as MediaStream
-  const video = { srcObject: stream, readyState: 2, videoWidth: 4, videoHeight: 3 } as HTMLVideoElement
+  const video = { srcObject: stream, readyState: 2, paused: false, videoWidth: 4, videoHeight: 3 } as HTMLVideoElement
   const pending = captureFrame(video, stream, new AbortController().signal)
   callbacks.shift()?.(jpeg())
   const frame = await pending
