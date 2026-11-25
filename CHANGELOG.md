@@ -31,6 +31,8 @@
 
 ### Added
 
+- Coordinate a verified public-shell registration across cooperative browser tabs, withholding stale or foreign registrations and waiting for explicit update preparation. This internal coordinator is not yet connected to the application interface.
+
 - Validate the public shell descriptor in a bounded, cookie-free browser read with caller cancellation; this internal reader does not register or update a worker.
 
 - Publish a network-only, non-cacheable public shell version descriptor alongside the generated worker and HTML. This is not an API compatibility handshake or an atomic deployment guarantee.
