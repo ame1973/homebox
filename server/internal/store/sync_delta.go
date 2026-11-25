@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"crypto/subtle"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -55,9 +56,9 @@ type syncDeltaPage struct {
 }
 
 // readSyncDeltaPage is private groundwork, not an HTTP or offline-replica
-// boundary. Backfill, historical provenance and retention remain incomplete.
-// In particular, search upserts are withheld until their historical approved
-// source can be established; current source cannot prove a frozen old value.
+// boundary. Backfill, other-kind provenance and retention remain incomplete.
+// Search upserts require a producer's matching proof; current source cannot
+// establish the reviewed origin of an older frozen value.
 func (a *Auth) readSyncDeltaPage(ctx context.Context, token, cursor string, limits syncPageLimits) (syncDeltaPage, error) {
 	if ctx == nil || a == nil || a.store == nil || a.store.db == nil || !limits.valid() {
 		return syncDeltaPage{}, ErrDomainInput
@@ -82,7 +83,8 @@ func (a *Auth) readSyncDeltaPage(ctx context.Context, token, cursor string, limi
 	if err = finishDomainSession(ctx, a, tx, token, session); err != nil {
 		return syncDeltaPage{}, err
 	}
-	if _, err = verifySyncSearchSigner(ctx, tx, a.serverSecret); err != nil {
+	signerPinned, err := verifySyncSearchSigner(ctx, tx, a.serverSecret)
+	if err != nil {
 		return syncDeltaPage{}, err
 	}
 	dataset, err := readSyncDataset(ctx, tx)
@@ -101,7 +103,7 @@ func (a *Auth) readSyncDeltaPage(ctx context.Context, token, cursor string, limi
 	if err = checkSyncDeltaPosition(position.After, dataset.Floor, watermark); err != nil {
 		return syncDeltaPage{}, err
 	}
-	changes, more, err := readSyncChanges(ctx, tx, position.After, watermark, limits)
+	changes, more, err := readSyncChanges(ctx, tx, a, dataset, signerPinned, position.After, watermark, limits)
 	if err != nil {
 		return syncDeltaPage{}, err
 	}
@@ -122,18 +124,20 @@ func (a *Auth) readSyncDeltaPage(ctx context.Context, token, cursor string, limi
 		HighWatermark: watermark, Changes: changes, NextCursor: next, HasMore: more}, nil
 }
 
-func readSyncChanges(ctx context.Context, tx *sql.Tx, after, watermark int64, limits syncPageLimits) ([]syncChange, bool, error) {
+func readSyncChanges(ctx context.Context, tx *sql.Tx, a *Auth, dataset syncDataset, signerPinned bool, after, watermark int64, limits syncPageLimits) ([]syncChange, bool, error) {
 	// SQL bounds individual fields before returning them to Go. The NULL flag
 	// distinguishes a real tombstone from a non-NULL oversized payload.
-	rows, err := tx.QueryContext(ctx, `SELECT seq,
- CASE WHEN length(CAST(entity_type AS BLOB))<=32 THEN entity_type END,
- CASE WHEN length(CAST(entity_id AS BLOB))<=? THEN entity_id END,
- CASE WHEN length(CAST(operation AS BLOB))<=16 THEN operation END,
- entity_revision,
- CASE WHEN length(CAST(projection_json AS BLOB))<=? THEN projection_json END,
- projection_json IS NULL,
- CASE WHEN length(CAST(created_at AS BLOB))<=35 THEN created_at END
- FROM sync_changes WHERE seq>? AND seq<=? ORDER BY seq LIMIT ?`,
+	rows, err := tx.QueryContext(ctx, `SELECT c.seq,
+ CASE WHEN length(CAST(c.entity_type AS BLOB))<=32 THEN c.entity_type END,
+ CASE WHEN length(CAST(c.entity_id AS BLOB))<=? THEN c.entity_id END,
+ CASE WHEN length(CAST(c.operation AS BLOB))<=16 THEN c.operation END,
+ c.entity_revision,
+ CASE WHEN length(CAST(c.projection_json AS BLOB))<=? THEN c.projection_json END,
+ c.projection_json IS NULL,
+ CASE WHEN length(CAST(c.created_at AS BLOB))<=35 THEN c.created_at END,
+ p.seq IS NOT NULL,CASE WHEN typeof(p.proof)='blob' AND length(p.proof)=32 THEN p.proof END
+ FROM sync_changes c LEFT JOIN sync_search_proofs p ON p.seq=c.seq
+ WHERE c.seq>? AND c.seq<=? ORDER BY c.seq LIMIT ?`,
 		maxSyncIdentityBytes, limits.PayloadBytes, after, watermark, limits.Records+1)
 	if err != nil {
 		return nil, false, err
@@ -146,8 +150,9 @@ func readSyncChanges(ctx context.Context, tx *sql.Tx, after, watermark int64, li
 		for rows.Next() {
 			var change syncChange
 			var kind, id, operation, payload, created sql.NullString
-			var nullPayload bool
-			if err := rows.Scan(&change.Seq, &kind, &id, &operation, &change.Record.EntityRevision, &payload, &nullPayload, &created); err != nil {
+			var nullPayload, proofPresent bool
+			var proof []byte
+			if err := rows.Scan(&change.Seq, &kind, &id, &operation, &change.Record.EntityRevision, &payload, &nullPayload, &created, &proofPresent, &proof); err != nil {
 				return err
 			}
 			if change.Seq <= previous || change.Seq > watermark || !kind.Valid || !id.Valid || !operation.Valid || !created.Valid || !validPurchaseInstant(created.String) {
@@ -165,7 +170,18 @@ func readSyncChanges(ctx context.Context, tx *sql.Tx, after, watermark int64, li
 				return err
 			}
 			if kind.String == "search_doc" && operation.String == "upsert" {
-				return errSyncSearchUnproven
+				if !signerPinned || !proofPresent || len(proof) != 32 {
+					return errSyncSearchUnproven
+				}
+				expected, err := a.syncSearchProof(ctx, dataset.Instance, dataset.Epoch, id.String, change.Seq, change.Record.EntityRevision, change.Record.Payload)
+				if err != nil {
+					return err
+				}
+				if subtle.ConstantTimeCompare(proof, expected[:]) != 1 {
+					return errSyncSearchUnproven
+				}
+			} else if proofPresent {
+				return ErrDomainState
 			}
 			size := len(kind.String) + len(id.String) + len(operation.String) + len(change.Record.Payload)
 			if size > limits.PageBytes {

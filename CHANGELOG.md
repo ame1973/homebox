@@ -31,7 +31,9 @@
 
 ### Added
 
-- Atomically bind newly published approved search projections to their frozen change proofs, rechecking source, key, counters and exact bytes after session activity and final callbacks. Legacy search changes receive no invented proofs; the private delta reader still withholds all search upserts and public synchronization remains unavailable.
+- Verify stored, dataset-bound search proofs when privately reading frozen delta pages, including lookahead, without comparing historical text to today's source. Withhold the whole page for missing or invalid provenance; public sync and complete backfill remain unavailable.
+
+- Atomically bind newly published approved search projections to their frozen change proofs, rechecking source, key, counters and exact bytes after session activity and final callbacks. Legacy search changes receive no invented proofs; private reads reject unproven search and public synchronization remains unavailable.
 
 - Bind search-proof signing to an independent immutable server-key marker, with no guessed marker for old changes or unknown proof rows. Reject missing or changed pinned keys and late dependency injection; this private key check neither authenticates source nor enables search synchronization.
 
@@ -39,7 +41,7 @@
 
 - Bind a frozen search payload's exact server instance, epoch, identity, sequence, revision and bytes with a private, domain-separated server-secret HMAC. This internal primitive does not validate reviewed origin, store provenance or enable synchronization.
 
-- Read bounded frozen sync changes through a private completed-session transaction with scoped signed cursors, lookahead validation, durable watermarks and exact tombstones. Withhold historical search upserts until approved-source provenance is established; public bootstrap/delta and offline readiness remain unavailable.
+- Read bounded frozen sync changes through a private completed-session transaction with scoped signed cursors, lookahead validation, durable watermarks and exact tombstones. Withhold historical search upserts without verified approved-source provenance; public bootstrap/delta and offline readiness remain unavailable.
 
 - Print a locally generated Location or Unit QR label in an isolated document, or download its SVG image. Clear the temporary download URL and still-controlled print document on session or page suspension; already handed-off outputs cannot be recalled. Browser tests intercept printing and do not claim physical printer or scanner acceptance.
 

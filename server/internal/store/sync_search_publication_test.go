@@ -92,8 +92,18 @@ func TestSearchPublicationSignsActualReviewedSourceAndPreservesHistory(t *testin
 		t.Fatal("original-key replay changed a proof or reply", err)
 	}
 	cursor := testSyncDeltaCursor(t, s, a, 0)
-	if page, err := a.readSyncDeltaPage(t.Context(), token, cursor, syncPageLimits{Records: 100, PayloadBytes: 4096, PageBytes: 32768}); !errors.Is(err, errSyncSearchUnproven) || !reflect.DeepEqual(page, syncDeltaPage{}) {
-		t.Fatal("private delta exposed a search upsert before reader verification existed", page, err)
+	page, err := a.readSyncDeltaPage(t.Context(), token, cursor, syncPageLimits{Records: 100, PayloadBytes: 4096, PageBytes: 32768})
+	if err != nil {
+		t.Fatal("private delta rejected proven search publication", err)
+	}
+	found := false
+	for _, change := range page.Changes {
+		if change.Record.EntityType == "search_doc" && change.Record.EntityID == itemIdentity && change.Record.Operation == "upsert" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("private delta omitted proven search publication")
 	}
 }
 
