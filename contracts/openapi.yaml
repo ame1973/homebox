@@ -1161,6 +1161,101 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
+  /locations/{id}/movements:
+    get:
+      operationId: get_location_movements
+      summary: Retained Location movement page
+      description: Read actual immutable parent-change events for one retained Location, including logically deleted owners. Results are ordered by independent event ID, not chronological time. The exact nullable historical parent IDs and bounded legacy occurrence text are not current paths, physical-presence evidence or a complete audit history. A signed live cursor binds principal, epoch, exact Location, page size and retained aggregate revision; restart after a change. No body is accepted.
+      x-max-body-bytes: 0
+      tags:
+      - locations
+      responses: &locationMovementResponses
+        '200':
+          description: One actual retained movement page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocationMovements'
+          headers:
+            Cache-Control:
+              schema:
+                const: no-store
+              description: Protected API data is never cached by the service worker.
+            ETag:
+              required: true
+              schema:
+                type: string
+                minLength: 3
+                maxLength: 18
+                pattern: '^"[1-9][0-9]*"(?![\s\S])'
+              description: Actual retained Location aggregate revision at this read, quoted and at most 9007199254740991; not an event mutation proof.
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+      - name: cursor
+        in: query
+        description: Opaque live continuation of at most 2048 UTF-8 bytes; not encrypted and not a credential.
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
+  /location-movements:
+    get:
+      operationId: get_location_movements_by_identity
+      summary: Retained Location movement page by exact identity
+      description: Read the same retained movement scope and revision as the path form, preserving an exact Location ID that cannot be used as a path segment. Path and query forms accept each other's continuations; neither is a credential or a complete audit history. No body is accepted.
+      x-max-body-bytes: 0
+      tags:
+      - locations
+      responses: *locationMovementResponses
+      parameters:
+      - name: id
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+      - name: cursor
+        in: query
+        description: Opaque live continuation of at most 2048 UTF-8 bytes; not encrypted and not a credential.
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2048
   /locations/{id}/qr:
     get:
       operationId: get_locations_id_qr
@@ -16218,6 +16313,43 @@ components:
       - source_revision
       - date_basis
       - filters
+    LocationMovement:
+      description: A retained parent-change record with exact historical identities and occurrence text. It does not assert a current path or a parsed chronological instant.
+      allOf:
+      - $ref: '#/components/schemas/OfflineLocationEvent'
+      - type: object
+        properties:
+          id: *id001
+          location_id: *id001
+          occurred_at:
+            type: string
+            minLength: 1
+            maxLength: 10000
+    LocationMovements:
+      description: One live page for an existing or logically deleted retained Location. Event IDs are ordered by SQLite UTF-8 byte order, not by occurrence time. A non-null continuation requires a full page and is valid only for the same retained aggregate revision.
+      type: object
+      additionalProperties: false
+      properties:
+        location_id: *id001
+        deleted:
+          type: boolean
+        data:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/LocationMovement'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+          minLength: 1
+          maxLength: 2048
+          description: Null at the end, otherwise a nonempty signed continuation of at most 2048 UTF-8 bytes.
+      required:
+      - location_id
+      - deleted
+      - data
+      - next_cursor
     LocationContents:
       description: One bounded live page; the combined length of units, stock and sub_locations is at most the requested limit. A non-null continuation requires a full page and is valid only for the same Location aggregate revision and query scope.
       type: object

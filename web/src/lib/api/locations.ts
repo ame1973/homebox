@@ -1,5 +1,6 @@
+import { createQuerySerializer } from 'openapi-fetch'
 import { z } from 'zod'
-import { apiClient, requestData } from './client'
+import { apiClient, requestData, validText } from './client'
 import { itemMeasurementFields } from './catalog'
 import { stockSchema, unitSchema } from './holdings'
 import { createHeaders, cursorSchema, deleteAckSchema, idSchema, input, pageQuerySchema, parseSafeCount, pathIDSchema, resourceRequest, revisionHeaders, revisionSchema, text,
@@ -10,6 +11,11 @@ export type Location = components['schemas']['Location']
 export type LocationContents = components['schemas']['LocationContents']
 export type LocationContentsRead = Readonly<{ value: LocationContents; revision: number }>
 export type LocationContentsQuery = NonNullable<operations['get_locations_id_contents']['parameters']['query']>
+export type LocationMovement = components['schemas']['LocationMovement']
+export type LocationMovements = components['schemas']['LocationMovements']
+export type LocationMovementsRead = Readonly<{ value: LocationMovements; revision: number }>
+export type LocationMovementsQuery = NonNullable<operations['get_location_movements']['parameters']['query']>
+type LocationMovementsIdentityQuery = operations['get_location_movements_by_identity']['parameters']['query']
 export type LocationSummary = components['schemas']['LocationSummary']
 export type LocationSummaryRead = Readonly<{ value: LocationSummary; revision: number }>
 export type LocationsPage = components['schemas']['LocationList']
@@ -32,6 +38,29 @@ const contentsQuerySchema: z.ZodType<LocationContentsQuery> = z.strictObject({
 function onlyRawKeys(value: unknown, allowed: readonly string[]): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).every((key) => allowed.includes(key))
 }
+const serializeMovementIdentity = createQuerySerializer<LocationMovementsIdentityQuery>()
+const movementIdentityQuerySchema = pageQuerySchema.extend({ id: idSchema })
+  .refine((query) => Object.values(query).every((value) => typeof value !== 'string' || validText(value, 0, value.length)) && serializeMovementIdentity(query).length <= 16_384)
+const movementSchema: z.ZodType<LocationMovement> = z.strictObject({
+  id: idSchema, location_id: idSchema, occurred_at: text(1, 10000), from_parent_id: idSchema.nullable(), to_parent_id: idSchema.nullable(),
+})
+function rawMovementKeys(value: unknown): boolean {
+  return onlyRawKeys(value, ['location_id', 'deleted', 'data', 'next_cursor']) && Array.isArray(value.data) &&
+    value.data.every((row: unknown) => onlyRawKeys(row, ['id', 'location_id', 'occurred_at', 'from_parent_id', 'to_parent_id']))
+}
+// SQLite BINARY order compares UTF-8 bytes. JavaScript's native string order
+// compares UTF-16 units and differs for supplementary versus high BMP values.
+function orderedUTF8(left: string, right: string): boolean {
+  const encoder = new TextEncoder(), a = encoder.encode(left), b = encoder.encode(right)
+  for (let index = 0; index < Math.min(a.length, b.length); index++) {
+    if (a[index] !== b[index]) return a[index]! < b[index]!
+  }
+  return a.length < b.length
+}
+const movementsSchema: z.ZodType<LocationMovements> = z.unknown().refine(rawMovementKeys).pipe(z.strictObject({
+  location_id: idSchema, deleted: z.boolean(), data: z.array(movementSchema).max(100), next_cursor: cursorSchema().nullable(),
+}).refine((page) => page.data.every((event, index) => event.location_id === page.location_id &&
+  (index === 0 || orderedUTF8(page.data[index - 1]!.id, event.id)))))
 function rawContentsKeys(value: unknown): boolean {
   if (!onlyRawKeys(value, ['location_id', 'scope', 'units', 'stock', 'sub_locations', 'next_cursor'])) return false
   const groups = [
@@ -114,6 +143,26 @@ export async function fetchLocationSummary(id: string, signal: AbortSignal): Pro
       revision = locationReadRevision(response)
       return result.location_id === resourceID && revision > 0
     })
+  return { value, revision }
+}
+
+// Retained parent-change pages preserve exact legacy IDs and text. Neither the
+// current Location revision nor a historical parent is a physical write proof.
+export async function fetchLocationMovements(id: string, query: LocationMovementsQuery, signal: AbortSignal): Promise<LocationMovementsRead> {
+  const resourceID = input(idSchema, id), values = input(pageQuerySchema, query), limit = values.limit ?? 50
+  // Restrict path spelling to unreserved ASCII: encodeURIComponent and Go's
+  // canonical path escaping differ for some otherwise valid retained IDs.
+  const pathSafe = pathIDSchema.safeParse(resourceID).success && !/[^A-Za-z0-9._~-]/u.test(resourceID)
+  const exact = pathSafe ? undefined : input(movementIdentityQuerySchema, { ...values, id: resourceID })
+  let revision = 0
+  const value = await requestData(signal, (signal) => exact
+    ? apiClient.GET('/location-movements', { signal, params: { query: exact } })
+    : apiClient.GET('/locations/{id}/movements', { signal, params: { path: { id: resourceID }, query: values } }), movementsSchema, 8_000,
+  (result, response) => {
+    revision = locationReadRevision(response)
+    return revision > 0 && result.location_id === resourceID && result.data.length <= limit &&
+      (result.next_cursor === null || result.data.length === limit && result.next_cursor !== values.cursor)
+  })
   return { value, revision }
 }
 

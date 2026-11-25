@@ -86,6 +86,21 @@ const locationContentsRead = readLocationContents('location', { scope: 'subtree'
 const uncancellableLocationContents = readLocationContents('location', {})
 void [locationContents, incompleteLocationContents, invalidLocationContentsScope, locationContentsRead, uncancellableLocationContents]
 
+const movement = { id: 'event', location_id: 'legacy/location\0', occurred_at: 'legacy time', from_parent_id: null, to_parent_id: 'parent' } satisfies components['schemas']['LocationMovement']
+const locationMovements = { location_id: 'legacy/location\0', deleted: true, data: [movement], next_cursor: null } satisfies components['schemas']['LocationMovements']
+const movementIdentity = { id: 'legacy/location\0', limit: 20 } satisfies operations['get_location_movements_by_identity']['parameters']['query']
+// @ts-expect-error Historical parents are explicitly nullable, not omitted.
+const missingMovementParent: components['schemas']['LocationMovement'] = { id: 'event', location_id: 'location', occurred_at: 'legacy', to_parent_id: null }
+// @ts-expect-error Retained-owner pages require both deletion state and continuation.
+const incompleteLocationMovements: components['schemas']['LocationMovements'] = { location_id: 'location', data: [] }
+// @ts-expect-error An exact identity read must identify one retained Location.
+const missingMovementIdentity: operations['get_location_movements_by_identity']['parameters']['query'] = { limit: 20 }
+declare const readLocationMovements: typeof import('../src/lib/api/locations').fetchLocationMovements
+const locationMovementRead = readLocationMovements('location', { limit: 20 }, new AbortController().signal)
+// @ts-expect-error A live movement read requires caller-owned cancellation.
+const uncancellableLocationMovements = readLocationMovements('location', {})
+void [locationMovements, movementIdentity, missingMovementParent, incompleteLocationMovements, missingMovementIdentity, locationMovementRead, uncancellableLocationMovements]
+
 type CategoryCreateHeaders = operations['post_categories']['parameters']['header']
 const rootCategoryHeaders = { ...authHeaders } satisfies CategoryCreateHeaders
 const childCategoryHeaders = { ...authHeaders, 'If-Match': '"3"' } satisfies CategoryCreateHeaders

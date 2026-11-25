@@ -1039,6 +1039,26 @@ export interface paths {
         readonly patch?: never;
         readonly trace?: never;
     };
+    readonly "/location-movements": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /**
+         * Retained Location movement page by exact identity
+         * @description Read the same retained movement scope and revision as the path form, preserving an exact Location ID that cannot be used as a path segment. Path and query forms accept each other's continuations; neither is a credential or a complete audit history. No body is accepted.
+         */
+        readonly get: operations["get_location_movements_by_identity"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
     readonly "/locations": {
         readonly parameters: {
             readonly query?: never;
@@ -1138,6 +1158,26 @@ export interface paths {
          * @description Non-idempotent mutations must use Idempotency-Key and CSRF; domain service validates invariants and commits projections in same SQLite transaction.
          */
         readonly post: operations["post_locations_id_move"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/locations/{id}/movements": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /**
+         * Retained Location movement page
+         * @description Read actual immutable parent-change events for one retained Location, including logically deleted owners. Results are ordered by independent event ID, not chronological time. The exact nullable historical parent IDs and bounded legacy occurrence text are not current paths, physical-presence evidence or a complete audit history. A signed live cursor binds principal, epoch, exact Location, page size and retained aggregate revision; restart after a change. No body is accepted.
+         */
+        readonly get: operations["get_location_movements"];
+        readonly put?: never;
+        readonly post?: never;
         readonly delete?: never;
         readonly options?: never;
         readonly head?: never;
@@ -3148,6 +3188,20 @@ export interface components {
         };
         readonly LocationMove: {
             readonly target_parent_id: (string | null) & unknown;
+        };
+        /** @description A retained parent-change record with exact historical identities and occurrence text. It does not assert a current path or a parsed chronological instant. */
+        readonly LocationMovement: components["schemas"]["OfflineLocationEvent"] & {
+            readonly id?: string;
+            readonly location_id?: string;
+            readonly occurred_at?: string;
+        };
+        /** @description One live page for an existing or logically deleted retained Location. Event IDs are ordered by SQLite UTF-8 byte order, not by occurrence time. A non-null continuation requires a full page and is valid only for the same retained aggregate revision. */
+        readonly LocationMovements: {
+            readonly data: readonly components["schemas"]["LocationMovement"][];
+            readonly deleted: boolean;
+            readonly location_id: string;
+            /** @description Null at the end, otherwise a nonempty signed continuation of at most 2048 UTF-8 bytes. */
+            readonly next_cursor: string | null;
         };
         /** @description Current recorded-holding counts for one actual location and its complete nondeleted subtree. Exclude disposed Units and zero Stock from presence, count each distinct Item once across the subtree, and keep positive quantity Stock grouped by exact base unit without conversion. Retained absent holdings are still validated. This is a live read, not physical-presence evidence, a frozen replica or write proof. */
         readonly LocationSummary: {
@@ -7233,6 +7287,42 @@ export interface operations {
             readonly 503: components["responses"]["Error503"];
         };
     };
+    readonly get_location_movements_by_identity: {
+        readonly parameters: {
+            readonly query: {
+                /** @description Opaque live continuation of at most 2048 UTF-8 bytes; not encrypted and not a credential. */
+                readonly cursor?: string;
+                readonly id: string;
+                readonly limit?: number;
+            };
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description One actual retained movement page */
+            readonly 200: {
+                headers: {
+                    /** @description Protected API data is never cached by the service worker. */
+                    readonly "Cache-Control"?: "no-store";
+                    /** @description Actual retained Location aggregate revision at this read, quoted and at most 9007199254740991; not an event mutation proof. */
+                    readonly ETag: string;
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["LocationMovements"];
+                };
+            };
+            readonly 400: components["responses"]["Error400"];
+            readonly 401: components["responses"]["Error401"];
+            readonly 403: components["responses"]["Error403"];
+            readonly 404: components["responses"]["Error404"];
+            readonly 422: components["responses"]["Error422"];
+            readonly 429: components["responses"]["Error429"];
+            readonly 503: components["responses"]["Error503"];
+        };
+    };
     readonly post_locations: {
         readonly parameters: {
             readonly query?: never;
@@ -7548,6 +7638,43 @@ export interface operations {
             readonly 415: components["responses"]["Error415"];
             readonly 422: components["responses"]["Error422"];
             readonly 426: components["responses"]["Error426"];
+            readonly 429: components["responses"]["Error429"];
+            readonly 503: components["responses"]["Error503"];
+        };
+    };
+    readonly get_location_movements: {
+        readonly parameters: {
+            readonly query?: {
+                /** @description Opaque live continuation of at most 2048 UTF-8 bytes; not encrypted and not a credential. */
+                readonly cursor?: string;
+                readonly limit?: number;
+            };
+            readonly header?: never;
+            readonly path: {
+                readonly id: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description One actual retained movement page */
+            readonly 200: {
+                headers: {
+                    /** @description Protected API data is never cached by the service worker. */
+                    readonly "Cache-Control"?: "no-store";
+                    /** @description Actual retained Location aggregate revision at this read, quoted and at most 9007199254740991; not an event mutation proof. */
+                    readonly ETag: string;
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["LocationMovements"];
+                };
+            };
+            readonly 400: components["responses"]["Error400"];
+            readonly 401: components["responses"]["Error401"];
+            readonly 403: components["responses"]["Error403"];
+            readonly 404: components["responses"]["Error404"];
+            readonly 422: components["responses"]["Error422"];
             readonly 429: components["responses"]["Error429"];
             readonly 503: components["responses"]["Error503"];
         };

@@ -29,7 +29,9 @@
 
 ### Added
 
-- Read actual retained Location movement records through a private, revision-scoped Store page and an owner/ID index. Preserve historical parent IDs and exact legacy time text, including for logically deleted locations; reject missing source, counters or invalid lookahead. Public movement history and full audit history remain unfinished.
+- Expose protected path and exact-identity query reads for retained Location parent changes, including deleted owners, with independently validated source, signed revision-bound live pages and the retained aggregate ETag. A stateless browser adapter preserves legacy IDs and time text without hidden paging or retries; the history screen and complete audit history remain unfinished.
+
+- Read actual retained Location movement records through a private, revision-scoped Store page and an owner/ID index. Preserve historical parent IDs and exact legacy time text, including for logically deleted locations; reject missing source, counters or invalid lookahead. A visible movement history and full audit history remain unfinished.
 
 - Browse recorded Location contents in explicit direct/subtree pages, retaining disposed Units and zero Stock and offering safe detail links. Hide inconsistent or failed pages, require restart after changed revisions or offline reconnection, and clear the local trail on delivered session changes and page suspension. These live pages do not prove physical presence or constitute a frozen snapshot.
 

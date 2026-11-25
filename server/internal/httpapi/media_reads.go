@@ -209,16 +209,7 @@ func mediaIdentityPageQuery(w http.ResponseWriter, r *http.Request, requestID st
 		writeError(w, http.StatusBadRequest, "INVALID_QUERY", "Use one exact Media identity and a bounded limit and cursor.", requestID)
 		return "", "", 0, false
 	}
-	if len(r.URL.RawQuery) > 16<<10 {
-		return invalid()
-	}
-	values, err := url.ParseQuery(r.URL.RawQuery)
-	if err != nil || len(values["id"]) != 1 || !boundedString(values.Get("id"), 1, 128) {
-		return invalid()
-	}
-	id := values.Get("id")
-	delete(values, "id")
-	cursor, limit, ok := metadataQueryValues(values, 50)
+	id, cursor, limit, ok := identityMetadataQuery(r)
 	if !ok {
 		return invalid()
 	}

@@ -596,6 +596,34 @@ class OpenAPIContractTests(unittest.TestCase):
             with self.subTest(change=change), self.assertRaises(ValidationError):
                 validator("LocationContents").validate({**value, **change})
 
+    def test_location_movements_preserve_exact_owner_and_bound_each_live_page(self):
+        for path in ("/locations/{id}/movements", "/location-movements"):
+            operation = API["paths"][path]["get"]
+            self.assertEqual(0, operation["x-max-body-bytes"])
+            params = {p["name"]: p for p in operation["parameters"]}
+            self.assertEqual({"id", "limit", "cursor"}, set(params))
+            self.assertTrue(params["id"]["required"])
+            self.assertEqual("query" if path == "/location-movements" else "path", params["id"]["in"])
+            self.assertEqual((50, 100), (params["limit"]["schema"]["default"], params["limit"]["schema"]["maximum"]))
+            self.assertEqual(2048, params["cursor"]["schema"]["maxLength"])
+            self.assertTrue(operation["responses"]["200"]["headers"]["ETag"]["required"])
+        schema = SCHEMAS["LocationMovements"]
+        self.assertEqual({"location_id", "deleted", "data", "next_cursor"}, set(schema["required"]))
+        self.assertEqual(100, schema["properties"]["data"]["maxItems"])
+        event = {"id": "event\u0000", "location_id": "loc/\u0000", "occurred_at": "legacy\nexact", "from_parent_id": None, "to_parent_id": "parent"}
+        page = {"location_id": event["location_id"], "deleted": True, "data": [event], "next_cursor": None}
+        validator("LocationMovements").validate(page)
+        for field in schema["required"]:
+            with self.subTest(missing=field), self.assertRaises(ValidationError):
+                validator("LocationMovements").validate({key: value for key, value in page.items() if key != field})
+        for change in ({"id": "x" * 129}, {"location_id": ""}, {"occurred_at": ""}, {"occurred_at": "x" * 10001}, {"from_parent_id": "x" * 129}, {"extra": True}):
+            with self.subTest(event=change), self.assertRaises(ValidationError):
+                validator("LocationMovements").validate({**page, "data": [{**event, **change}]})
+        for change in ({"deleted": None}, {"next_cursor": ""}, {"next_cursor": "x" * 2049}, {"revision": 1}, {"data": [event] * 101}):
+            with self.subTest(page=change), self.assertRaises(ValidationError):
+                validator("LocationMovements").validate({**page, **change})
+        validator("OfflineLocationEvent").validate({**event, "occurred_at": "x" * 10001})
+
     def test_taxonomy_creation_patch_and_nullable_parent_are_distinct(self):
         validator("CategoryCreate").validate({"name": "  分類 😀  "})
         validator("CategoryCreate").validate({"name": "分類", "parent_id": None})

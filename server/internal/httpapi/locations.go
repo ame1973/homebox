@@ -17,6 +17,8 @@ func locationRoute(path string) (route, id, allow string) {
 		return "create", "", http.MethodPost
 	case "/api/v1/locations/tree":
 		return "tree", "", http.MethodGet
+	case "/api/v1/location-movements":
+		return "movements-by-identity", "", http.MethodGet
 	}
 	const prefix = "/api/v1/locations/"
 	if !strings.HasPrefix(path, prefix) {
@@ -29,7 +31,7 @@ func locationRoute(path string) (route, id, allow string) {
 	if len(parts) == 2 && parts[0] != "" && (parts[1] == "move" || parts[1] == "archive") {
 		return parts[1], parts[0], http.MethodPost
 	}
-	if len(parts) == 2 && parts[0] != "" && (parts[1] == "summary" || parts[1] == "contents") {
+	if len(parts) == 2 && parts[0] != "" && (parts[1] == "summary" || parts[1] == "contents" || parts[1] == "movements") {
 		return parts[1], parts[0], http.MethodGet
 	}
 	return "", "", ""
@@ -51,7 +53,7 @@ func (a *authAPI) serveLocations(w http.ResponseWriter, r *http.Request, request
 		return true
 	}
 	if r.URL.RawPath != "" || strings.ContainsAny(id, "\\\x00") || id == "." || id == ".." || id != "" && !boundedString(id, 1, 128) ||
-		route != "tree" && route != "contents" && (r.URL.RawQuery != "" || r.URL.ForceQuery) {
+		route != "tree" && route != "contents" && route != "movements" && route != "movements-by-identity" && (r.URL.RawQuery != "" || r.URL.ForceQuery) {
 		writeError(w, http.StatusBadRequest, "INVALID_LOCATION_URL", "Use an exact location path and only documented list parameters.", requestID)
 		return true
 	}
@@ -88,6 +90,31 @@ func (a *authAPI) serveLocations(w http.ResponseWriter, r *http.Request, request
 			}
 			w.Header().Set("ETag", strconv.Quote(strconv.FormatInt(contents.Revision, 10)))
 			writeJSON(w, contents)
+			return true
+		}
+		if route == "movements" || route == "movements-by-identity" {
+			var cursor string
+			var limit int
+			var ok bool
+			if route == "movements-by-identity" {
+				id, cursor, limit, ok = identityMetadataQuery(r)
+				if !ok {
+					writeError(w, http.StatusBadRequest, "INVALID_QUERY", "Use one exact Location identity and a bounded limit and cursor.", requestID)
+					return true
+				}
+			} else {
+				cursor, limit, ok = boundedMetadataQuery(w, r, requestID, 50, 16<<10)
+				if !ok {
+					return true
+				}
+			}
+			movements, err := a.locations.PageMovements(r.Context(), token, id, cursor, limit)
+			if err != nil {
+				writeLocationError(w, err, requestID)
+				return true
+			}
+			w.Header().Set("ETag", strconv.Quote(strconv.FormatInt(movements.Revision, 10)))
+			writeJSON(w, movements)
 			return true
 		}
 		if route == "summary" {

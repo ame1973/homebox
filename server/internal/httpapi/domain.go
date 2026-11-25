@@ -86,6 +86,23 @@ func exactIdentityQuery(r *http.Request) (string, bool) {
 	return values["id"][0], true
 }
 
+func identityMetadataQuery(r *http.Request) (string, string, int, bool) {
+	if len(r.URL.RawQuery) > 16<<10 {
+		return "", "", 0, false
+	}
+	values, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil || len(values["id"]) != 1 || !boundedString(values.Get("id"), 1, 128) {
+		return "", "", 0, false
+	}
+	id := values.Get("id")
+	delete(values, "id")
+	cursor, limit, ok := metadataQueryValues(values, 50)
+	if !ok {
+		return "", "", 0, false
+	}
+	return id, cursor, limit, true
+}
+
 func metadataListQuery(w http.ResponseWriter, r *http.Request, requestID string) (string, int, bool) {
 	return boundedMetadataQuery(w, r, requestID, 100, 2300)
 }
