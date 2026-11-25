@@ -31,6 +31,8 @@
 
 ### Added
 
+- Validate the public shell descriptor in a bounded, cookie-free browser read with caller cancellation; this internal reader does not register or update a worker.
+
 - Publish a network-only, non-cacheable public shell version descriptor alongside the generated worker and HTML. This is not an API compatibility handshake or an atomic deployment guarantee.
 
 - Build an integrity-checked public shell worker with bounded, credential-free asset installation, network-only private requests and update waiting. It is not yet registered by the application and does not enable offline replicas or drafts.
