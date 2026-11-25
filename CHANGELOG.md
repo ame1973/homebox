@@ -31,6 +31,8 @@
 
 ### Added
 
+- Print a locally generated Location or Unit QR label in an isolated document, or download its SVG image. Clear the temporary download URL and still-controlled print document on session or page suspension; already handed-off outputs cannot be recalled. Browser tests intercept printing and do not claim physical printer or scanner acceptance.
+
 - Preview local Location and Unit QR labels after fresh completed-session and source reads before and after worker generation. Withhold changed or unsafe identities and clear the preview on offline, backgrounding, session-clear or page suspension. Printing/download and the contracted server SVG endpoints remain unfinished.
 
 - Prepare a bounded local Location or Unit QR matrix in a cancellable same-origin worker. This internal helper is not a visible label, print action, authorization check or the contracted server SVG endpoint.

@@ -1,6 +1,6 @@
 # Location Rules
 
-**Implementation status:** the authoritative Go/SQLite service, eleven HTTP operations, and responsive location-management screens, including the direct/subtree summary, paged contents, parent-change history and a local QR preview, are implemented. The history screen covers recorded parent changes only; a complete audit history, the server QR endpoint, QR printing/download, saved photo uploads, persistent drafts, and full offline synchronization remain unfinished.
+**Implementation status:** the authoritative Go/SQLite service, eleven HTTP operations, and responsive location-management screens, including the direct/subtree summary, paged contents, parent-change history and local QR labels, are implemented. The history screen covers recorded parent changes only; a complete audit history, the server QR endpoint, saved photo uploads, persistent drafts, and full offline synchronization remain unfinished.
 
 ## Browser usage
 
@@ -15,13 +15,15 @@ Sign in and complete any mandatory password change first. The same routes and co
 | `/locations/ID/edit` | Edit descriptive metadata without implicitly changing parent or status |
 | `/l/ID` | Open a protected relative alias, returning to the location after login |
 
-Supported imported IDs matching the reserved create segment `new` (including case variants) use `/locations/ID/view` for detail, without rewriting their stored identity. Ordinary links and aliases choose this route automatically. URLs preserve only whitelisted relative location destinations across login; they cannot redirect to another host or carry arbitrary query data. The local QR preview is separate from the unfinished server SVG endpoint and printing/download.
+Supported imported IDs matching the reserved create segment `new` (including case variants) use `/locations/ID/view` for detail, without rewriting their stored identity. Ordinary links and aliases choose this route automatically. URLs preserve only whitelisted relative location destinations across login; they cannot redirect to another host or carry arbitrary query data. The local QR label is separate from the unfinished server SVG endpoint.
 
-### Preview a local QR label
+### Generate, print or download a local QR label
 
 On Location detail, choose **Generate QR label**. The browser checks the completed session and actual Location, creates a bounded matrix locally in a same-origin worker, then rechecks the session and source before displaying it. If the selected source changed during generation, refresh the Location before trying again. The displayed QR contains the current application origin and stable Location ID, not a credential; the destination still requires authentication. Moving or renaming a Location does not change its ID. A later deletion can make its existing link unavailable.
 
-The preview is a live check rather than a frozen guarantee: the source can change after the final read. It is hidden while the parent read is being revalidated and cleared on offline, backgrounding, page suspension or a delivered session-clear signal. Reconnection and back-forward-cache restoration require an explicit new generation. Delivery of cross-window session signals is best effort; clearing references is not memory erasure. Retained legacy IDs that cannot be represented safely are shown as unavailable without renaming them. QR printing/download and the contracted server SVG endpoint are not yet implemented. Synthetic same-library browser pixel tests are not physical scanner, printer or device acceptance.
+The preview is a live check rather than a frozen guarantee: the source can change after the final read. Choose **Print QR label** to open the browser's print flow with a separate document containing only this QR, the exact ID and the visible code when its quoted representation is at most 256 UTF-16 units. A longer code is explicitly omitted; the ID is never shortened. **Download SVG** saves only the QR image under a fixed non-identifying filename. Both outputs retain the four-module quiet zone. Review the printed size and scan it with your own device; print quality and browser/OS behavior are not guaranteed. A print job already handed to the browser and a downloaded file cannot be recalled after logout. If the browser never signals that printing finished, generate a new label before trying again.
+
+The preview is hidden while the parent read is being revalidated and cleared on offline, backgrounding, page suspension or a delivered session-clear signal. Cleanup revokes its volatile download URL and clears any print document still controlled by the page. Reconnection and back-forward-cache restoration require an explicit new generation. Delivery of cross-window session signals is best effort; clearing references is not memory erasure. Retained legacy IDs that cannot be represented safely are shown as unavailable without renaming them. The contracted server SVG endpoint remains unimplemented. Synthetic browser tests intercept the print call and use the same library for pixel decoding; they are not OS print-dialog, independent optical, printer or device acceptance.
 
 ### Browse and choose parents
 

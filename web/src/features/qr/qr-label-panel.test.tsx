@@ -59,6 +59,156 @@ describe('local QR label panel', () => {
     expect(holdings.fetchUnit).not.toHaveBeenCalled(); expect(lost).not.toHaveBeenCalled()
   })
 
+  it('offers an isolated print and an SVG download, then revokes the volatile URL on session loss', async () => {
+    const createDescriptor = Object.getOwnPropertyDescriptor(URL, 'createObjectURL'), revokeDescriptor = Object.getOwnPropertyDescriptor(URL, 'revokeObjectURL')
+    const create = vi.fn((_blob: Blob) => 'blob:homebox-qr-test'), revoke = vi.fn()
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: create })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revoke })
+    try {
+      const view = render(<QRLabelPanel {...props} />)
+      expect(screen.queryByRole('link', { name: text.download })).not.toBeInTheDocument()
+      await generate(); expect(await screen.findByRole('img')).toBeVisible()
+      const download = await screen.findByRole('link', { name: text.download })
+      expect(download).toHaveAttribute('href', 'blob:homebox-qr-test')
+      expect(download).toHaveAttribute('download', 'homebox-location-qr.svg')
+      expect(create).toHaveBeenCalledTimes(1)
+      const blob = create.mock.calls[0]![0] as Blob
+      expect(blob.type).toBe('image/svg+xml')
+      const svg = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader(); reader.onerror = () => reject(reader.error); reader.onload = () => resolve(String(reader.result)); reader.readAsText(blob)
+      })
+      const document = new DOMParser().parseFromString(svg, 'image/svg+xml')
+      expect(document.querySelectorAll('rect')).toHaveLength(1); expect(document.querySelectorAll('path')).toHaveLength(1)
+      expect(document.querySelector('script, a, image, foreignObject')).toBeNull(); expect(svg).not.toContain('ROOM-1')
+      const frame = view.container.querySelector('iframe')!
+      expect(frame).toHaveAttribute('aria-hidden', 'true'); expect(frame).toHaveAttribute('tabindex', '-1')
+      const printing = vi.fn(), child = frame.contentWindow!
+      child.print = printing
+      await userEvent.setup().click(screen.getByRole('button', { name: text.print }))
+      expect(printing).toHaveBeenCalledTimes(1)
+      expect(child.document.title).toBe('HomeBox QR')
+      expect(child.document.body.textContent).toContain('"ROOM-1"'); expect(child.document.body.textContent).toContain('"room-1"')
+      expect(child.document.querySelectorAll('svg')).toHaveLength(1); expect(child.document.querySelector('script, a, img, iframe')).toBeNull()
+      await userEvent.setup().click(screen.getByRole('button', { name: text.print }))
+      expect(printing).toHaveBeenCalledTimes(1)
+      child.dispatchEvent(new Event('afterprint'))
+      expect(child.document.body.childElementCount).toBe(0)
+      await userEvent.setup().click(screen.getByRole('button', { name: text.print }))
+      expect(printing).toHaveBeenCalledTimes(2)
+      act(() => { notifyPageSuspended(); expect(child.document.body.childElementCount).toBe(0) })
+      expect(revoke).toHaveBeenCalledWith('blob:homebox-qr-test')
+      expect(view.container.querySelector('iframe')).toBeNull(); expect(screen.queryByRole('link', { name: text.download })).not.toBeInTheDocument()
+      view.unmount()
+    } finally {
+      if (createDescriptor) Object.defineProperty(URL, 'createObjectURL', createDescriptor); else Reflect.deleteProperty(URL, 'createObjectURL')
+      if (revokeDescriptor) Object.defineProperty(URL, 'revokeObjectURL', revokeDescriptor); else Reflect.deleteProperty(URL, 'revokeObjectURL')
+    }
+  })
+
+  it('revokes an object URL created reentrantly during a delivered session-clear', async () => {
+    const createDescriptor = Object.getOwnPropertyDescriptor(URL, 'createObjectURL'), revokeDescriptor = Object.getOwnPropertyDescriptor(URL, 'revokeObjectURL')
+    const revoke = vi.fn()
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: () => { notifyPageSuspended(); return 'blob:late-qr' } })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revoke })
+    try {
+      const view = render(<QRLabelPanel {...props} />)
+      await generate()
+      await waitFor(() => expect(revoke).toHaveBeenCalledWith('blob:late-qr'))
+      expect(screen.queryByRole('img')).not.toBeInTheDocument(); expect(screen.queryByRole('link', { name: text.download })).not.toBeInTheDocument()
+      view.unmount()
+    } finally {
+      if (createDescriptor) Object.defineProperty(URL, 'createObjectURL', createDescriptor); else Reflect.deleteProperty(URL, 'createObjectURL')
+      if (revokeDescriptor) Object.defineProperty(URL, 'revokeObjectURL', revokeDescriptor); else Reflect.deleteProperty(URL, 'revokeObjectURL')
+    }
+  })
+
+  it('revokes the preceding SVG URL on regeneration and the new URL on unmount', async () => {
+    const createDescriptor = Object.getOwnPropertyDescriptor(URL, 'createObjectURL'), revokeDescriptor = Object.getOwnPropertyDescriptor(URL, 'revokeObjectURL')
+    const create = vi.fn().mockReturnValueOnce('blob:first-qr').mockReturnValueOnce('blob:second-qr'), revoke = vi.fn()
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: create })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revoke })
+    try {
+      const view = render(<QRLabelPanel {...props} />)
+      await generate(); expect(await screen.findByRole('link', { name: text.download })).toHaveAttribute('href', 'blob:first-qr')
+      await userEvent.setup().click(screen.getByRole('button', { name: text.again }))
+      await waitFor(() => expect(screen.getByRole('link', { name: text.download })).toHaveAttribute('href', 'blob:second-qr'))
+      expect(revoke).toHaveBeenCalledTimes(1); expect(revoke).toHaveBeenCalledWith('blob:first-qr')
+      view.unmount(); expect(revoke).toHaveBeenCalledTimes(2); expect(revoke).toHaveBeenLastCalledWith('blob:second-qr')
+    } finally {
+      if (createDescriptor) Object.defineProperty(URL, 'createObjectURL', createDescriptor); else Reflect.deleteProperty(URL, 'createObjectURL')
+      if (revokeDescriptor) Object.defineProperty(URL, 'revokeObjectURL', revokeDescriptor); else Reflect.deleteProperty(URL, 'revokeObjectURL')
+    }
+  })
+
+  it('rejects reentrant print and download clicks after a local session-clear signal', async () => {
+    const createDescriptor = Object.getOwnPropertyDescriptor(URL, 'createObjectURL'), revokeDescriptor = Object.getOwnPropertyDescriptor(URL, 'revokeObjectURL')
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: () => 'blob:reentrant-qr' })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
+    try {
+      const view = render(<QRLabelPanel {...props} />)
+      await generate()
+      const button = await screen.findByRole('button', { name: text.print }), download = screen.getByRole('link', { name: text.download })
+      const child = view.container.querySelector('iframe')!.contentWindow!, printing = vi.fn()
+      child.print = printing
+      let downloadAllowed = true
+      const reenter = () => {
+        button.click()
+        downloadAllowed = download.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+      }
+      window.addEventListener('homebox:session-cleared', reenter, { once: true })
+      act(() => notifyPageSuspended())
+      expect(printing).not.toHaveBeenCalled(); expect(downloadAllowed).toBe(false)
+      expect(screen.queryByRole('img')).not.toBeInTheDocument(); view.unmount()
+    } finally {
+      if (createDescriptor) Object.defineProperty(URL, 'createObjectURL', createDescriptor); else Reflect.deleteProperty(URL, 'createObjectURL')
+      if (revokeDescriptor) Object.defineProperty(URL, 'revokeObjectURL', revokeDescriptor); else Reflect.deleteProperty(URL, 'revokeObjectURL')
+    }
+  })
+
+  it('omits an oversized Unit code from the printout without changing its identity', async () => {
+    vi.mocked(holdings.fetchUnit).mockResolvedValue({ ...unit, asset_code: 'x'.repeat(300) })
+    const view = render(<QRLabelPanel {...props} kind="unit" id={unit.id} revision={unit.revision} />)
+    await generate(); expect(await screen.findByRole('img')).toBeVisible()
+    const child = view.container.querySelector('iframe')!.contentWindow!
+    child.print = vi.fn()
+    await userEvent.setup().click(screen.getByRole('button', { name: text.print }))
+    expect(child.document.body.textContent).toContain(text.printCodeOmitted)
+    expect(child.document.body.textContent).toContain('"unit-1"'); expect(child.document.body.textContent).not.toContain('x'.repeat(300))
+  })
+
+  it('reports a print failure without removing the preview and allows a retry', async () => {
+    const view = render(<QRLabelPanel {...props} />)
+    await generate(); expect(await screen.findByRole('img')).toBeVisible()
+    const child = view.container.querySelector('iframe')!.contentWindow!
+    child.print = () => { throw new Error('private printer detail') }
+    await userEvent.setup().click(screen.getByRole('button', { name: text.print }))
+    expect(screen.getByRole('alert')).toHaveTextContent(text.printError); expect(child.document.body.childElementCount).toBe(0)
+    expect(screen.getByRole('img')).toBeVisible()
+    child.print = vi.fn()
+    await userEvent.setup().click(screen.getByRole('button', { name: text.print }))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument(); expect(child.print).toHaveBeenCalledTimes(1)
+  })
+
+  it('moves focus only from a disappearing print control during parent revalidation', async () => {
+    const view = render(<QRLabelPanel {...props} />)
+    await generate(); expect(await screen.findByRole('img')).toBeVisible()
+    const frame = view.container.querySelector('iframe')!, child = frame.contentWindow!, printDocument = child.document
+    child.print = vi.fn()
+    await userEvent.setup().click(screen.getByRole('button', { name: text.print }))
+    expect(printDocument.body.childElementCount).toBeGreaterThan(0)
+    view.rerender(<QRLabelPanel {...props} checking />)
+    expect(printDocument.body.childElementCount).toBe(0)
+    expect(screen.getByRole('heading', { name: text.title })).toHaveFocus()
+  })
+
+  it('does not steal focus from another control when the print controls disappear', async () => {
+    const view = render(<><QRLabelPanel {...props} /><button type="button">Outside action</button></>)
+    await generate(); expect(await screen.findByRole('img')).toBeVisible()
+    screen.getByRole('button', { name: text.print }).focus(); screen.getByRole('button', { name: 'Outside action' }).focus()
+    view.rerender(<><QRLabelPanel {...props} checking /><button type="button">Outside action</button></>)
+    expect(screen.getByRole('button', { name: 'Outside action' })).toHaveFocus()
+  })
+
   it('reads the actual Unit and does not use an Item or a Location as its identity', async () => {
     render(<QRLabelPanel {...props} kind="unit" id={unit.id} revision={unit.revision} />)
     await generate()

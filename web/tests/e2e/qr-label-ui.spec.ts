@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -10,7 +10,8 @@ import { test as applicationTest, expect } from './auth-fixture.ts'
 import { leaveDocument, permitBFCache, returnFromBFCache } from './bfcache-helpers.ts'
 import { noOverflow, provision, watchDomainWrites, writeContext } from './domain-helpers.ts'
 
-type QRProbe = { started: number; terminated: number; hold: boolean; held: boolean; hidden: boolean; signals: number; deliver?: () => void; redacted?: boolean }
+type PrintProbe = { title: string; body: string; svg: string; forbidden: number; style: string }
+type QRProbe = { started: number; terminated: number; hold: boolean; held: boolean; hidden: boolean; signals: number; revoked: string[]; printed?: PrintProbe; printDocument?: Document; deliver?: () => void; redacted?: boolean }
 declare global { interface Window { __qrUI: QRProbe } }
 const text = messages.qr
 const test = applicationTest.extend<{}, { decoder: string }>({
@@ -39,8 +40,10 @@ const panel = (page: Page) => page.getByRole('region', { name: text.title, exact
 
 async function install(page: Page, transport?: 'broadcast' | 'storage') {
   await page.addInitScript((selected) => {
-    const probe: QRProbe = { started: 0, terminated: 0, hold: false, held: false, hidden: false, signals: 0 }
+    const probe: QRProbe = { started: 0, terminated: 0, hold: false, held: false, hidden: false, signals: 0, revoked: [] }
     window.__qrUI = probe
+    const revoke = URL.revokeObjectURL.bind(URL)
+    URL.revokeObjectURL = (url) => { probe.revoked.push(url); revoke(url) }
     document.addEventListener('visibilitychange', () => { if (document.visibilityState !== 'visible') probe.hidden = true })
     if (selected === 'storage') {
       Object.defineProperty(window, 'BroadcastChannel', { configurable: true, value: undefined })
@@ -70,14 +73,14 @@ async function install(page: Page, transport?: 'broadcast' | 'storage') {
   }, transport)
 }
 
-async function decodeVisible(page: Page, decoder: string, imageName: string) {
+async function decodeSVG(page: Page, decoder: string, markup: string) {
   await page.route('**/assets/qr-decode-private.js', (route) => route.fulfill({ path: decoder, contentType: 'text/javascript', headers: { 'Cache-Control': 'no-store' } }))
-  return page.evaluate(async (name) => {
-    const svg = document.querySelector<SVGSVGElement>(`svg[aria-label="${name}"]`)
-    if (!svg) throw new Error('Missing QR SVG')
-    const copy = svg.cloneNode(true) as SVGSVGElement, size = svg.viewBox.baseVal.width
-    copy.setAttribute('width', String(size * 4)); copy.setAttribute('height', String(size * 4))
-    const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(copy)], { type: 'image/svg+xml' }))
+  return page.evaluate(async (xml) => {
+    const svg = new DOMParser().parseFromString(xml, 'image/svg+xml').documentElement as unknown as SVGSVGElement
+    const size = Number(svg.getAttribute('viewBox')?.split(/\s+/)[2])
+    if (svg.localName !== 'svg' || !Number.isInteger(size) || size < 29 || size > 185) throw new Error('Invalid QR SVG')
+    svg.setAttribute('width', String(size * 4)); svg.setAttribute('height', String(size * 4))
+    const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(svg)], { type: 'image/svg+xml' }))
     try {
       const image = new Image(); image.src = url; await image.decode()
       const canvas = document.createElement('canvas'); canvas.width = size * 4; canvas.height = size * 4
@@ -90,7 +93,12 @@ async function decodeVisible(page: Page, decoder: string, imageName: string) {
       const modulePath = '/assets/qr-decode-private.js', decoderModule = await import(modulePath)
       return decoderModule.decodeZXing(pixels, canvas.width, canvas.height, ['QR_CODE'])
     } finally { URL.revokeObjectURL(url) }
-  }, imageName)
+  }, markup)
+}
+
+async function decodeVisible(page: Page, decoder: string, imageName: string) {
+  const markup = await page.getByRole('img', { name: imageName }).evaluate((svg) => new XMLSerializer().serializeToString(svg))
+  return decodeSVG(page, decoder, markup)
 }
 
 // Real production UI/worker and disposable Go sources; pixel decoding uses the
@@ -119,6 +127,60 @@ for (const kind of ['location', 'unit'] as const) test(`renders an exact ${kind}
   await page.goto(url)
   await expect(page).toHaveURL(new RegExp(`/${kind === 'location' ? 'locations' : 'units'}/${source.id}$`))
   await expect(page.getByRole('heading', { level: 1, name: kind === 'location' ? 'QR 測試房間' : messages.holdings.unitDetail })).toBeVisible()
+})
+
+for (const kind of ['location', 'unit'] as const) test(`downloads and isolates the ${kind} QR print document`, async ({ page, application, decoder }) => {
+  await install(page); await provision(page, application)
+  const source = kind === 'location'
+    ? await post(page, application.url, '/api/v1/locations', { name: '列印測試', code: '<img src=x onerror=alert(1)>' })
+    : await unit(page, application.url)
+  const resource = `/api/v1/${kind === 'location' ? 'locations' : 'units'}/${source.id}`
+  const read = await page.request.get(resource)
+  expect(read.status()).toBe(200)
+  const data = await read.json() as { code?: string; asset_code?: string }
+  const code = data.code ?? data.asset_code
+  expect(code).toBeTruthy()
+  const writes = watchDomainWrites(page, ['/api/v1/locations', '/api/v1/items', '/api/v1/units', '/api/v1/stock'])
+  await page.goto(`/${kind === 'location' ? 'locations' : 'units'}/${source.id}`)
+  const region = panel(page), generate = region.getByRole('button', { name: text.create })
+  await expect(generate).toHaveAttribute('aria-disabled', 'false'); await generate.click()
+  await expect(region.getByRole('img', { name: kind === 'location' ? text.locationImage : text.unitImage })).toBeVisible()
+  const link = region.getByRole('link', { name: text.download }), objectURL = await link.getAttribute('href')
+  expect(objectURL).toMatch(/^blob:/)
+  const incoming = page.waitForEvent('download')
+  await link.click()
+  const file = await incoming
+  expect(file.suggestedFilename()).toBe(`homebox-${kind}-qr.svg`)
+  const path = await file.path()
+  expect(path).not.toBeNull()
+  const svg = readFileSync(path!, 'utf8'), expected = `${application.url}/${kind === 'location' ? 'l' : 'u'}/${source.id}`
+  expect(svg.length).toBeLessThan(512 * 1024); expect(svg).not.toContain(code!)
+  expect(await decodeSVG(page, decoder, svg)).toEqual([{ format: 'QR_CODE', rawValue: expected }])
+  await page.evaluate(() => { const decoy = document.createElement('p'); decoy.textContent = 'PRIVATE-OUTSIDE-LABEL'; document.body.append(decoy) })
+  const frame = region.locator('iframe')
+  await expect(frame).toHaveAttribute('aria-hidden', 'true'); await expect(frame).toHaveAttribute('tabindex', '-1')
+  await frame.evaluate((element) => {
+    const child = (element as HTMLIFrameElement).contentWindow
+    if (!child) throw new Error('Missing isolated print window')
+    child.print = () => {
+      const doc = child.document, image = doc.querySelector('svg')
+      if (!image) throw new Error('Missing print image')
+      window.__qrUI.printed = { title: doc.title, body: doc.body.textContent ?? '', svg: new XMLSerializer().serializeToString(image),
+        forbidden: doc.querySelectorAll('script,a,img,image,iframe,foreignObject').length, style: doc.head.textContent ?? '' }
+      child.dispatchEvent(new Event('afterprint'))
+    }
+  })
+  await region.getByRole('button', { name: text.print }).click()
+  const printed = await page.evaluate(() => window.__qrUI.printed)
+  expect(printed).toMatchObject({ title: 'HomeBox QR', forbidden: 0 })
+  expect(printed?.body).toContain(JSON.stringify(source.id)); expect(printed?.body).toContain(JSON.stringify(code))
+  expect(printed?.body).not.toContain('PRIVATE-OUTSIDE-LABEL'); expect(printed?.style).not.toMatch(/url\s*\(|@import/i)
+  expect(await decodeSVG(page, decoder, printed!.svg)).toEqual([{ format: 'QR_CODE', rawValue: expected }])
+  expect(await frame.evaluate((element) => (element as HTMLIFrameElement).contentDocument?.body.childElementCount)).toBe(0)
+  await page.evaluate(() => window.dispatchEvent(new Event('pagehide')))
+  expect(await page.evaluate(() => window.__qrUI.revoked)).toContain(objectURL)
+  await expect(region.locator('iframe')).toHaveCount(0); await expect(region.getByRole('link', { name: text.download })).toHaveCount(0)
+  expect(writes).toEqual([])
 })
 
 test('rejects a real source change while the generated matrix is delayed', async ({ page, application }) => {
@@ -159,6 +221,60 @@ for (const transport of ['broadcast', 'storage'] as const) test(`removes a delay
   } finally { await other.close() }
 })
 
+for (const transport of ['broadcast', 'storage'] as const) test(`revokes a rendered SVG and clears a pending print after real logout using ${transport} only`, async ({ page, context, application }) => {
+  await install(page, transport); await provision(page, application)
+  const source = await location(page, application.url), writes = watchDomainWrites(page, ['/api/v1/locations', '/api/v1/items', '/api/v1/units'])
+  await page.goto(`/locations/${source.id}`)
+  const region = panel(page), generate = region.getByRole('button', { name: text.create })
+  await expect(generate).toHaveAttribute('aria-disabled', 'false'); await generate.click()
+  const link = region.getByRole('link', { name: text.download }), objectURL = await link.getAttribute('href')
+  expect(objectURL).toMatch(/^blob:/)
+  const frame = region.locator('iframe')
+  await frame.evaluate((element) => {
+    const child = (element as HTMLIFrameElement).contentWindow
+    if (!child) throw new Error('Missing isolated print window')
+    window.__qrUI.printDocument = child.document; child.print = () => {}
+  })
+  await region.getByRole('button', { name: text.print }).click()
+  expect(await page.evaluate(() => window.__qrUI.printDocument?.body.childElementCount)).toBeGreaterThan(0)
+  const other = await context.newPage()
+  try {
+    await other.goto('/settings/account')
+    await other.getByRole('button', { name: messages.auth.logout, exact: true }).click()
+    await other.getByRole('alertdialog').getByRole('button', { name: messages.auth.logout, exact: true }).click()
+    await expect.poll(() => page.evaluate(() => window.__qrUI.signals)).toBeGreaterThan(0)
+    await expect(region.getByText(text.cleared)).toBeVisible()
+    expect(await page.evaluate(() => window.__qrUI.hidden)).toBe(false)
+    expect(await page.evaluate(() => window.__qrUI.revoked)).toContain(objectURL)
+    expect(await page.evaluate(() => window.__qrUI.printDocument?.body.childElementCount)).toBe(0)
+    await expect(region.locator('iframe')).toHaveCount(0); await expect(region.getByRole('link', { name: text.download })).toHaveCount(0)
+    expect(writes).toEqual([])
+  } finally { await other.close() }
+})
+
+test('blocks reentrant print and download activation during a delivered local session-clear', async ({ page, application }) => {
+  await install(page); await provision(page, application)
+  const source = await location(page, application.url)
+  await page.goto(`/locations/${source.id}`)
+  const region = panel(page), generate = region.getByRole('button', { name: text.create })
+  await expect(generate).toHaveAttribute('aria-disabled', 'false'); await generate.click()
+  await expect(region.getByRole('link', { name: text.download })).toBeVisible()
+  const result = await region.evaluate((element, printLabel) => {
+    const frame = element.querySelector('iframe'), print = [...element.querySelectorAll('button')].find((button) => button.textContent === printLabel)
+    const download = element.querySelector<HTMLAnchorElement>('a[download]'), child = frame?.contentWindow
+    if (!print || !download || !child) throw new Error('Missing QR actions')
+    let calls = 0, allowed = true
+    child.print = () => { calls++ }
+    window.addEventListener('homebox:session-cleared', () => {
+      print.click(); allowed = download.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    }, { once: true })
+    window.dispatchEvent(new Event('homebox:session-cleared'))
+    return { calls, allowed }
+  }, text.print)
+  expect(result).toEqual({ calls: 0, allowed: false })
+  await expect(region.getByText(text.cleared)).toBeVisible(); await expect(region.getByRole('img')).toHaveCount(0)
+})
+
 test('clears a QR while offline and requires a new explicit generation on reconnect', async ({ page, context, application }) => {
   await install(page); await provision(page, application)
   const source = await location(page, application.url)
@@ -166,8 +282,11 @@ test('clears a QR while offline and requires a new explicit generation on reconn
   const region = panel(page), button = region.getByRole('button', { name: text.create })
   await expect(button).toHaveAttribute('aria-disabled', 'false'); await button.click()
   await expect(region.getByRole('img', { name: text.locationImage })).toBeVisible()
+  const objectURL = await region.getByRole('link', { name: text.download }).getAttribute('href')
   await context.setOffline(true)
   await expect(region.getByRole('img')).toHaveCount(0); await expect(region.getByText(text.offline)).toBeVisible()
+  expect(await page.evaluate(() => window.__qrUI.revoked)).toContain(objectURL)
+  await expect(region.locator('iframe')).toHaveCount(0)
   await context.setOffline(false)
   await expect(region.getByRole('button', { name: text.create })).toHaveAttribute('aria-disabled', 'false')
   expect(await page.evaluate(() => window.__qrUI.started)).toBe(1)
@@ -183,10 +302,12 @@ test('redacts a rendered QR before actual BFCache and requires explicit revalida
   const region = panel(page), button = region.getByRole('button', { name: text.create })
   await expect(button).toHaveAttribute('aria-disabled', 'false'); await button.click()
   await expect(region.getByRole('img', { name: text.locationImage })).toBeVisible()
-  await page.waitForLoadState('networkidle')
+  const objectURL = await region.getByRole('link', { name: text.download }).getAttribute('href')
   await page.evaluate((imageName) => { window.addEventListener('pagehide', () => { window.__qrUI.redacted = !document.querySelector(`svg[aria-label="${imageName}"]`) }) }, text.locationImage)
   await leaveDocument(page, false); await returnFromBFCache(page, diagnostics)
   expect(await page.evaluate(() => window.__qrUI.redacted)).toBe(true)
+  expect(await page.evaluate(() => window.__qrUI.revoked)).toContain(objectURL)
+  await expect(region.locator('iframe')).toHaveCount(0)
   await expect(region.getByText(text.restore)).toBeVisible(); await expect(region.getByRole('img')).toHaveCount(0)
   expect(await page.evaluate(() => window.__qrUI.started)).toBe(1)
   const resume = region.getByRole('button', { name: text.continue })
@@ -204,6 +325,28 @@ test('redacts a rendered QR before actual BFCache and requires explicit revalida
   await resume.click()
   await expect(region.getByRole('img', { name: text.locationImage })).toBeVisible()
   expect(await page.evaluate(() => window.__qrUI.started)).toBe(2)
+})
+
+test('preserves keyboard focus when a parent refresh hides the print controls', async ({ page, application }) => {
+  await install(page); await provision(page, application)
+  const source = await location(page, application.url)
+  await page.goto(`/locations/${source.id}`)
+  const region = panel(page), generate = region.getByRole('button', { name: text.create })
+  await expect(generate).toHaveAttribute('aria-disabled', 'false'); await generate.click()
+  const print = region.getByRole('button', { name: text.print })
+  await expect(print).toBeVisible(); await print.focus(); await expect(print).toBeFocused()
+  let started!: () => void, release!: () => void
+  const request = new Promise<void>((resolve) => { started = resolve }), gate = new Promise<void>((resolve) => { release = resolve })
+  await page.route((url) => url.pathname === '/api/v1/auth/me', async (route) => { started(); await gate; await route.continue() })
+  try {
+    await page.getByRole('button', { name: messages.locations.refresh, exact: true }).evaluate((element: HTMLButtonElement) => element.click())
+    await request
+    await expect(region.getByRole('heading', { name: text.title })).toBeFocused()
+    await expect(region.getByRole('button', { name: text.print })).toHaveCount(0)
+    release()
+    await expect(region.getByRole('button', { name: text.print })).toBeVisible()
+    await expect(region.getByRole('heading', { name: text.title })).toBeFocused()
+  } finally { release() }
 })
 
 test('keeps QR controls and exact identity accessible at 320px and 200% text', async ({ page, application }, info) => {
@@ -225,6 +368,14 @@ test('keeps QR controls and exact identity accessible at 320px and 200% text', a
       buttonFits: button.scrollWidth <= button.clientWidth }
   })
   expect(lines.heading).toBe(1); expect(lines.button).toBeLessThanOrEqual(2); expect(lines.buttonFits).toBe(true)
+  for (const action of [region.getByRole('button', { name: text.print }), region.getByRole('link', { name: text.download })]) {
+    const geometry = await action.evaluate((element) => {
+      const style = getComputedStyle(element)
+      return { fits: element.scrollWidth <= element.clientWidth,
+        lines: Math.round((element.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom)) / parseFloat(style.lineHeight)) }
+    })
+    expect(geometry.fits).toBe(true); expect(geometry.lines).toBeLessThanOrEqual(2)
+  }
   for (const colorScheme of ['light', 'dark'] as const) {
     await page.emulateMedia({ colorScheme }); await expect(page.locator('html')).toHaveAttribute('data-theme', colorScheme)
     await noOverflow(page)
