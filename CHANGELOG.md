@@ -29,6 +29,8 @@
 
 ### Added
 
+- Prepare a bounded local Location or Unit QR matrix in a cancellable same-origin worker. This internal helper is not a visible label, print action, authorization check or the contracted server SVG endpoint.
+
 - Browse recorded Location parent changes in explicit live pages on the Location detail, or select an exact retained ID on the Location list to read a deleted owner's changes. Preserve legacy text and historical parent IDs without claiming chronological order or complete audit history; session/page suspension clears the relevant volatile state.
 
 - Expose protected path and exact-identity query reads for retained Location parent changes, including deleted owners, with independently validated source, signed revision-bound live pages and the retained aggregate ETag. A stateless browser adapter preserves legacy IDs and time text without hidden paging or retries; complete audit history remains unfinished.
