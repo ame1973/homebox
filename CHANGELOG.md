@@ -31,6 +31,8 @@
 
 ### Added
 
+- Add an explicitly authorized, private single-Item or single-Unit search backfill for missing current projections. Validate retained counters and approved source, consume a session-bound reauthentication grant atomically, and leave valid existing projections unchanged; batch coverage and public sync remain unavailable.
+
 - Verify stored, dataset-bound search proofs when privately reading frozen delta pages, including lookahead, without comparing historical text to today's source. Withhold the whole page for missing or invalid provenance; public sync and complete backfill remain unavailable.
 
 - Atomically bind newly published approved search projections to their frozen change proofs, rechecking source, key, counters and exact bytes after session activity and final callbacks. Legacy search changes receive no invented proofs; private reads reject unproven search and public synchronization remains unavailable.
