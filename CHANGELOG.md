@@ -31,6 +31,8 @@
 
 ### Added
 
+- Locate current or missing Item/Unit search projections in private live pages with actual source, counter and lookahead validation. Scope continuations to the observed dataset and revisions; these pages do not certify full coverage or enable public sync.
+
 - Index retained search-change and snapshot revisions by exact search identity for the private single-source backfill. Existing frozen payloads and proof bytes remain unchanged; query-plan tests do not establish NAS performance.
 
 - Add an explicitly authorized, private single-Item or single-Unit search backfill for missing current projections. Validate retained counters and approved source, consume a session-bound reauthentication grant atomically, and leave valid existing projections unchanged; batch coverage and public sync remain unavailable.
