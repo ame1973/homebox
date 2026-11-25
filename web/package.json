@@ -9,11 +9,11 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "npm run typecheck && vite build && node scripts/check-build.mjs",
+    "build": "npm run typecheck && vite build && node scripts/build-shell-worker.mjs && node scripts/check-build.mjs",
     "typecheck": "tsc -b --pretty false && tsc -p tsconfig.contracts.json --pretty false",
     "lint": "oxlint --deny-warnings",
     "test": "vitest run --coverage",
-    "test:build": "node --test tests/build-budget.test.mjs tests/pwa-manifest.test.mjs",
+    "test:build": "node --test tests/build-budget.test.mjs tests/pwa-manifest.test.mjs tests/shell-worker-build.test.mjs tests/shell-worker-runtime.test.mjs",
     "test:fixtures": "node --test tests/private-application.test.ts",
     "pwa:icons": "node scripts/render-pwa-icons.mjs --write",
     "test:e2e": "playwright test",
