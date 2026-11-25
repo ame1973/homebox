@@ -181,6 +181,17 @@ func (s *Store) migrate(ctx context.Context, cfg Config, all []migrations.Migrat
 			return report, fmt.Errorf("validate new pending media journal: %w", ErrDomainState)
 		}
 	}
+	// Migration must not assert provenance for retained history, including rows
+	// injected by late migration-ledger or legacy-mapping triggers.
+	if version < 26 && len(all) >= 26 {
+		var proofs int
+		if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM sync_search_proofs").Scan(&proofs); err != nil {
+			return report, err
+		}
+		if proofs != 0 {
+			return report, fmt.Errorf("validate new search proof storage: %w", ErrDomainState)
+		}
+	}
 	finalVersion, finalLedger, err := history(ctx, tx, all)
 	if err != nil {
 		return report, err
