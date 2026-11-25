@@ -18,6 +18,7 @@ import { LocationBreadcrumbs } from './breadcrumbs'
 import { LocationEditor } from './editor'
 import { isKnownKind } from './form'
 import { LocationError } from './location-error'
+import { LocationContentsPanel } from './location-contents-panel'
 import { LocationSummaryPanel } from './location-summary-panel'
 import { LocationMutationNotice, LocationReviewDialog } from './review-dialog'
 import { readLocationTree } from './tree'
@@ -84,7 +85,7 @@ export default function LocationsPage({ mode }: { mode: Mode }) {
   async function readCurrent() {
     return Promise.all([auth.refetch(), treeQuery.refetch(), ...(needRecord ? [recordQuery.refetch()] : [])])
   }
-  async function revalidateSummary(): Promise<boolean> {
+  async function revalidateLocation(): Promise<boolean> {
     const session = await auth.refetch()
     if (session.isError || !session.data || session.data.must_change_password || !navigator.onLine) return false
     const [freshTree, freshRecord] = await Promise.all([treeQuery.refetch(), recordQuery.refetch()])
@@ -139,7 +140,10 @@ export default function LocationsPage({ mode }: { mode: Mode }) {
                         {[[text.status, record.status === 'active' ? text.active : text.archived], [text.kind, isKnownKind(record.kind) ? text.kinds[record.kind] : record.kind], [text.sortOrder, String(record.sort_order)], [text.version, String(record.revision)], [text.description, record.description || text.emptyValue]].map(([label, value]) => <div key={label} className="space-y-1"><dt className="text-sm text-muted-foreground">{label}</dt><dd className="whitespace-pre-wrap text-base leading-relaxed [overflow-wrap:anywhere]">{value}</dd></div>)}
                       </dl>
                       <LocationSummaryPanel key={`summary:${record.id}`} id={record.id} revision={record.revision} online={online} checked={authorized && auth.isFetchedAfterMount}
-                        checking={isReading} invalid={!!readError || inconsistentRecord} revalidate={revalidateSummary}
+                        checking={isReading} invalid={!!readError || inconsistentRecord} revalidate={revalidateLocation}
+                        onSessionLost={(mandatory) => { allowNavigation(); sessionLost(mandatory) }} />
+                      <LocationContentsPanel key={`contents:${record.id}`} id={record.id} revision={record.revision} online={online} checked={authorized && auth.isFetchedAfterMount}
+                        checking={isReading} invalid={!!readError || inconsistentRecord} revalidate={revalidateLocation}
                         onSessionLost={(mandatory) => { allowNavigation(); sessionLost(mandatory) }} />
                       <Button asChild variant="outline" className={control}><Link to={mediaOwnerRoute({ kind: 'location', id: record.id })}>{messages.media.nav}</Link></Button>
                       <LocationActions key={record.id} location={record} tree={tree} operation={operation} online={online} canWrite={canWrite} />

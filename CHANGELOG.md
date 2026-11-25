@@ -29,9 +29,11 @@
 
 ### Added
 
-- Expose protected, bounded Location contents pages over actual Unit, Stock and sub-location source. The revision-bound signed continuation validates scope and page size; retained disposed Units and zero Stock remain visible as records. A stateless browser adapter validates each combined page and aggregate Location ETag without hidden retries or pagination. The visible contents workflow remains unfinished.
+- Browse recorded Location contents in explicit direct/subtree pages, retaining disposed Units and zero Stock and offering safe detail links. Hide inconsistent or failed pages, require restart after changed revisions or offline reconnection, and clear the local trail on delivered session changes and page suspension. These live pages do not prove physical presence or constitute a frozen snapshot.
 
-- Expose a protected current Location summary with direct/subtree recorded-holding counts and separately grouped base quantities. Validate real location/Unit/Stock authority, retained zeros and disposed Units, fail closed on unsafe totals, and return the actual Location aggregate ETag. The stateless browser adapter validates the reply without retries. Location detail displays the summary only after matching live Location reads and hides it during errors, session changes and page suspension; complete paged contents remain separate.
+- Expose protected, bounded Location contents pages over actual Unit, Stock and sub-location source. The revision-bound signed continuation validates scope and page size; retained disposed Units and zero Stock remain visible as records. A stateless browser adapter validates each combined page and aggregate Location ETag without hidden retries or pagination.
+
+- Expose a protected current Location summary with direct/subtree recorded-holding counts and separately grouped base quantities. Validate real location/Unit/Stock authority, retained zeros and disposed Units, fail closed on unsafe totals, and return the actual Location aggregate ETag. The stateless browser adapter validates the reply without retries. Location detail displays the summary only after matching live Location reads and hides it during errors, session changes and page suspension; the summary is not a complete contents listing.
 
 - Offer an explicit JPEG/PNG/static-WebP file-selection fallback on the volatile photo screen. Process files locally with bounded sequential admission, preserve orientation and transparency at browser-canvas precision, disclose possible quality changes, and discard pending results on session or page suspension. Photos remain unsaved and are never uploaded.
 

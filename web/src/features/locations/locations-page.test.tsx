@@ -14,7 +14,7 @@ import { notifyPageSuspended } from '@/lib/session-lifecycle'
 
 vi.mock('@/lib/api/client', async (original) => ({ ...await original<typeof import('@/lib/api/client')>(), fetchHealth: vi.fn().mockResolvedValue({ status: 'ok' }) }))
 vi.mock('@/lib/api/auth', async (original) => ({ ...await original<typeof import('@/lib/api/auth')>(), fetchAdmin: vi.fn(), fetchCSRF: vi.fn(), login: vi.fn() }))
-vi.mock('@/lib/api/locations', async (original) => ({ ...await original<typeof import('@/lib/api/locations')>(), fetchLocation: vi.fn(), fetchLocationSummary: vi.fn(), fetchLocationsPage: vi.fn(), createLocation: vi.fn(), patchLocation: vi.fn(), moveLocation: vi.fn(), archiveLocation: vi.fn(), deleteLocation: vi.fn() }))
+vi.mock('@/lib/api/locations', async (original) => ({ ...await original<typeof import('@/lib/api/locations')>(), fetchLocation: vi.fn(), fetchLocationContents: vi.fn(), fetchLocationSummary: vi.fn(), fetchLocationsPage: vi.fn(), createLocation: vi.fn(), patchLocation: vi.fn(), moveLocation: vi.fn(), archiveLocation: vi.fn(), deleteLocation: vi.fn() }))
 const text = messages.locations
 const root: api.Location = { id: 'room', name: '書房', code: 'ROOM-1', revision: 3, parent_id: null, kind: 'room', sort_order: -2, description: '房間說明', status: 'active' }
 const child: api.Location = { ...root, id: 'box', name: '收納箱', code: 'BOX-1', parent_id: 'room', revision: 1, kind: '防潮容器', sort_order: 0, description: '' }
@@ -38,6 +38,11 @@ beforeEach(() => {
   vi.mocked(auth.login).mockReset().mockImplementation(async () => { administrator = { id: 'admin', revision: 2, username: 'owner', must_change_password: false }; return administrator })
   vi.mocked(api.fetchLocationsPage).mockReset().mockImplementation(async () => ({ data: Array.from(records.values()), next_cursor: null }))
   vi.mocked(api.fetchLocation).mockReset().mockImplementation(async (id) => { const record = records.get(id); if (!record) throw new ApiError('NOT_FOUND', { status: 404 }); return record })
+  vi.mocked(api.fetchLocationContents).mockReset().mockImplementation(async (id, query) => {
+    const record = records.get(id)
+    if (!record) throw new ApiError('NOT_FOUND', { status: 404 })
+    return { revision: record.revision, value: { location_id: id, scope: query.scope ?? 'subtree', units: [], stock: [], sub_locations: [], next_cursor: null } }
+  })
   vi.mocked(api.fetchLocationSummary).mockReset().mockImplementation(async (id) => {
     const record = records.get(id)
     if (!record) throw new ApiError('NOT_FOUND', { status: 404 })
@@ -90,6 +95,18 @@ async function confirm(user: ReturnType<typeof userEvent.setup>, label: string) 
   await screen.findByText(text.done, { exact: true })
   await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
 }
+
+it('opens the live contents from a completed-session Location detail without writes', async () => {
+  const user = userEvent.setup()
+  mount('/locations/room')
+  const panel = await screen.findByRole('region', { name: text.contentsTitle })
+  await waitFor(() => expect(within(panel).getByRole('button', { name: text.contentsOpen })).toHaveAttribute('aria-disabled', 'false'))
+  expect(api.fetchLocationContents).not.toHaveBeenCalled()
+  await user.click(within(panel).getByRole('button', { name: text.contentsOpen }))
+  expect(await within(panel).findByText(text.contentsEmpty)).toBeVisible()
+  expect(api.fetchLocationContents).toHaveBeenCalledWith('room', { scope: 'subtree', limit: 20 }, expect.any(AbortSignal))
+  expect(api.createLocation).not.toHaveBeenCalled(); expect(auth.fetchCSRF).not.toHaveBeenCalled()
+})
 
 it('shows current direct and subtree physical summary without mixing base units', async () => {
   mount('/locations/room')
