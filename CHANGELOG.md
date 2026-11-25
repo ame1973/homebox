@@ -31,6 +31,8 @@
 
 ### Added
 
+- Bind search-proof signing to an independent immutable server-key marker, with no guessed marker for old changes or unknown proof rows. Reject missing or changed pinned keys and late dependency injection; this private key check neither authenticates source nor enables search synchronization.
+
 - Add initially empty private storage for search-change proof bytes, tied to retained search upserts. Updates, replacements and direct deletion while the parent remains are rejected; pruning the parent cascades to its proof. No historical proof is invented; a stored row alone does not establish reviewed origin or enable synchronization.
 
 - Bind a frozen search payload's exact server instance, epoch, identity, sequence, revision and bytes with a private, domain-separated server-secret HMAC. This internal primitive does not validate reviewed origin, store provenance or enable synchronization.

@@ -192,6 +192,15 @@ func (s *Store) migrate(ctx context.Context, cfg Config, all []migrations.Migrat
 			return report, fmt.Errorf("validate new search proof storage: %w", ErrDomainState)
 		}
 	}
+	if version < 27 && len(all) >= 27 {
+		var signers int
+		if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM sync_search_signer").Scan(&signers); err != nil {
+			return report, err
+		}
+		if signers != 0 {
+			return report, fmt.Errorf("validate new search signer: %w", ErrDomainState)
+		}
+	}
 	finalVersion, finalLedger, err := history(ctx, tx, all)
 	if err != nil {
 		return report, err

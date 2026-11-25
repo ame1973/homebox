@@ -20,6 +20,7 @@ func (s *Store) loadAuthServerSecret(ctx context.Context) ([]byte, error) {
 	}
 	defer tx.Rollback()
 	var secret []byte
+	initialized := false
 	err = tx.QueryRowContext(ctx, "SELECT key_bytes FROM auth_server_secret WHERE singleton=1").Scan(&secret)
 	if errors.Is(err, sql.ErrNoRows) {
 		var outstanding int
@@ -27,7 +28,8 @@ func (s *Store) loadAuthServerSecret(ctx context.Context) ([]byte, error) {
  (SELECT COUNT(*) FROM sessions WHERE revoked_at IS NULL) +
  (SELECT COUNT(*) FROM auth_reauth_grants) +
  (SELECT COUNT(*) FROM api_idempotency WHERE operation IN ('post_auth_logout','post_auth_password','post_auth_reauth')) +
- (SELECT COUNT(*) FROM auth_keyed_receipt_secret)`).Scan(&outstanding); err != nil {
+ (SELECT COUNT(*) FROM auth_keyed_receipt_secret) + (SELECT COUNT(*) FROM sync_search_signer) +
+ (SELECT EXISTS(SELECT 1 FROM sync_search_proofs))`).Scan(&outstanding); err != nil {
 			return nil, err
 		}
 		if outstanding != 0 {
@@ -44,14 +46,28 @@ func (s *Store) loadAuthServerSecret(ctx context.Context) ([]byte, error) {
 		if _, err = appendAuthAudit(ctx, tx, "auth_key_initialized", nil, now); err != nil {
 			return nil, err
 		}
+		initialized = true
 	} else if err != nil {
 		return nil, err
 	}
 	if len(secret) != sha256.Size {
 		return nil, ErrAuthState
 	}
-	if _, err = verifyKeyedReceiptSecret(ctx, tx, secret); err != nil {
+	if _, err = verifySyncSearchSigner(ctx, tx, secret); err != nil {
 		return nil, err
+	}
+	// The key-initialization audit can trigger SQL writes after the initial
+	// dependency check. It must not assign a new key to late search state.
+	if initialized {
+		var searchDependencies int
+		if err = tx.QueryRowContext(ctx, `SELECT
+ (SELECT EXISTS(SELECT 1 FROM sync_search_signer)) +
+ (SELECT EXISTS(SELECT 1 FROM sync_search_proofs))`).Scan(&searchDependencies); err != nil {
+			return nil, err
+		}
+		if searchDependencies != 0 {
+			return nil, ErrAuthState
+		}
 	}
 	if err = tx.Commit(); err != nil {
 		return nil, err

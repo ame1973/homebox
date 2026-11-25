@@ -82,7 +82,7 @@ func (a *Auth) readSyncDeltaPage(ctx context.Context, token, cursor string, limi
 	if err = finishDomainSession(ctx, a, tx, token, session); err != nil {
 		return syncDeltaPage{}, err
 	}
-	if _, err = verifyKeyedReceiptSecret(ctx, tx, a.serverSecret); err != nil {
+	if _, err = verifySyncSearchSigner(ctx, tx, a.serverSecret); err != nil {
 		return syncDeltaPage{}, err
 	}
 	dataset, err := readSyncDataset(ctx, tx)
