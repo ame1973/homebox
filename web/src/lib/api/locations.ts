@@ -50,7 +50,7 @@ function rawMovementKeys(value: unknown): boolean {
 }
 // SQLite BINARY order compares UTF-8 bytes. JavaScript's native string order
 // compares UTF-16 units and differs for supplementary versus high BMP values.
-function orderedUTF8(left: string, right: string): boolean {
+export function orderedUTF8(left: string, right: string): boolean {
   const encoder = new TextEncoder(), a = encoder.encode(left), b = encoder.encode(right)
   for (let index = 0; index < Math.min(a.length, b.length); index++) {
     if (a[index] !== b[index]) return a[index]! < b[index]!
