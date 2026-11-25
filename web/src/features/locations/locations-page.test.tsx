@@ -14,7 +14,7 @@ import { notifyPageSuspended } from '@/lib/session-lifecycle'
 
 vi.mock('@/lib/api/client', async (original) => ({ ...await original<typeof import('@/lib/api/client')>(), fetchHealth: vi.fn().mockResolvedValue({ status: 'ok' }) }))
 vi.mock('@/lib/api/auth', async (original) => ({ ...await original<typeof import('@/lib/api/auth')>(), fetchAdmin: vi.fn(), fetchCSRF: vi.fn(), login: vi.fn() }))
-vi.mock('@/lib/api/locations', async (original) => ({ ...await original<typeof import('@/lib/api/locations')>(), fetchLocation: vi.fn(), fetchLocationContents: vi.fn(), fetchLocationSummary: vi.fn(), fetchLocationsPage: vi.fn(), createLocation: vi.fn(), patchLocation: vi.fn(), moveLocation: vi.fn(), archiveLocation: vi.fn(), deleteLocation: vi.fn() }))
+vi.mock('@/lib/api/locations', async (original) => ({ ...await original<typeof import('@/lib/api/locations')>(), fetchLocation: vi.fn(), fetchLocationContents: vi.fn(), fetchLocationMovements: vi.fn(), fetchLocationSummary: vi.fn(), fetchLocationsPage: vi.fn(), createLocation: vi.fn(), patchLocation: vi.fn(), moveLocation: vi.fn(), archiveLocation: vi.fn(), deleteLocation: vi.fn() }))
 const text = messages.locations
 const root: api.Location = { id: 'room', name: '書房', code: 'ROOM-1', revision: 3, parent_id: null, kind: 'room', sort_order: -2, description: '房間說明', status: 'active' }
 const child: api.Location = { ...root, id: 'box', name: '收納箱', code: 'BOX-1', parent_id: 'room', revision: 1, kind: '防潮容器', sort_order: 0, description: '' }
@@ -42,6 +42,11 @@ beforeEach(() => {
     const record = records.get(id)
     if (!record) throw new ApiError('NOT_FOUND', { status: 404 })
     return { revision: record.revision, value: { location_id: id, scope: query.scope ?? 'subtree', units: [], stock: [], sub_locations: [], next_cursor: null } }
+  })
+  vi.mocked(api.fetchLocationMovements).mockReset().mockImplementation(async (id) => {
+    const record = records.get(id)
+    if (!record) throw new ApiError('NOT_FOUND', { status: 404 })
+    return { revision: record.revision, value: { location_id: id, deleted: false, data: [], next_cursor: null } }
   })
   vi.mocked(api.fetchLocationSummary).mockReset().mockImplementation(async (id) => {
     const record = records.get(id)
@@ -95,6 +100,36 @@ async function confirm(user: ReturnType<typeof userEvent.setup>, label: string) 
   await screen.findByText(text.done, { exact: true })
   await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
 }
+
+it('opens a retained deleted owner from the location list without treating the live tree as its authority', async () => {
+  const id = 'deleted/location\0😀', user = userEvent.setup()
+  vi.mocked(api.fetchLocationMovements).mockResolvedValueOnce({ revision: 5, value: { location_id: id, deleted: true, data: [], next_cursor: null } })
+  mount('/locations')
+  const lookup = await screen.findByRole('region', { name: text.movementLookupTitle })
+  await user.click(within(lookup).getByRole('radio', { name: text.movementLookupJSON }))
+  fireEvent.change(within(lookup).getByRole('textbox', { name: text.movementLookupID }), { target: { value: JSON.stringify(id) } })
+  const choose = within(lookup).getByRole('button', { name: text.movementLookupChoose })
+  await waitFor(() => expect(choose).toHaveAttribute('aria-disabled', 'false'))
+  await user.click(choose)
+  const panel = within(lookup).getByRole('region', { name: text.movementsTitle })
+  await user.click(within(panel).getByRole('button', { name: text.movementsOpen }))
+  expect(await within(panel).findByText(text.movementsDeleted)).toBeVisible()
+  expect(api.fetchLocationMovements).toHaveBeenCalledWith(id, { limit: 20 }, expect.any(AbortSignal))
+  expect(api.fetchLocation).not.toHaveBeenCalled(); expect(auth.fetchCSRF).not.toHaveBeenCalled()
+})
+
+it('opens retained parent-change history from a completed-session Location detail without writes', async () => {
+  const user = userEvent.setup()
+  mount('/locations/room')
+  const panel = await screen.findByRole('region', { name: text.movementsTitle })
+  expect(screen.getByText('"room"', { exact: true })).toBeVisible()
+  await waitFor(() => expect(within(panel).getByRole('button', { name: text.movementsOpen })).toHaveAttribute('aria-disabled', 'false'))
+  expect(api.fetchLocationMovements).not.toHaveBeenCalled()
+  await user.click(within(panel).getByRole('button', { name: text.movementsOpen }))
+  expect(await within(panel).findByText(text.movementsEmpty)).toBeVisible()
+  expect(api.fetchLocationMovements).toHaveBeenCalledWith('room', { limit: 20 }, expect.any(AbortSignal))
+  expect(api.createLocation).not.toHaveBeenCalled(); expect(auth.fetchCSRF).not.toHaveBeenCalled()
+})
 
 it('opens the live contents from a completed-session Location detail without writes', async () => {
   const user = userEvent.setup()

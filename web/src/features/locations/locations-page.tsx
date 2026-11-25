@@ -11,6 +11,7 @@ import { fetchLocation } from '@/lib/api/locations'
 import { locationReturnPath, locationRoute } from '@/lib/location-navigation'
 import { mediaOwnerRoute } from '@/lib/media-navigation'
 import { messages } from '@/lib/messages'
+import { quoteExactText } from '@/lib/text-literal'
 import { useOnline } from '@/lib/use-online'
 import { clearSessionQueries } from '@/features/auth/use-auth-action'
 import { LocationActions } from './actions'
@@ -19,6 +20,8 @@ import { LocationEditor } from './editor'
 import { isKnownKind } from './form'
 import { LocationError } from './location-error'
 import { LocationContentsPanel } from './location-contents-panel'
+import { LocationMovementLookup } from './location-movement-lookup'
+import { LocationMovementsPanel } from './location-movements-panel'
 import { LocationSummaryPanel } from './location-summary-panel'
 import { LocationMutationNotice, LocationReviewDialog } from './review-dialog'
 import { readLocationTree } from './tree'
@@ -85,9 +88,12 @@ export default function LocationsPage({ mode }: { mode: Mode }) {
   async function readCurrent() {
     return Promise.all([auth.refetch(), treeQuery.refetch(), ...(needRecord ? [recordQuery.refetch()] : [])])
   }
-  async function revalidateLocation(): Promise<boolean> {
+  async function revalidateSession(): Promise<boolean> {
     const session = await auth.refetch()
-    if (session.isError || !session.data || session.data.must_change_password || !navigator.onLine) return false
+    return !session.isError && !!session.data && !session.data.must_change_password && navigator.onLine
+  }
+  async function revalidateLocation(): Promise<boolean> {
+    if (!await revalidateSession()) return false
     const [freshTree, freshRecord] = await Promise.all([treeQuery.refetch(), recordQuery.refetch()])
     return !freshTree.isError && !freshRecord.isError && !!freshRecord.data && freshTree.data?.byID.get(id)?.revision === freshRecord.data.revision
   }
@@ -137,12 +143,15 @@ export default function LocationsPage({ mode }: { mode: Mode }) {
                     <section className="min-w-0 space-y-6" aria-labelledby="location-detail-title">
                       <div className="flex flex-wrap items-center justify-between gap-3"><h2 id="location-detail-title" className="text-xl font-semibold">{text.detail}</h2>{canWrite ? <Button asChild className={control}><Link to={locationRoute(record.id, 'edit')}>{text.edit}</Link></Button> : <Button disabled className={control}>{text.edit}</Button>}</div>
                       <dl className="space-y-4 rounded-lg border bg-card p-5">
-                        {[[text.status, record.status === 'active' ? text.active : text.archived], [text.kind, isKnownKind(record.kind) ? text.kinds[record.kind] : record.kind], [text.sortOrder, String(record.sort_order)], [text.version, String(record.revision)], [text.description, record.description || text.emptyValue]].map(([label, value]) => <div key={label} className="space-y-1"><dt className="text-sm text-muted-foreground">{label}</dt><dd className="whitespace-pre-wrap text-base leading-relaxed [overflow-wrap:anywhere]">{value}</dd></div>)}
+                        {[[text.movementsOwner, quoteExactText(record.id)], [text.status, record.status === 'active' ? text.active : text.archived], [text.kind, isKnownKind(record.kind) ? text.kinds[record.kind] : record.kind], [text.sortOrder, String(record.sort_order)], [text.version, String(record.revision)], [text.description, record.description || text.emptyValue]].map(([label, value]) => <div key={label} className="space-y-1"><dt className="text-sm text-muted-foreground">{label}</dt><dd className="whitespace-pre-wrap text-base leading-relaxed [overflow-wrap:anywhere]">{value}</dd></div>)}
                       </dl>
                       <LocationSummaryPanel key={`summary:${record.id}`} id={record.id} revision={record.revision} online={online} checked={authorized && auth.isFetchedAfterMount}
                         checking={isReading} invalid={!!readError || inconsistentRecord} revalidate={revalidateLocation}
                         onSessionLost={(mandatory) => { allowNavigation(); sessionLost(mandatory) }} />
                       <LocationContentsPanel key={`contents:${record.id}`} id={record.id} revision={record.revision} online={online} checked={authorized && auth.isFetchedAfterMount}
+                        checking={isReading} invalid={!!readError || inconsistentRecord} revalidate={revalidateLocation}
+                        onSessionLost={(mandatory) => { allowNavigation(); sessionLost(mandatory) }} />
+                      <LocationMovementsPanel key={`movements:${record.id}`} id={record.id} revision={record.revision} online={online} checked={authorized && auth.isFetchedAfterMount}
                         checking={isReading} invalid={!!readError || inconsistentRecord} revalidate={revalidateLocation}
                         onSessionLost={(mandatory) => { allowNavigation(); sessionLost(mandatory) }} />
                       <Button asChild variant="outline" className={control}><Link to={mediaOwnerRoute({ kind: 'location', id: record.id })}>{messages.media.nav}</Link></Button>
@@ -160,5 +169,7 @@ export default function LocationsPage({ mode }: { mode: Mode }) {
               {treeQuery.dataUpdatedAt > 0 && <p className="text-sm text-muted-foreground">{text.readAt}：{new Intl.DateTimeFormat('zh-TW', { dateStyle: 'short', timeStyle: 'short' }).format(treeQuery.dataUpdatedAt)}</p>}
               <LocationReviewDialog operation={operation} tree={tree} online={online} onReadCurrent={readCurrent} />
             </>}
+    {mode === 'list' && authorized && <LocationMovementLookup online={online} checked={auth.isFetchedAfterMount} checking={auth.isFetching} invalid={auth.isError}
+      revalidate={revalidateSession} onSessionLost={(mandatory) => { allowNavigation(); sessionLost(mandatory) }} />}
   </div>
 }
