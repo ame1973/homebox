@@ -16,12 +16,18 @@ type Record = components['schemas']['DisposalRecord']
 type History = components['schemas']['DisposalCorrectionList']
 test.use({ trace: 'off', screenshot: 'off', video: 'off' })
 
-async function seed(page: Page, origin: string, name = '財務處置實際個體', note = '原始處置紀錄') {
-  const created = await page.request.post('/api/v1/items', { headers: await writeContext(page, origin), data: { name } }); expect(created.status()).toBe(200); const item: Item = await created.json()
-  const physical = await page.request.post(`/api/v1/items/${item.id}/units`, { headers: await writeContext(page, origin, item.revision), data: { location_id: null, notes: 'Physical source remains unchanged' } }); expect(physical.status()).toBe(200); const unit: Unit = await physical.json()
+async function seedSource(page: Page, origin: string, name = '財務處置實際個體', note = '原始處置紀錄') {
+  const first = await writeContext(page, origin)
+  const next = (revision: number) => ({ ...first, 'Idempotency-Key': crypto.randomUUID(), 'If-Match': JSON.stringify(String(revision)) })
+  const created = await page.request.post('/api/v1/items', { headers: first, data: { name } }); expect(created.status()).toBe(200); const item: Item = await created.json()
+  const physical = await page.request.post(`/api/v1/items/${item.id}/units`, { headers: next(item.revision), data: { location_id: null, notes: 'Physical source remains unchanged' } }); expect(physical.status()).toBe(200); const unit: Unit = await physical.json()
   const owner: Item = await (await page.request.get(`/api/v1/items/${item.id}`)).json()
-  const profile = await page.request.put(`/api/v1/units/${unit.id}/asset`, { headers: await writeContext(page, origin, unit.revision), data: { item_revision: owner.revision, asset_revision: null, cost_basis: 'manual', currency: 'JPY', manual_acquisition_minor: 100, in_service_at: null, retired_at: null, estimated_residual_minor: 30, usage_unit: 'times' } }); expect(profile.status()).toBe(200)
-  const disposal = await page.request.post(`/api/v1/units/${unit.id}/disposal`, { headers: await writeContext(page, origin, 1), data: { unit_revision: unit.revision, kind: 'sold', currency: 'JPY', realized_proceeds_minor: 200, disposed_at: instant, note } }); expect(disposal.status()).toBe(200)
+  const profile = await page.request.put(`/api/v1/units/${unit.id}/asset`, { headers: next(unit.revision), data: { item_revision: owner.revision, asset_revision: null, cost_basis: 'manual', currency: 'JPY', manual_acquisition_minor: 100, in_service_at: null, retired_at: null, estimated_residual_minor: 30, usage_unit: 'times' } }); expect(profile.status()).toBe(200)
+  const disposal = await page.request.post(`/api/v1/units/${unit.id}/disposal`, { headers: next(1), data: { unit_revision: unit.revision, kind: 'sold', currency: 'JPY', realized_proceeds_minor: 200, disposed_at: instant, note } }); expect(disposal.status()).toBe(200)
+  return { item, unit }
+}
+async function seed(page: Page, origin: string, name?: string, note?: string) {
+  const { item, unit } = await seedSource(page, origin, name, note)
   const retained: Record = await (await page.request.get(`/api/v1/units/${unit.id}/disposal-record`)).json()
   const currentUnit: Unit = await (await page.request.get(`/api/v1/units/${unit.id}`)).json()
   return { item, unit: currentUnit, retained }
@@ -39,7 +45,7 @@ async function confirm(page: Page, label: string, unit: string) {
 
 test('reviews real zero replacement and financial void without changing the physical Unit', async ({ page, application }) => {
   await provision(page, application); const { unit, retained } = await seed(page, application.url), writes = watchDomainWrites(page, ['/api/v1/units', '/api/v1/stock'])
-  await page.goto(`/assets/${unit.id}`); await page.getByRole('link', { name: text.title, exact: true }).click(); await expect(page.getByRole('heading', { name: text.title, exact: true })).toBeVisible()
+  await page.goto(`/assets/${unit.id}/disposal-corrections`); await expect(page.getByRole('heading', { name: text.title, exact: true })).toBeVisible()
   await expect(page.getByText(text.noHistory, { exact: true })).toBeVisible(); await expect(select(page, text.action)).toHaveValue('')
   await select(page, text.action).selectOption('replace'); await input(page, text.reason).fill('更正為明確零元'); await select(page, text.kind).selectOption('donated')
   await expect(input(page, text.proceeds)).toHaveValue(''); await expect(input(page, text.disposedAt)).toHaveValue(''); await page.getByRole('button', { name: text.review, exact: true }).click(); await expect(input(page, text.proceeds)).toBeFocused(); expect(writes).toHaveLength(0)
@@ -101,7 +107,7 @@ test('keeps an uncertain committed original command available after current-sour
 })
 
 test('keeps a volatile offline draft but preserves only safe scope through actual login', async ({ page, application }) => {
-  const password = await provision(page, application); const { unit } = await seed(page, application.url), writes = watchDomainWrites(page, ['/api/v1/units'])
+  const password = await provision(page, application); const { unit } = await seedSource(page, application.url), writes = watchDomainWrites(page, ['/api/v1/units'])
   await page.goto('/assets?currency=JPY&limit=1'); await page.getByRole('link', { name: `${assetText.identifier}：${unit.id}`, exact: true }).click(); await page.getByRole('link', { name: text.title, exact: true }).click()
   await select(page, text.action).selectOption('void'); await input(page, text.reason).fill('不應進入登入返回狀態')
   await page.context().setOffline(true); await expect(page.getByText(text.offline, { exact: true })).toBeVisible(); await expect(input(page, text.reason)).toHaveValue('不應進入登入返回狀態'); await expect(page.getByRole('button', { name: text.review, exact: true })).toBeDisabled()
