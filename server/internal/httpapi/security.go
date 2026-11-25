@@ -15,6 +15,13 @@ import (
 const sessionCookieName = "homebox_session"
 const supportedClientVersion = "0.1.0"
 
+// The exact list is used by write admission and can be advertised by a future
+// version handshake; it is not a minimum version range. Return a fresh slice so
+// callers cannot change the policy.
+func supportedWriteClientVersions() []string {
+	return []string{supportedClientVersion, supportedClientVersion + "-dev"}
+}
+
 var errRequestOrigin = errors.New("request does not match the configured application origin")
 
 // PublicOrigin is fixed by the operator, never learned from request/proxy headers.

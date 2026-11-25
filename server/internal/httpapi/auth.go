@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -210,7 +211,7 @@ func (a *authAPI) writeCredentials(w http.ResponseWriter, r *http.Request, reque
 		return "", "", false
 	}
 	versions := r.Header.Values("X-HomeBox-Client-Version")
-	if len(versions) != 1 || versions[0] != supportedClientVersion && versions[0] != supportedClientVersion+"-dev" {
+	if len(versions) != 1 || !slices.Contains(supportedWriteClientVersions(), versions[0]) {
 		writeError(w, http.StatusUpgradeRequired, "CLIENT_UPGRADE_REQUIRED", "Reload the application before sending this write.", requestID)
 		return "", "", false
 	}
