@@ -228,11 +228,13 @@ test('rejects an actual over-limit File before creating a worker', async ({ page
 })
 
 test('does not steal focus after the user clicks outside during processing', async ({ page, application }) => {
-  await installProbe(page); await openCapture(page, application)
+  await installProbe(page)
+  // Enable Playwright's browser interception before the keyboard gesture.
+  const chooser = page.waitForEvent('filechooser')
+  await openCapture(page, application)
   await page.evaluate(() => { window.__captureFileProbe.holdWorker = true })
   const input = page.getByLabel(text.fileInput)
   await input.focus(); await expect(input).toBeFocused()
-  const chooser = page.waitForEvent('filechooser')
   await page.keyboard.press('Enter')
   await (await chooser).setFiles(file('private.png', 'image/png', png))
   await expect.poll(() => page.evaluate(() => window.__captureFileProbe.workerHeld)).toBe(true)
@@ -322,7 +324,10 @@ for (const mode of ['worker', 'decode', 'encode'] as const) test(`redacts an imp
 })
 
 test('keeps the picker, errors and imported album accessible at 320px and 200% text in both themes', async ({ page, application }) => {
-  await installProbe(page); await openCapture(page, application)
+  await installProbe(page)
+  // Enable Playwright's browser interception before the keyboard gesture.
+  const chooser = page.waitForEvent('filechooser')
+  await openCapture(page, application)
   await page.setViewportSize({ width: 320, height: 568 })
   await page.locator('html').evaluate((element) => { element.style.fontSize = '200%' })
   const input = page.getByLabel(text.fileInput)
@@ -339,7 +344,6 @@ test('keeps the picker, errors and imported album accessible at 320px and 200% t
     expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze()).violations).toEqual([])
   }
   await input.focus(); await expect(input).toBeFocused()
-  const chooser = page.waitForEvent('filechooser')
   await page.keyboard.press('Enter')
   await (await chooser).setFiles(file('PRIVATE-name.png', 'image/png', png))
   await expect(page.getByRole('img', { name: text.preview })).toBeVisible()
