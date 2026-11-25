@@ -501,6 +501,28 @@ export const messages = {
     offline: '目前離線，不能送出財務更正', leaveTitle: '要離開尚未完成的財務更正嗎？', leaveHelp: '輸入與原請求只留在本頁。停止等候不代表伺服器已取消；離開後仍需核對目前資料。', stay: '留在此頁', leave: '放棄此畫面並離開',
   },
   theme: { label: '外觀', system: '跟隨系統', light: '淺色', dark: '深色' },
+  shell: {
+    label: '公開頁面快取', check: '檢查頁面版本', prepare: '準備頁面快取', prepareUpdate: '準備頁面更新', retry: '重新準備頁面快取',
+    busy: '正在檢查頁面版本…', busyInstall: '正在準備頁面快取…',
+    phases: {
+      checking: '正在檢查公開頁面快取', installing: '正在準備公開頁面快取', ready: '公開頁面背景程式已啟用',
+      available: '頁面更新可供準備', waiting: '頁面更新已準備，等待啟用', outdated: '目前頁面不是伺服器的最新版本',
+      missing: '尚未準備公開頁面快取', error: '無法檢查或準備公開頁面快取', foreign: '無法確認網站已有的背景程式',
+      unsupported: '目前無法安全準備公開頁面快取', paused: '頁面快取檢查已暫停',
+    },
+    help: {
+      checking: '只檢查公開介面，不會修改物品資料。', installing: '只準備公開介面，不會送出物品變更。',
+      ready: '首次安裝後，下一次開啟的頁面才會受背景程式控制；快取可能被瀏覽器清除，離線資料、照片與草稿尚未提供。',
+      available: '先保存所有分頁尚未完成的操作。準備後不會強制重新載入；關閉所有 HomeBox 分頁再開啟，更新才可啟用。',
+      waiting: '更新不會強制重新載入。請先保存所有分頁尚未完成的操作，再關閉所有 HomeBox 分頁並重新開啟。',
+      outdated: '請先保存所有未完成的操作，再重新開啟頁面確認更新；舊頁面不會取代背景程式。',
+      missing: '可明確準備公開介面；離線資料與草稿尚未提供。',
+      error: '請確認伺服器連線後明確重試；不會自動送出物品變更。',
+      foreign: '不會取代已有的背景程式；請先確認此網站的背景程式，再重新檢查。',
+      unsupported: '需要完整的應用程式建置、安全連線，以及支援 Service Worker 和 Web Locks 的瀏覽器；線上功能不受影響。',
+      paused: '返回畫面後會重新檢查；不會因此自動送出物品變更。',
+    },
+  },
   connectivityIndicator: {
     label: '登入連線檢查', account: '重新確認帳號',
     help: '這是最近一次連線檢查，不代表離線資料完整，也不會自動送出變更。',

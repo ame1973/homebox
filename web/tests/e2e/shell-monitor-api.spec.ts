@@ -31,10 +31,23 @@ const test = applicationTest.extend<{}, { applicationWebDirectory: string }>({
 })
 
 test.use({ launchOptions: { channel: 'chromium', ignoreDefaultArgs: ['--disable-back-forward-cache'] }, trace: 'off', screenshot: 'off', video: 'off' })
+test.beforeEach(async ({ context }) => {
+  // Disable only the mounted coordinator; the private SDK restores the real
+  // browser lock before its own explicitly controlled test instance starts.
+  await context.addInitScript(() => {
+    const locks = navigator.locks
+    Object.defineProperty(navigator, 'locks', { configurable: true, value: undefined })
+    ;(window as Window & { __restoreShellLocks?: () => void }).__restoreShellLocks = () => {
+      Object.defineProperty(navigator, 'locks', { configurable: true, value: locks })
+    }
+  })
+})
 
 type BrowserMonitor = { states: { phase: string; busy: boolean }[]; check: () => boolean; prepare: () => boolean; stop: () => void }
 async function start(page: Page) {
+  await expect(page.getByLabel(messages.shell.label).getByText(messages.shell.phases.unsupported)).toBeVisible()
   await page.evaluate(async () => {
+    ;(window as Window & { __restoreShellLocks?: () => void }).__restoreShellLocks?.()
     const module = '/assets/shell-monitor-sdk.js', sdk = await import(module)
     const states: { phase: string; busy: boolean }[] = []
     const monitor = sdk.monitorShell((value: { phase: string; busy: boolean }) => { states.push(value) })

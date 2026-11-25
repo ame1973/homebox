@@ -9,6 +9,10 @@ import { test as applicationTest, expect } from './auth-fixture.ts'
 import { provision, watchDomainWrites, writeContext } from './domain-helpers.ts'
 
 applicationTest.use({ trace: 'off', screenshot: 'off', video: 'off' })
+applicationTest.beforeEach(async ({ context }) => {
+  // These cases register workers themselves to isolate the low-level worker.
+  await context.addInitScript(() => { Object.defineProperty(navigator, 'locks', { configurable: true, value: undefined }) })
+})
 
 async function registerShell(page: Page) {
   return page.evaluate(async () => {

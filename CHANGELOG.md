@@ -33,15 +33,17 @@
 
 ### Added
 
-- Coordinate a verified public-shell registration across cooperative browser tabs, withholding stale or foreign registrations and waiting for explicit update preparation. This internal coordinator is not yet connected to the application interface.
+- Show public-shell status throughout the application, automatically prepare only an eligible first installation, and require explicit preparation of later versions. Updates wait for old controlled tabs to close without forced reloads; the offline replica, persistent drafts and API compatibility handshake remain unfinished.
+
+- Coordinate a verified public-shell registration across cooperative browser tabs, withholding stale or foreign registrations and waiting for explicit update preparation. The shell status interface now uses this coordinator.
 
 - Validate the public shell descriptor in a bounded, cookie-free browser read with caller cancellation; this internal reader does not register or update a worker.
 
 - Publish a network-only, non-cacheable public shell version descriptor alongside the generated worker and HTML. This is not an API compatibility handshake or an atomic deployment guarantee.
 
-- Build an integrity-checked public shell worker with bounded, credential-free asset installation, network-only private requests and update waiting. It is not yet registered by the application and does not enable offline replicas or drafts.
+- Build an integrity-checked public shell worker with bounded, credential-free asset installation, network-only private requests and update waiting. The shell does not enable offline replicas or drafts.
 
-- Advertise a stable same-origin web app manifest with scalable and device-sized icons, including maskable artwork, and serve manifests with the correct media type independently of the host MIME database. Installation remains browser-dependent; offline startup, replicas and service-worker updates are not yet available.
+- Advertise a stable same-origin web app manifest with scalable and device-sized icons, including maskable artwork, and serve manifests with the correct media type independently of the host MIME database. Installation remains browser-dependent and the manifest alone does not provide offline data.
 
 - Locate current or missing Item/Unit search projections in private live pages with actual source, counter and lookahead validation. Scope continuations to the observed dataset and revisions; these pages do not certify full coverage or enable public sync.
 

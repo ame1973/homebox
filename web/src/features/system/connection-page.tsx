@@ -15,9 +15,9 @@ export default function ConnectionPage() {
   const tone = { pending: 'text-muted-foreground', error: 'text-destructive', degraded: 'text-warning', ok: 'text-success' }[state]
   const help = state === 'ok' ? text.okHelp : state === 'degraded' ? text.degradedHelp : text.errorHelp
   return (
-    <div className="grid items-start gap-8 py-8 md:grid-cols-2 md:gap-12 md:py-16">
-      <section aria-labelledby="connection-title" className="space-y-5 md:pt-4">
-        <h1 id="connection-title" className="text-3xl leading-snug font-semibold tracking-tight md:text-4xl">{text.title}</h1>
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] items-start gap-8 py-8 md:grid-cols-2 md:gap-12 md:py-16">
+      <section aria-labelledby="connection-title" className="min-w-0 space-y-5 md:pt-4">
+        <h1 id="connection-title" className="text-3xl leading-snug font-semibold tracking-tight [overflow-wrap:anywhere] md:text-4xl">{text.title}</h1>
         <p className="max-w-prose text-base leading-relaxed text-muted-foreground">{text.introduction}</p>
         <p className="flex max-w-prose items-start gap-3 text-sm leading-relaxed text-muted-foreground">
           <ShieldCheck className="mt-0.5 size-5 shrink-0" aria-hidden="true" />{text.privacy}
