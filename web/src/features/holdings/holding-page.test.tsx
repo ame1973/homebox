@@ -12,11 +12,15 @@ import * as locations from '@/lib/api/locations'
 import * as taxonomy from '@/lib/api/taxonomy'
 import { ApiError } from '@/lib/api/client'
 import { messages } from '@/lib/messages'
+import * as qr from '@/lib/qr-label-client'
+import { encodeQRLabel } from '@/lib/qr-label-encode'
+import { makeQRLabelLink } from '@/lib/qr-label-link'
 import { createQueryClient } from '@/lib/query'
 import { buildLocationTree } from '@/features/locations/tree'
 
 vi.mock('@/lib/api/auth', async (original) => ({ ...await original<typeof import('@/lib/api/auth')>(), fetchAdmin: vi.fn(), fetchCSRF: vi.fn(), login: vi.fn() }))
 vi.mock('@/lib/api/catalog', async (original) => ({ ...await original<typeof import('@/lib/api/catalog')>(), fetchItem: vi.fn(), fetchItemsPage: vi.fn() }))
+vi.mock('@/lib/qr-label-client', () => ({ prepareQRLabel: vi.fn() }))
 vi.mock('@/lib/api/holdings', async (original) => ({ ...await original<typeof import('@/lib/api/holdings')>(), fetchUnit: vi.fn(), fetchItemUnitsPage: vi.fn(), fetchStockPage: vi.fn(), createUnit: vi.fn(), patchUnit: vi.fn(), moveUnit: vi.fn(), setUnitStatus: vi.fn(), deleteUnit: vi.fn(), receiveStock: vi.fn(), consumeStock: vi.fn(), transferStock: vi.fn(), adjustStock: vi.fn() }))
 vi.mock('@/lib/api/locations', async (original) => ({ ...await original<typeof import('@/lib/api/locations')>(), fetchLocationsPage: vi.fn() }))
 vi.mock('@/lib/api/taxonomy', async (original) => ({ ...await original<typeof import('@/lib/api/taxonomy')>(), fetchCategoriesPage: vi.fn() }))
@@ -62,6 +66,10 @@ beforeEach(() => {
   vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
   vi.mocked(auth.fetchAdmin).mockReset().mockImplementation(async () => { if (!administrator) throw new ApiError('AUTHENTICATION_REQUIRED', { status: 401 }); return administrator })
   vi.mocked(auth.fetchCSRF).mockReset().mockResolvedValue('C'.repeat(43))
+  vi.mocked(qr.prepareQRLabel).mockReset().mockImplementation(async (kind, id, origin) => {
+    const matrix = encodeQRLabel(kind, id, origin)
+    return { kind: 'ready', link: makeQRLabelLink(kind, id, origin), size: matrix.size, modules: matrix.modules }
+  })
   vi.mocked(auth.login).mockReset().mockImplementation(async () => { administrator = { id: 'owner', username: 'owner', revision: 2, must_change_password: false }; return administrator })
   vi.mocked(catalog.fetchItem).mockReset().mockImplementation(async (id) => { const current = items.get(id); if (!current) throw new ApiError('NOT_FOUND', { status: 404 }); return { ...current } })
   vi.mocked(catalog.fetchItemsPage).mockReset().mockImplementation(async () => ({ data: [...items.values()], next_cursor: null }))
@@ -99,6 +107,21 @@ async function confirm(label: string) {
 async function refresh(work: ReturnType<typeof mount>) { await act(async () => { await Promise.all([work.client.invalidateQueries({ queryKey: ['holdings'] }), work.client.invalidateQueries({ queryKey: ['locations'] })]) }) }
 function fill(label: string, value: string) { fireEvent.change(field(label), { target: { value } }) }
 function select(label: string, value: string) { fireEvent.change(screen.getByRole('combobox', { name: label }), { target: { value } }) }
+
+it('opens an individual Unit QR only after explicitly checking its actual source', async () => {
+  const user = userEvent.setup()
+  mount('/units/unit')
+  const panel = await screen.findByRole('region', { name: messages.qr.title })
+  const button = within(panel).getByRole('button', { name: messages.qr.create })
+  await waitFor(() => expect(button).toHaveAttribute('aria-disabled', 'false'))
+  const reads = vi.mocked(api.fetchUnit).mock.calls.length
+  expect(qr.prepareQRLabel).not.toHaveBeenCalled()
+  await user.click(button)
+  expect(await within(panel).findByRole('img', { name: messages.qr.unitImage })).toBeVisible()
+  expect(within(panel).getByText(`${window.location.origin}/u/unit`)).toBeVisible()
+  expect(vi.mocked(api.fetchUnit).mock.calls.length).toBe(reads + 2)
+  expect(auth.fetchCSRF).not.toHaveBeenCalled(); expect(api.createUnit).not.toHaveBeenCalled()
+})
 
 it('completes all 205 Unit pages and retains imported new identifiers and scoped catalog returns', async () => {
   units = new Map(Array.from({ length: 205 }, (_, index) => [`unit-${index}`, { ...unit, id: `unit-${index}`, asset_code: `AST-${index}` }]))

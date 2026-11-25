@@ -10,10 +10,14 @@ import { ApiError } from '@/lib/api/client'
 import * as api from '@/lib/api/locations'
 import { createQueryClient } from '@/lib/query'
 import { messages } from '@/lib/messages'
+import * as qr from '@/lib/qr-label-client'
+import { encodeQRLabel } from '@/lib/qr-label-encode'
+import { makeQRLabelLink } from '@/lib/qr-label-link'
 import { notifyPageSuspended } from '@/lib/session-lifecycle'
 
 vi.mock('@/lib/api/client', async (original) => ({ ...await original<typeof import('@/lib/api/client')>(), fetchHealth: vi.fn().mockResolvedValue({ status: 'ok' }) }))
 vi.mock('@/lib/api/auth', async (original) => ({ ...await original<typeof import('@/lib/api/auth')>(), fetchAdmin: vi.fn(), fetchCSRF: vi.fn(), login: vi.fn() }))
+vi.mock('@/lib/qr-label-client', () => ({ prepareQRLabel: vi.fn() }))
 vi.mock('@/lib/api/locations', async (original) => ({ ...await original<typeof import('@/lib/api/locations')>(), fetchLocation: vi.fn(), fetchLocationContents: vi.fn(), fetchLocationMovements: vi.fn(), fetchLocationSummary: vi.fn(), fetchLocationsPage: vi.fn(), createLocation: vi.fn(), patchLocation: vi.fn(), moveLocation: vi.fn(), archiveLocation: vi.fn(), deleteLocation: vi.fn() }))
 const text = messages.locations
 const root: api.Location = { id: 'room', name: '書房', code: 'ROOM-1', revision: 3, parent_id: null, kind: 'room', sort_order: -2, description: '房間說明', status: 'active' }
@@ -35,6 +39,10 @@ beforeEach(() => {
   vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
   vi.mocked(auth.fetchAdmin).mockReset().mockImplementation(async () => { if (!administrator) throw new ApiError('AUTHENTICATION_REQUIRED', { status: 401 }); return administrator })
   vi.mocked(auth.fetchCSRF).mockReset().mockResolvedValue('C'.repeat(43))
+  vi.mocked(qr.prepareQRLabel).mockReset().mockImplementation(async (kind, id, origin) => {
+    const matrix = encodeQRLabel(kind, id, origin)
+    return { kind: 'ready', link: makeQRLabelLink(kind, id, origin), size: matrix.size, modules: matrix.modules }
+  })
   vi.mocked(auth.login).mockReset().mockImplementation(async () => { administrator = { id: 'admin', revision: 2, username: 'owner', must_change_password: false }; return administrator })
   vi.mocked(api.fetchLocationsPage).mockReset().mockImplementation(async () => ({ data: Array.from(records.values()), next_cursor: null }))
   vi.mocked(api.fetchLocation).mockReset().mockImplementation(async (id) => { const record = records.get(id); if (!record) throw new ApiError('NOT_FOUND', { status: 404 }); return record })
@@ -116,6 +124,21 @@ it('opens a retained deleted owner from the location list without treating the l
   expect(await within(panel).findByText(text.movementsDeleted)).toBeVisible()
   expect(api.fetchLocationMovements).toHaveBeenCalledWith(id, { limit: 20 }, expect.any(AbortSignal))
   expect(api.fetchLocation).not.toHaveBeenCalled(); expect(auth.fetchCSRF).not.toHaveBeenCalled()
+})
+
+it('opens a Location QR only after explicitly checking the current session and source', async () => {
+  const user = userEvent.setup()
+  mount('/locations/room')
+  const panel = await screen.findByRole('region', { name: messages.qr.title })
+  const button = within(panel).getByRole('button', { name: messages.qr.create })
+  await waitFor(() => expect(button).toHaveAttribute('aria-disabled', 'false'))
+  const reads = vi.mocked(api.fetchLocation).mock.calls.length
+  expect(qr.prepareQRLabel).not.toHaveBeenCalled()
+  await user.click(button)
+  expect(await within(panel).findByRole('img', { name: messages.qr.locationImage })).toBeVisible()
+  expect(within(panel).getByText(`${window.location.origin}/l/room`)).toBeVisible()
+  expect(vi.mocked(api.fetchLocation).mock.calls.length).toBe(reads + 2)
+  expect(auth.fetchCSRF).not.toHaveBeenCalled(); expect(api.createLocation).not.toHaveBeenCalled()
 })
 
 it('opens retained parent-change history from a completed-session Location detail without writes', async () => {

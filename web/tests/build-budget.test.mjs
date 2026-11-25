@@ -18,6 +18,7 @@ function fixture(t, { initial = 100, lazy = 100, worker = 100, manifest } = {}) 
   writeFileSync(join(root, 'dist', 'shared.js'), 'shared')
   writeFileSync(join(root, 'dist', 'lazy.js'), randomBytes(lazy))
   writeFileSync(join(root, 'dist', 'assets', 'scan-zxing-worker-test.js'), randomBytes(worker))
+  writeFileSync(join(root, 'dist', 'assets', 'qr-label-worker-test.js'), randomBytes(worker))
   writeFileSync(join(root, 'dist', '.vite', 'manifest.json'), JSON.stringify(manifest ?? {
     'index.html': { file: 'entry.js', isEntry: true, imports: ['shared', 'shared'] },
     shared: { file: 'shared.js' },
@@ -49,6 +50,10 @@ test('rejects a scanner worker in a transitive initial import', (t) => {
     shared: { file: 'shared.js', assets: ['assets/scan-zxing-worker-test.js'] },
   }
   assert.throws(fixture(t, { manifest }), /Scanner worker must stay out of the initial application graph/)
+})
+test('rejects a QR label worker in the initial application graph', (t) => {
+  const manifest = { entry: { file: 'entry.js', isEntry: true, imports: ['shared'] }, shared: { file: 'shared.js', assets: ['assets/qr-label-worker-test.js'] } }
+  assert.throws(fixture(t, { manifest }), /QR label worker must stay out of the initial application graph/)
 })
 test('rejects a missing emitted worker asset', (t) => {
   const manifest = { entry: { file: 'entry.js', isEntry: true }, lazy: { file: 'lazy.js', isDynamicEntry: true, assets: ['assets/missing-worker.js'] } }

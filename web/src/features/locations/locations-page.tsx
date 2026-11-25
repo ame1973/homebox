@@ -14,6 +14,7 @@ import { messages } from '@/lib/messages'
 import { quoteExactText } from '@/lib/text-literal'
 import { useOnline } from '@/lib/use-online'
 import { clearSessionQueries } from '@/features/auth/use-auth-action'
+import { QRLabelPanel } from '@/features/qr/qr-label-panel'
 import { LocationActions } from './actions'
 import { LocationBreadcrumbs } from './breadcrumbs'
 import { LocationEditor } from './editor'
@@ -145,6 +146,9 @@ export default function LocationsPage({ mode }: { mode: Mode }) {
                       <dl className="space-y-4 rounded-lg border bg-card p-5">
                         {[[text.movementsOwner, quoteExactText(record.id)], [text.status, record.status === 'active' ? text.active : text.archived], [text.kind, isKnownKind(record.kind) ? text.kinds[record.kind] : record.kind], [text.sortOrder, String(record.sort_order)], [text.version, String(record.revision)], [text.description, record.description || text.emptyValue]].map(([label, value]) => <div key={label} className="space-y-1"><dt className="text-sm text-muted-foreground">{label}</dt><dd className="whitespace-pre-wrap text-base leading-relaxed [overflow-wrap:anywhere]">{value}</dd></div>)}
                       </dl>
+                      <QRLabelPanel key={`qr:${record.id}:${record.revision}`} kind="location" id={record.id} revision={record.revision} online={online}
+                        checked={authorized && auth.isFetchedAfterMount && treeQuery.isFetchedAfterMount && recordQuery.isFetchedAfterMount}
+                        checking={isReading} invalid={!!readError || inconsistentRecord || transitioning} onSessionLost={(mandatory) => { allowNavigation(); sessionLost(mandatory) }} />
                       <LocationSummaryPanel key={`summary:${record.id}`} id={record.id} revision={record.revision} online={online} checked={authorized && auth.isFetchedAfterMount}
                         checking={isReading} invalid={!!readError || inconsistentRecord} revalidate={revalidateLocation}
                         onSessionLost={(mandatory) => { allowNavigation(); sessionLost(mandatory) }} />

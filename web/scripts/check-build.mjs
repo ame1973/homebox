@@ -18,6 +18,7 @@ for (const [key, chunk] of Object.entries(manifest)) if (chunk.isEntry) visit(ke
 assert(initial.size > 0, 'The build has no entry chunk')
 for (const file of [...initial, ...initialAssets]) {
   assert(!/(?:^|\/)scan-zxing-worker(?:-|\.)/.test(file), 'Scanner worker must stay out of the initial application graph')
+  assert(!/(?:^|\/)qr-label-worker(?:-|\.)/.test(file), 'QR label worker must stay out of the initial application graph')
 }
 let initialBytes = 0
 for (const file of initial) initialBytes += gzipSync(await readFile(new URL(file, root))).length

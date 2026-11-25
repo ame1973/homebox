@@ -29,6 +29,8 @@
 
 ### Added
 
+- Preview local Location and Unit QR labels after fresh completed-session and source reads before and after worker generation. Withhold changed or unsafe identities and clear the preview on offline, backgrounding, session-clear or page suspension. Printing/download and the contracted server SVG endpoints remain unfinished.
+
 - Prepare a bounded local Location or Unit QR matrix in a cancellable same-origin worker. This internal helper is not a visible label, print action, authorization check or the contracted server SVG endpoint.
 
 - Browse recorded Location parent changes in explicit live pages on the Location detail, or select an exact retained ID on the Location list to read a deleted owner's changes. Preserve legacy text and historical parent IDs without claiming chronological order or complete audit history; session/page suspension clears the relevant volatile state.

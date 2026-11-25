@@ -17,6 +17,7 @@ import { mediaOwnerRoute } from '@/lib/media-navigation'
 import { messages } from '@/lib/messages'
 import { useOnline } from '@/lib/use-online'
 import { clearSessionQueries } from '@/features/auth/use-auth-action'
+import { QRLabelPanel } from '@/features/qr/qr-label-panel'
 import { readLocationTree } from '@/features/locations/tree'
 import { holdingCommandCurrent, holdingPath } from './display'
 import type { StockAction } from './form'
@@ -114,6 +115,9 @@ export default function HoldingPage({ mode, action }: { mode: Mode; action?: Sto
               <Button asChild variant="outline" className={control}><Link to={assetRoute(unit.id)} state={navigationState}>{messages.assets.title}</Link></Button>
               <Button asChild variant="outline" className={control}><Link to={mediaOwnerRoute({ kind: 'unit', id: unit.id })} state={navigationState}>{messages.media.nav}</Link></Button>
               <UnitFields unit={unit} locations={locations.data} /><p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">{text.identifier}：{unit.id}<br />{text.unitProof}{unit.revision}</p>{unit.status === 'disposed' && <p>{text.disposedHelp}</p>}
+              <QRLabelPanel key={`qr:${unit.id}:${unit.revision}`} kind="unit" id={unit.id} revision={unit.revision} online={online}
+                checked={authorized && auth.isFetchedAfterMount && editorReady} checking={reading} invalid={!!readError || !compatible || transitioning || denied}
+                onSessionLost={(mandatory) => { allowNavigation(); sessionLost(mandatory) }} />
               <section className="space-y-4 border-t pt-6"><p className="text-base leading-relaxed text-muted-foreground">{text.deleteHelp}</p><Button type="button" variant="destructive" disabled={!canWrite || operation.phase === 'pending' || operation.phase === 'uncertain' || holdingPath(locations.data, unit.location_id) === undefined} className={control} onClick={removeUnit}>{text.deleteUnit}</Button></section>
             </section>}
             {formMode && !editorReady && <p role="status">{text.offlineHelp}</p>}

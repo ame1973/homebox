@@ -1,6 +1,6 @@
 # Location Rules
 
-**Implementation status:** the authoritative Go/SQLite service, eleven HTTP operations, and responsive location-management screens, including the direct/subtree summary, paged contents and parent-change history, are implemented. The history screen covers recorded parent changes only; a complete audit history, the QR endpoint, saved photo uploads, persistent drafts, and full offline synchronization remain unfinished.
+**Implementation status:** the authoritative Go/SQLite service, eleven HTTP operations, and responsive location-management screens, including the direct/subtree summary, paged contents, parent-change history and a local QR preview, are implemented. The history screen covers recorded parent changes only; a complete audit history, the server QR endpoint, QR printing/download, saved photo uploads, persistent drafts, and full offline synchronization remain unfinished.
 
 ## Browser usage
 
@@ -11,11 +11,17 @@ Sign in and complete any mandatory password change first. The same routes and co
 | `/locations` | Browse, expand/collapse, search names/codes, optionally show archived locations, or select an exact retained ID for parent-change history |
 | `/locations/new` | Create a root location or explicitly choose an active parent |
 | `/locations/new?parent=ID` | Start a child under the selected parent, with its reviewed aggregate revision |
-| `/locations/ID` | Read metadata and the exact Location ID, direct children, a direct/subtree summary, explicit contents pages and parent-change history; start move, archive, restore, or delete |
+| `/locations/ID` | Read metadata and the exact Location ID, direct children, summary, contents, parent-change history and a local QR preview; start move, archive, restore, or delete |
 | `/locations/ID/edit` | Edit descriptive metadata without implicitly changing parent or status |
 | `/l/ID` | Open a protected relative alias, returning to the location after login |
 
-Supported imported IDs matching the reserved create segment `new` (including case variants) use `/locations/ID/view` for detail, without rewriting their stored identity. Ordinary links and aliases choose this route automatically. URLs preserve only whitelisted relative location destinations across login; they cannot redirect to another host or carry arbitrary query data. QR generation is still pending; the alias is not a claim that printable labels already exist.
+Supported imported IDs matching the reserved create segment `new` (including case variants) use `/locations/ID/view` for detail, without rewriting their stored identity. Ordinary links and aliases choose this route automatically. URLs preserve only whitelisted relative location destinations across login; they cannot redirect to another host or carry arbitrary query data. The local QR preview is separate from the unfinished server SVG endpoint and printing/download.
+
+### Preview a local QR label
+
+On Location detail, choose **Generate QR label**. The browser checks the completed session and actual Location, creates a bounded matrix locally in a same-origin worker, then rechecks the session and source before displaying it. If the selected source changed during generation, refresh the Location before trying again. The displayed QR contains the current application origin and stable Location ID, not a credential; the destination still requires authentication. Moving or renaming a Location does not change its ID. A later deletion can make its existing link unavailable.
+
+The preview is a live check rather than a frozen guarantee: the source can change after the final read. It is hidden while the parent read is being revalidated and cleared on offline, backgrounding, page suspension or a delivered session-clear signal. Reconnection and back-forward-cache restoration require an explicit new generation. Delivery of cross-window session signals is best effort; clearing references is not memory erasure. Retained legacy IDs that cannot be represented safely are shown as unavailable without renaming them. QR printing/download and the contracted server SVG endpoint are not yet implemented. Synthetic same-library browser pixel tests are not physical scanner, printer or device acceptance.
 
 ### Browse and choose parents
 
