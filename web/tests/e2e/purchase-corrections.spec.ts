@@ -16,14 +16,16 @@ type Unit = components['schemas']['Unit']
 type Correction = components['schemas']['PurchaseLineCorrection']
 test.use({ trace: 'off', screenshot: 'off', video: 'off' })
 
-async function item(page: Page, origin: string, name: string, quantity = true): Promise<Item> {
-  const response = await page.request.post('/api/v1/items', { headers: await writeContext(page, origin), data: { name, ...(quantity ? { tracking_mode: 'quantity', unit_code: 'kg', base_unit: 'g', scale_factor: 1000 } : {}) } }); expect(response.status()).toBe(200); return response.json()
+async function item(page: Page, origin: string, name: string, quantity = true, headers?: Awaited<ReturnType<typeof writeContext>>): Promise<Item> {
+  const response = await page.request.post('/api/v1/items', { headers: headers ?? await writeContext(page, origin), data: { name, ...(quantity ? { tracking_mode: 'quantity', unit_code: 'kg', base_unit: 'g', scale_factor: 1000 } : {}) } }); expect(response.status()).toBe(200); return response.json()
 }
 async function seed(page: Page, origin: string, merchant = '實際財務更正商家') {
-  const original = await item(page, origin, '原始數量物品')
-  const response = await page.request.post('/api/v1/purchases', { headers: await writeContext(page, origin), data: { merchant_name: merchant, purchased_at: '2026-11-07T10:00:00.123456789+08:00', currency: 'JPY', receipt_note: '原始採購' } }); expect(response.status()).toBe(200); const purchase: Purchase = await response.json()
-  const created = await page.request.post(`/api/v1/purchases/${purchase.id}/lines`, { headers: await writeContext(page, origin, purchase.revision), data: { item_id: original.id, item_revision: original.revision, item_unit_id: null, quantity_base: 1500, paid_minor: 0, note: '原始零元分攤' } }); expect(created.status()).toBe(200); const line: Line = await created.json()
-  return { original, purchase, line }
+  const first = await writeContext(page, origin)
+  const next = (revision?: number) => ({ ...first, 'Idempotency-Key': crypto.randomUUID(), ...(revision === undefined ? {} : { 'If-Match': JSON.stringify(String(revision)) }) })
+  const original = await item(page, origin, '原始數量物品', true, next())
+  const response = await page.request.post('/api/v1/purchases', { headers: next(), data: { merchant_name: merchant, purchased_at: '2026-11-07T10:00:00.123456789+08:00', currency: 'JPY', receipt_note: '原始採購' } }); expect(response.status()).toBe(200); const purchase: Purchase = await response.json()
+  const created = await page.request.post(`/api/v1/purchases/${purchase.id}/lines`, { headers: next(purchase.revision), data: { item_id: original.id, item_revision: original.revision, item_unit_id: null, quantity_base: 1500, paid_minor: 0, note: '原始零元分攤' } }); expect(created.status()).toBe(200); const line: Line = await created.json()
+  return { original, purchase, line, next }
 }
 async function current(page: Page, purchaseID: string, itemID: string) {
   const purchase = await page.request.get(`/api/v1/purchases/${purchaseID}`), item = await page.request.get(`/api/v1/items/${itemID}`); expect(purchase.status()).toBe(200); expect(item.status()).toBe(200)
@@ -71,18 +73,21 @@ test('uses real paged Item discovery and explicitly replaces the whole quantity 
 })
 
 test('rejects a real stale replacement proof and explicitly adopts it without changing the physical Unit', async ({ page, application }) => {
-  await provision(page, application); const { purchase, original, line } = await seed(page, application.url), target = await item(page, application.url, '替代個體物品', false)
-  const created = await page.request.post(`/api/v1/items/${target.id}/units`, { headers: await writeContext(page, application.url, target.revision), data: { location_id: null, notes: 'Physical target remains unchanged' } }); expect(created.status()).toBe(200); const unit: Unit = await created.json(), targetBefore = (await current(page, purchase.id, target.id)).item
+  await provision(page, application); const { purchase, original, line, next } = await seed(page, application.url), target = await item(page, application.url, '替代個體物品', false, next())
+  const created = await page.request.post(`/api/v1/items/${target.id}/units`, { headers: next(target.revision), data: { location_id: null, notes: 'Physical target remains unchanged' } }); expect(created.status()).toBe(200); const unit: Unit = await created.json()
+  const targetResponse = await page.request.get(`/api/v1/items/${target.id}`); expect(targetResponse.status()).toBe(200); const targetBefore: Item = await targetResponse.json()
   const writes = watchDomainWrites(page, ['/api/v1/purchases', '/api/v1/stock', '/api/v1/units']); await openEditor(page, purchase.id, line.id); await select(page, text.action).selectOption('replace'); await input(page, text.reason).fill('指定實際個體'); await chooseTarget(page, target.id)
   await select(page, purchaseText.fields.allocation).selectOption('unit'); await page.getByRole('button', { name: text.review, exact: true }).click(); await expect(select(page, purchaseText.fields.item_unit_id)).toBeFocused()
   await select(page, purchaseText.fields.item_unit_id).selectOption(unit.id); await input(page, purchaseText.fields.quantity_base).fill('2'); await input(page, purchaseText.fields.paid_minor).fill('50'); await page.getByRole('button', { name: text.review, exact: true }).click(); await expect(input(page, purchaseText.fields.quantity_base)).toBeFocused()
   await input(page, purchaseText.fields.quantity_base).fill('1'); await page.getByRole('button', { name: text.review, exact: true }).click()
-  const changed = await page.request.patch(`/api/v1/items/${target.id}`, { headers: await writeContext(page, application.url, targetBefore.revision), data: { notes: 'Concurrent target metadata' } }); expect(changed.status()).toBe(200)
+  const changed = await page.request.patch(`/api/v1/items/${target.id}`, { headers: next(targetBefore.revision), data: { notes: 'Concurrent target metadata' } }); expect(changed.status()).toBe(200)
   await page.getByRole('alertdialog').getByRole('button', { name: text.confirmReplace, exact: true }).click(); await expect(page.getByRole('alertdialog')).toContainText(messages.locations.conflict)
   await page.getByRole('alertdialog').getByRole('button', { name: text.cancel, exact: true }).click(); await expect(page.getByText(text.changed, { exact: true })).toBeVisible(); await input(page, purchaseText.fields.paid_minor).fill('1.5'); await page.getByRole('button', { name: text.keepEdits, exact: true }).click(); await expect(input(page, purchaseText.fields.paid_minor)).toHaveValue('1.5')
   await page.getByRole('button', { name: text.review, exact: true }).click(); await expect(input(page, purchaseText.fields.paid_minor)).toBeFocused(); await input(page, purchaseText.fields.paid_minor).fill('0'); await page.getByRole('button', { name: text.review, exact: true }).click(); await confirm(page, text.confirmReplace, purchase.id)
   expect(writes).toHaveLength(2); expect(writes[1]?.key).not.toBe(writes[0]?.key); expect(JSON.parse(writes[0]?.body ?? '{}').replacement.item_revision).toBe(targetBefore.revision); expect(JSON.parse(writes[1]?.body ?? '{}').replacement).toMatchObject({ item_revision: targetBefore.revision + 1, item_unit_id: unit.id, quantity_base: 1, paid_minor: 0 })
-  expect(await (await page.request.get(`/api/v1/units/${unit.id}`)).json()).toEqual(unit); expect((await (await page.request.get(`/api/v1/inventory?item_id=${original.id}`)).json()).data).toEqual([])
+  await expect(page.getByText(`${history.historyCount}1`, { exact: true })).toBeVisible()
+  const actualUnit = await page.request.get(`/api/v1/units/${unit.id}`); expect(actualUnit.status()).toBe(200); expect(await actualUnit.json()).toEqual(unit)
+  const actualInventory = await page.request.get(`/api/v1/inventory?item_id=${original.id}`); expect(actualInventory.status()).toBe(200); expect((await actualInventory.json()).data).toEqual([])
 })
 
 test('rejects an independently stale original Item proof before an explicit void review', async ({ page, application }) => {
