@@ -164,9 +164,8 @@ func TestSyncSearchSignerCannotBeReplacedOrRegenerated(t *testing.T) {
 }
 
 func TestSyncSearchSignerDoesNotClaimUnknownProofsOrRegenerateTheirKey(t *testing.T) {
-	s, catalog, a, token := catalogFixture(t)
-	item := createCatalogItem(t, catalog, token, ItemCreate{Name: "Unproven search"})
-	seq := scalar[int64](t, s.db, "SELECT seq FROM sync_changes WHERE entity_type='search_doc' AND entity_id=?", projectionPair("item", item.ID))
+	s, _, a, _ := locationFixture(t)
+	seq, _ := seedUnprovenSearchChange(t, s)
 	execSQL(t, s.db, "INSERT INTO sync_search_proofs(seq,proof) VALUES(?,zeroblob(32))", seq)
 	tx, err := s.db.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -205,8 +204,8 @@ func TestSyncSearchSignerPinRejectsLateKeyOrProofInjection(t *testing.T) {
 		{"proof injected", "AFTER", `INSERT INTO sync_search_proofs(seq,proof) SELECT seq,zeroblob(32) FROM sync_changes WHERE entity_type='search_doc' LIMIT 1`, ""},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			s, catalog, a, token := catalogFixture(t)
-			createCatalogItem(t, catalog, token, ItemCreate{Name: "Late proof"})
+			s, _, a, _ := locationFixture(t)
+			seedUnprovenSearchChange(t, s)
 			original := bytes.Clone(a.serverSecret)
 			if test.removeGuard != "" {
 				execSQL(t, s.db, "DROP TRIGGER "+test.removeGuard)
@@ -229,6 +228,32 @@ func TestSyncSearchSignerPinRejectsLateKeyOrProofInjection(t *testing.T) {
 				t.Fatal("failed signer pin leaked a marker, proof or key change")
 			}
 		})
+	}
+}
+
+func TestSyncSearchSignerPinPreservesExistingMediaDependency(t *testing.T) {
+	s, a, _, _, token := completedAuthFixture(t)
+	if _, err := keyedReceipt(t, a, token, "existing-media-receipt"); err != nil {
+		t.Fatal(err)
+	}
+	marker := bytes.Clone(scalar[[]byte](t, s.db, "SELECT key_proof FROM auth_keyed_receipt_secret"))
+	execSQL(t, s.db, "DROP TRIGGER auth_keyed_receipt_secret_no_delete")
+	execSQL(t, s.db, `CREATE TRIGGER remove_receipt_during_pin AFTER INSERT ON sync_search_signer BEGIN
+ DELETE FROM auth_keyed_receipt_secret; END`)
+	tx, err := s.db.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = pinSyncSearchSigner(t.Context(), tx, a.serverSecret); !errors.Is(err, ErrAuthState) {
+		_ = tx.Rollback()
+		t.Fatal("search signer pin accepted a lost Media dependency", err)
+	}
+	if err = tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(scalar[[]byte](t, s.db, "SELECT key_proof FROM auth_keyed_receipt_secret"), marker) ||
+		scalar[int](t, s.db, "SELECT COUNT(*) FROM sync_search_signer") != 0 {
+		t.Fatal("failed pin committed a changed signer dependency")
 	}
 }
 
@@ -263,9 +288,8 @@ func TestSyncSearchSignerDeltaChecksTheMarkerAfterSessionActivity(t *testing.T) 
 }
 
 func TestSyncSearchSignerStillWithholdsUnprovenSearch(t *testing.T) {
-	s, catalog, a, token := catalogFixture(t)
-	item := createCatalogItem(t, catalog, token, ItemCreate{Name: "Unknown provenance"})
-	seq := scalar[int64](t, s.db, "SELECT seq FROM sync_changes WHERE entity_type='search_doc' AND entity_id=?", projectionPair("item", item.ID))
+	s, _, a, token := locationFixture(t)
+	seq, _ := seedUnprovenSearchChange(t, s)
 	pinTestSyncSearchSigner(t, s, a)
 	execSQL(t, s.db, "INSERT INTO sync_search_proofs(seq,proof) VALUES(?,zeroblob(32))", seq)
 	cursor := testSyncDeltaCursor(t, s, a, 0)

@@ -21,7 +21,7 @@ func TestCatalogTagsEveryStatementFailureRollsBackCompleteReplacement(t *testing
 			if _, err := catalog.ReplaceTags(t.Context(), token, "tag-rollback-baseline", item.ID, 1, []string{tags[0].ID}); err != nil {
 				t.Fatal(err)
 			}
-			execSQL(t, s.db, "INSERT INTO item_units(id,item_id,asset_code,created_at,updated_at) VALUES('unit',?,'UNIT-001','2026','2026')", item.ID)
+			seedSearchUnit(t, s, "unit", item.ID, "UNIT-001", nil, "")
 			now := auth.now().Add(time.Minute)
 			auth.now = func() time.Time { return now }
 			before := domainState(t, s)
@@ -91,7 +91,7 @@ func TestCatalogTagsRejectExhaustedMissingAndCorruptDependentAuthority(t *testin
 			case "item search":
 				setCatalogProjectionRevision(t, s, "search_doc", projectionPair("item", item.ID), maxSafeInteger)
 			case "unit search":
-				execSQL(t, s.db, "INSERT INTO item_units(id,item_id,asset_code,created_at,updated_at) VALUES('unit',?,'UNIT-001','2026','2026')", item.ID)
+				seedSearchUnit(t, s, "unit", item.ID, "UNIT-001", nil, "")
 				execSQL(t, s.db, "INSERT INTO projection_revisions VALUES('search_doc',?,?)", projectionPair("unit", "unit"), maxSafeInteger)
 			case "catalog":
 				execSQL(t, s.db, "UPDATE data_revision SET revision=? WHERE scope='catalog'", maxSafeInteger)

@@ -31,6 +31,8 @@
 
 ### Added
 
+- Atomically bind newly published approved search projections to their frozen change proofs, rechecking source, key, counters and exact bytes after session activity and final callbacks. Legacy search changes receive no invented proofs; the private delta reader still withholds all search upserts and public synchronization remains unavailable.
+
 - Bind search-proof signing to an independent immutable server-key marker, with no guessed marker for old changes or unknown proof rows. Reject missing or changed pinned keys and late dependency injection; this private key check neither authenticates source nor enables search synchronization.
 
 - Add initially empty private storage for search-change proof bytes, tied to retained search upserts. Updates, replacements and direct deletion while the parent remains are rejected; pruning the parent cascades to its proof. No historical proof is invented; a stored row alone does not establish reviewed origin or enable synchronization.

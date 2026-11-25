@@ -50,7 +50,7 @@ func mutateOwnedCatalogFixture(ctx context.Context, auth *Auth, token, key, item
 func TestCatalogLinkPublicationCoalescesFinalSourceOwnerAndUnitSearchWithoutCrossingOwnership(t *testing.T) {
 	fixture := catalogWithOwnedRows(t)
 	s, item := fixture.store, fixture.item
-	execSQL(t, s.db, "INSERT INTO item_units(id,item_id,asset_code,created_at,updated_at) VALUES('unit',?,'UNIT-001','2026','2026')", item.ID)
+	seedSearchUnit(t, s, "unit", item.ID, "UNIT-001", nil, "")
 	execSQL(t, s.db, "UPDATE current_projections SET payload_json='{\"id\":\"NeverCopyProjectionCache\"}' WHERE entity_type IN('barcode','alias','attribute') AND entity_id LIKE 'owned-%'")
 	before := domainState(t, s)
 	var reply Alias
@@ -205,7 +205,7 @@ func TestCatalogLinkPublicationRollsBackEverySourceProjectionSearchAndReceiptFai
 		t.Run(failure.table+failure.event, func(t *testing.T) {
 			fixture := catalogWithOwnedRows(t)
 			s := fixture.store
-			execSQL(t, s.db, "INSERT INTO item_units(id,item_id,asset_code,created_at,updated_at) VALUES('unit',?,'UNIT-001','2026','2026')", fixture.item.ID)
+			seedSearchUnit(t, s, "unit", fixture.item.ID, "UNIT-001", nil, "")
 			now := fixture.auth.now().Add(time.Minute)
 			fixture.auth.now = func() time.Time { return now }
 			before := domainState(t, s)

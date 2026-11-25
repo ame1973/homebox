@@ -266,6 +266,7 @@ func TestTaxonomyCategoryDeletionClearsClassificationWithoutDeletingHoldings(t *
 	execSQL(t, s.db, "UPDATE items SET tracking_mode='quantity' WHERE id='quantity'")
 	execSQL(t, s.db, "INSERT INTO locations(id,code,name,created_at,updated_at) VALUES('location','BOX','Box','2026','2026')")
 	execSQL(t, s.db, "INSERT INTO item_units(id,item_id,location_id,asset_code,created_at,updated_at) VALUES('unit','individual','location','ASSET-1','2026','2026')")
+	execSQL(t, s.db, "INSERT INTO projection_revisions VALUES('unit','unit',1)")
 	execSQL(t, s.db, "INSERT INTO stock_balances VALUES('quantity','location',1500,'2026')")
 	category = getCategory(t, taxonomy, token, category.ID)
 	before := domainState(t, s)

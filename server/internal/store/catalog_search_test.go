@@ -11,6 +11,7 @@ func seedSearchUnit(t *testing.T, s *Store, id, itemID, code string, serial *str
 	t.Helper()
 	execSQL(t, s.db, `INSERT INTO item_units(id,item_id,asset_code,serial_number,notes,created_at,updated_at)
  VALUES(?,?,?,?,?,'2026','2026')`, id, itemID, code, serial, notes)
+	execSQL(t, s.db, "INSERT INTO projection_revisions VALUES('unit',?,1)", id)
 }
 
 func publishCatalogSearch(t *testing.T, taxonomy *Taxonomy, token, key, itemID string) {
@@ -35,9 +36,6 @@ func TestCatalogUnitSearchKeepsIdentifiersAndPurchaseEvidenceInTheirOwnScope(t *
 	seedSearchUnit(t, s, unitID, "item", "ASSETALPHA", testPointer("SerialAlpha"), "UnitAlphaNote")
 	seedSearchUnit(t, s, "unit-beta", "item", "ASSETBETA", testPointer("SerialBeta"), "UnitBetaNote")
 	seedSearchUnit(t, s, "unit-other", "other", "ASSETOTHER", nil, "UnrelatedUnitNote")
-	for _, id := range []string{unitID, "unit-beta", "unit-other"} {
-		execSQL(t, s.db, "INSERT INTO projection_revisions VALUES('unit',?,1)", id)
-	}
 	for _, purchase := range []struct {
 		id, item, merchant, receipt, note string
 		unit                              *string

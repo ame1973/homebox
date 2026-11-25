@@ -38,6 +38,10 @@ func verifySyncSearchSigner(ctx context.Context, tx *sql.Tx, expected []byte) (b
 // A first pin must not assign authority to unknown, previously stored proofs.
 // The caller still owns authorization, source validation and transaction commit.
 func pinSyncSearchSigner(ctx context.Context, tx *sql.Tx, expected []byte) error {
+	receiptPinned, err := verifyKeyedReceiptSecret(ctx, tx, expected)
+	if err != nil {
+		return err
+	}
 	pinned, err := verifySyncSearchSigner(ctx, tx, expected)
 	if err != nil || pinned {
 		return err
@@ -57,6 +61,13 @@ func pinSyncSearchSigner(ctx context.Context, tx *sql.Tx, expected []byte) error
 		return err
 	}
 	if !pinned {
+		return ErrAuthState
+	}
+	currentReceiptPinned, err := verifyKeyedReceiptSecret(ctx, tx, expected)
+	if err != nil {
+		return err
+	}
+	if currentReceiptPinned != receiptPinned {
 		return ErrAuthState
 	}
 	if err = tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM sync_search_proofs)").Scan(&existing); err != nil {

@@ -28,7 +28,7 @@ func TestCatalogTagsReplaceCompleteSetPublishesOnlyChangedMembershipAndApprovedS
 	taxonomy, tags := catalogTags(t, auth, token, 3)
 	item := createCatalogItem(t, catalog, token, ItemCreate{Name: "Owner"})
 	other := createCatalogItem(t, catalog, token, ItemCreate{Name: "OtherOwner"})
-	execSQL(t, s.db, "INSERT INTO item_units(id,item_id,asset_code,created_at,updated_at) VALUES('unit',?,'UNIT-001','2026','2026')", item.ID)
+	seedSearchUnit(t, s, "unit", item.ID, "UNIT-001", nil, "")
 	execSQL(t, s.db, "INSERT INTO ai_review_entries(id,item_id,field_key,raw_value,state,reviewed_at,created_at,updated_at) VALUES('historical',?,'tag','PublishedTag000','accepted','2026','2026','2026'),('pending',?,'keyword','NeverPublishPendingMembership','needs_review',NULL,'2026','2026')", item.ID, item.ID)
 	before := domainState(t, s)
 	var original Item

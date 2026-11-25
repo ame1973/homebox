@@ -37,14 +37,19 @@ type pendingProjection struct {
 // one revision/change per transaction; payloads are built from the final SQL state.
 // Authentication must use its independently keyed credential fingerprint instead.
 type mutationTx struct {
-	ctx         context.Context
-	tx          *sql.Tx
-	now         time.Time
-	eventID     string
-	reason      string
-	note        string
-	pending     map[projectionKey]pendingProjection
-	finalChecks []func() error
+	ctx                context.Context
+	tx                 *sql.Tx
+	auth               *Auth
+	dataset            syncDataset
+	now                time.Time
+	eventID            string
+	reason             string
+	note               string
+	pending            map[projectionKey]pendingProjection
+	finalChecks        []func() error
+	searchProofChecks  []func() error
+	receiptPinned      bool
+	searchSignerPinned bool
 }
 
 type domainResult interface{ validateDomainResult() error }
@@ -108,7 +113,7 @@ func runDomainMutationWithFinalCheck[T domainResult](ctx context.Context, a *Aut
 		return zero, err
 	}
 	var result T
-	var finalChecks []func() error
+	var finalChecks, searchProofChecks []func() error
 	if reply.body != "" {
 		if keyed && !secretPinned {
 			return zero, ErrDomainState
@@ -129,7 +134,21 @@ func runDomainMutationWithFinalCheck[T domainResult](ctx context.Context, a *Aut
 		if err != nil {
 			return zero, err
 		}
-		m := &mutationTx{ctx: ctx, tx: tx, now: now, eventID: eventID, pending: make(map[projectionKey]pendingProjection)}
+		initialDataset, err := readSyncDataset(ctx, tx)
+		if err != nil {
+			return zero, err
+		}
+		if initialDataset.Epoch != epoch {
+			return zero, ErrDomainState
+		}
+		var receiptPinned, searchSignerPinned bool
+		if err = tx.QueryRowContext(ctx, `SELECT
+ (SELECT EXISTS(SELECT 1 FROM auth_keyed_receipt_secret WHERE singleton=1)),
+ (SELECT EXISTS(SELECT 1 FROM sync_search_signer WHERE singleton=1))`).Scan(&receiptPinned, &searchSignerPinned); err != nil {
+			return zero, err
+		}
+		m := &mutationTx{ctx: ctx, tx: tx, auth: a, dataset: initialDataset, now: now, eventID: eventID,
+			pending: make(map[projectionKey]pendingProjection), receiptPinned: receiptPinned, searchSignerPinned: searchSignerPinned}
 		result, err = apply(m)
 		if err != nil {
 			return zero, err
@@ -142,6 +161,7 @@ func runDomainMutationWithFinalCheck[T domainResult](ctx context.Context, a *Aut
 			if err != nil {
 				return zero, err
 			}
+			m.receiptPinned = true
 		}
 		encoded, err := json.Marshal(result)
 		if err != nil {
@@ -165,7 +185,7 @@ func runDomainMutationWithFinalCheck[T domainResult](ctx context.Context, a *Aut
 			eventID: eventID, eventAdmin: session.Admin.ID, eventEpoch: epoch, eventOperation: operation,
 			eventOccurred: stamp(now), eventReason: m.reason, eventNote: m.note,
 		}
-		finalChecks = m.finalChecks
+		finalChecks, searchProofChecks = m.finalChecks, m.searchProofChecks
 	}
 	if check != nil {
 		finalChecks = append(finalChecks, check)
@@ -210,6 +230,27 @@ func runDomainMutationWithFinalCheck[T domainResult](ctx context.Context, a *Aut
 	if check != nil {
 		if err = check(); err != nil {
 			return zero, err
+		}
+	}
+	// Search provenance must still match after every optional final callback.
+	for _, check := range searchProofChecks {
+		if err = check(); err != nil {
+			return zero, err
+		}
+	}
+	if len(searchProofChecks) > 0 {
+		if _, err = checkDomainSession(ctx, a, tx, token, session, a.now().UTC()); err != nil {
+			return zero, err
+		}
+		lastReply, err := readDomainReply(ctx, tx, scopedKey, operation, fingerprint, now)
+		if errors.Is(err, ErrIdempotencyConflict) || errors.Is(err, ErrIdempotencyExpired) || errors.Is(err, ErrDomainState) {
+			return zero, ErrDomainState
+		}
+		if err != nil {
+			return zero, err
+		}
+		if lastReply != reply {
+			return zero, ErrDomainState
 		}
 	}
 	if err = tx.Commit(); err != nil {
@@ -371,13 +412,15 @@ func (m *mutationTx) flush() error {
 		pending := m.pending[key]
 		operation := "upsert"
 		var payload any
+		var encoded []byte
 		if pending.deleted {
 			operation = "delete"
 			if _, err := m.tx.ExecContext(m.ctx, "DELETE FROM current_projections WHERE entity_type=? AND entity_id=?", key.kind, key.id); err != nil {
 				return err
 			}
 		} else {
-			encoded, err := m.projectionPayload(key)
+			var err error
+			encoded, err = m.projectionPayload(key)
 			if err != nil {
 				return err
 			}
@@ -400,6 +443,11 @@ func (m *mutationTx) flush() error {
 		}
 		if seq < 1 || seq > maxSafeInteger {
 			return ErrRevisionOverflow
+		}
+		if key.kind == "search_doc" && !pending.deleted {
+			if err = m.stageSearchProof(key.id, pending.revision, seq, encoded); err != nil {
+				return err
+			}
 		}
 	}
 	if len(keys) > 0 {

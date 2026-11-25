@@ -72,8 +72,8 @@ func TestCatalogOwnedWritesKeepIndependentRowsFrozenRepliesAndExactAtomicDepende
 					writer = candidate
 				}
 			}
-			// Units/AI remain explicit fixtures until their domain services exist.
-			execSQL(t, s.db, "INSERT INTO item_units(id,item_id,asset_code,created_at,updated_at) VALUES('unit',?,'UNIT-001','2026','2026')", item.ID)
+			// Keep an independently versioned Unit and unreviewed AI as explicit fixtures.
+			seedSearchUnit(t, s, "unit", item.ID, "UNIT-001", nil, "")
 			execSQL(t, s.db, "INSERT INTO ai_review_entries(id,item_id,field_key,raw_value,state,created_at,updated_at) VALUES('unreviewed',?,'keyword','NeverPublishUnreviewedOwned','needs_review','2026','2026')", item.ID)
 			before := domainState(t, s)
 			var original any

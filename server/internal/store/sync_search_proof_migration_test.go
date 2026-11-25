@@ -93,13 +93,15 @@ func TestSyncSearchProofMigrationRejectsLateInjectionAndRollsBack(t *testing.T) 
 }
 
 func TestSyncSearchProofRowsBindOnlyUpsertParentsAndCannotBeReplaced(t *testing.T) {
-	s, catalog, auth, token := catalogFixture(t)
-	item := createCatalogItem(t, catalog, token, ItemCreate{Name: "Search proof storage"})
-	other := createCatalogItem(t, catalog, token, ItemCreate{Name: "Other proof parent"})
-	identity := projectionPair("item", item.ID)
-	searchSeq := scalar[int64](t, s.db, "SELECT seq FROM sync_changes WHERE entity_type='search_doc' AND entity_id=?", identity)
-	otherSearchSeq := scalar[int64](t, s.db, "SELECT seq FROM sync_changes WHERE entity_type='search_doc' AND entity_id=?", projectionPair("item", other.ID))
-	itemSeq := scalar[int64](t, s.db, "SELECT seq FROM sync_changes WHERE entity_type='item' AND entity_id=?", item.ID)
+	s, locations, auth, token := locationFixture(t)
+	location := createLocation(t, locations, token, "NON-SEARCH-PARENT", nil)
+	identity := projectionPair("item", "legacy")
+	searchSeq, _ := seedUnprovenSearchChange(t, s)
+	otherIdentity := projectionPair("item", "other-legacy")
+	execSQL(t, s.db, `INSERT INTO sync_changes(entity_type,entity_id,operation,entity_revision,projection_json,created_at)
+ VALUES('search_doc',?,'upsert',1,?,'2026-01-01T00:00:00Z')`, otherIdentity, `{"entity_type":"item","entity_id":"other-legacy","approved_text":"other"}`)
+	otherSearchSeq := scalar[int64](t, s.db, "SELECT seq FROM sync_changes WHERE entity_type='search_doc' AND entity_id=?", otherIdentity)
+	locationSeq := scalar[int64](t, s.db, "SELECT seq FROM sync_changes WHERE entity_type='location' AND entity_id=?", location.ID)
 	execSQL(t, s.db, `INSERT INTO sync_changes(entity_type,entity_id,operation,entity_revision,projection_json,created_at)
  VALUES('search_doc',?,'delete',2,NULL,'2026-01-01T00:00:00Z')`, identity)
 	deleteSeq := scalar[int64](t, s.db, "SELECT MAX(seq) FROM sync_changes")
@@ -114,7 +116,7 @@ func TestSyncSearchProofRowsBindOnlyUpsertParentsAndCannotBeReplaced(t *testing.
 		{"UPDATE sync_search_proofs SET proof=zeroblob(32) WHERE seq=?", []any{searchSeq}},
 		{"DELETE FROM sync_search_proofs WHERE seq=?", []any{searchSeq}},
 		{"INSERT OR REPLACE INTO sync_search_proofs(seq,proof) VALUES(?,zeroblob(32))", []any{searchSeq}},
-		{"INSERT INTO sync_search_proofs(seq,proof) VALUES(?,zeroblob(32))", []any{itemSeq}},
+		{"INSERT INTO sync_search_proofs(seq,proof) VALUES(?,zeroblob(32))", []any{locationSeq}},
 		{"INSERT INTO sync_search_proofs(seq,proof) VALUES(?,zeroblob(32))", []any{deleteSeq}},
 		{"INSERT INTO sync_search_proofs(seq,proof) VALUES(?,zeroblob(32))", []any{deleteSeq + 100}},
 		{"INSERT INTO sync_search_proofs(seq,proof) VALUES(?,zeroblob(31))", []any{otherSearchSeq}},
