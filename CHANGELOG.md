@@ -33,6 +33,8 @@
 
 ### Added
 
+- Read the actual dataset identity, projection version and verified migration history in one completed-session database transaction. This internal version state is not yet an HTTP compatibility handshake or proof of offline readiness.
+
 - Show public-shell status throughout the application, automatically prepare only an eligible first installation, and require explicit preparation of later versions. Updates wait for old controlled tabs to close without forced reloads; the offline replica, persistent drafts and API compatibility handshake remain unfinished.
 
 - Coordinate a verified public-shell registration across cooperative browser tabs, withholding stale or foreign registrations and waiting for explicit update preparation. The shell status interface now uses this coordinator.
