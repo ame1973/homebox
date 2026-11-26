@@ -10,7 +10,7 @@ const text = messages.scan
 const control = 'min-h-12 h-auto max-w-full whitespace-normal py-3 text-base leading-normal'
 
 export function RestoreGate({ kind = 'scan', restored, generation, returnPath, onLeave }: {
-  kind?: 'scan' | 'item' | 'capture' | 'recovery' | 'sync'; restored: boolean; generation: number; returnPath: string; onLeave: () => void
+  kind?: 'scan' | 'item' | 'capture' | 'recovery' | 'sync' | 'version'; restored: boolean; generation: number; returnPath: string; onLeave: () => void
 }) {
   const heading = useRef<HTMLHeadingElement>(null)
   const auth = useQuery({ queryKey: ['auth', 'bfcache-check', generation, returnPath], enabled: restored,
@@ -32,8 +32,8 @@ export function RestoreGate({ kind = 'scan', restored, generation, returnPath, o
   const expired = auth.data?.kind === 'expired'
   const returnTo = auth.data?.returnTo ?? '/items'
   const scan = kind === 'scan'
-  const title = scan ? text.restoreTitle : kind === 'capture' ? messages.capture.restoreTitle : kind === 'recovery' ? messages.mediaRecovery.restoreTitle : kind === 'sync' ? messages.syncStatus.restoreTitle : messages.catalog.restorePageTitle
-  const help = scan ? text.restoreHelp : kind === 'capture' ? messages.capture.restoreHelp : kind === 'recovery' ? messages.mediaRecovery.restoreHelp : kind === 'sync' ? messages.syncStatus.restoreHelp : messages.catalog.restorePageHelp
+  const title = scan ? text.restoreTitle : kind === 'capture' ? messages.capture.restoreTitle : kind === 'recovery' ? messages.mediaRecovery.restoreTitle : kind === 'sync' ? messages.syncStatus.restoreTitle : kind === 'version' ? messages.versionStatus.restoreTitle : messages.catalog.restorePageTitle
+  const help = scan ? text.restoreHelp : kind === 'capture' ? messages.capture.restoreHelp : kind === 'recovery' ? messages.mediaRecovery.restoreHelp : kind === 'sync' ? messages.syncStatus.restoreHelp : kind === 'version' ? messages.versionStatus.restoreHelp : messages.catalog.restorePageHelp
   const scanNotice = scan ? { notice: 'scanHandoffLost' } : {}
   return <main id="main" className="safe-page mx-auto min-h-dvh max-w-3xl space-y-6 py-8">
     <div className="flex justify-end"><ThemeMenu /></div>
