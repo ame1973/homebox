@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Diagnose a rejected browser-test bootstrap using only bounded relationships from its disposable fixture, without logging credentials or retrying the setup request.
+
 - Add a read-only version diagnostics screen that compares the current page against the server's exact write-client list and observed build, distinguishes unknown model inventory, and never forces a reload or submits a change.
 
 - Expose a protected system version observation and stateless browser adapter using the actual dataset, paired web build and exact write-client allowlist. Unknown minimum policies and model inventory remain explicitly null; offline sync and full compatibility migration are not implied.

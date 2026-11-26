@@ -1,0 +1,34 @@
+import { createHash } from 'node:crypto'
+import { DatabaseSync } from 'node:sqlite'
+
+const codes = new Set(['AUTHENTICATION_REQUIRED', 'SETUP_CLOSED', 'VALIDATION_ERROR', 'RATE_LIMITED', 'SERVICE_UNAVAILABLE'])
+export function safeBootstrapCode(value: unknown): string {
+  return typeof value === 'string' && codes.has(value) ? value : 'OTHER'
+}
+
+// This examines a disposable test store after a failed request. Relationships
+// are not proof of the exact database state while the request was processed.
+export function inspectBootstrapFixture(database: string, token: string, before: number, after: number) {
+  const tokenCanonical = /^[A-Za-z0-9_-]{43}$/.test(token) && Buffer.from(token, 'base64url').toString('base64url') === token
+  const unavailable = { tokenCanonical, databaseReadable: false, rowPresent: null, tokenMatches: null,
+    epochMatches: null, requestBeforeCreated: null, responseAfterExpiry: null, accountCount: null }
+  try {
+    const db = new DatabaseSync(database, { readOnly: true })
+    try {
+      db.exec('BEGIN')
+      const row = db.prepare('SELECT b.token_hash,b.created_at,b.expires_at,b.dataset_epoch,d.dataset_epoch AS actual_epoch FROM auth_bootstrap b LEFT JOIN sync_state d ON d.singleton=1 WHERE b.singleton=1').get() as {
+        token_hash: string; created_at: string; expires_at: string; dataset_epoch: string; actual_epoch: string | null
+      } | undefined
+      const count = db.prepare('SELECT count(*) AS value FROM admin_accounts').get() as { value: number }
+      const created = row ? Date.parse(row.created_at) : NaN, expires = row ? Date.parse(row.expires_at) : NaN
+      const result = { tokenCanonical, databaseReadable: true, rowPresent: !!row,
+        tokenMatches: row ? row.token_hash === createHash('sha256').update(token).digest('hex') : null,
+        epochMatches: row ? row.actual_epoch !== null && row.dataset_epoch === row.actual_epoch : null,
+        requestBeforeCreated: row && Number.isFinite(created) && Number.isFinite(before) ? before < created : null,
+        responseAfterExpiry: row && Number.isFinite(expires) && Number.isFinite(after) ? after >= expires : null,
+        accountCount: Number.isSafeInteger(count.value) && count.value >= 0 ? count.value : null }
+      db.exec('COMMIT')
+      return result
+    } finally { db.close() }
+  } catch { return unavailable }
+}

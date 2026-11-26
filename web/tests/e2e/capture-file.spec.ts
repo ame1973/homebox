@@ -109,7 +109,7 @@ async function installProbe(page: Page, transport?: 'broadcast' | 'storage') {
   }, transport)
 }
 
-async function openCapture(page: Page, application: { url: string; bootstrapToken: string }) {
+async function openCapture(page: Page, application: { url: string; bootstrapToken: string; database: string }) {
   await provision(page, application)
   await page.goto('/photos/capture?owner_type=item&owner_id=synthetic-owner')
   await expect(page.getByLabel(text.fileInput)).toBeEnabled()

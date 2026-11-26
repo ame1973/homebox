@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { cleanupPrivateApplication } from './private-application.ts'
 
-type Application = { url: string; bootstrapToken: string }
+type Application = { url: string; bootstrapToken: string; database: string }
 
 // Private per-test stores avoid sharing a setup token/account/rate window across
 // viewports or bypassing the production limiter with a test-only HTTP endpoint.
@@ -52,7 +52,7 @@ export const test = base.extend<{ application: Application; applicationDatabaseF
           }
         })
       })
-      await provideFixture({ url: ready.public_origin, bootstrapToken: readFileSync(tokenFile, 'utf8').trim() })
+      await provideFixture({ url: ready.public_origin, bootstrapToken: readFileSync(tokenFile, 'utf8').trim(), database })
     } catch (error) {
       failure = { error }
       throw error

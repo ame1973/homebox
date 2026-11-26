@@ -3,11 +3,25 @@ import { expect } from './auth-fixture.ts'
 
 // Domain browser tests use real setup/rotation and isolated serving stores. Never
 // record provisioning/cookies in traces, videos or automatic failure images.
-export async function provision(page: Page, application: { url: string; bootstrapToken: string }): Promise<string> {
+export async function provision(page: Page, application: { url: string; bootstrapToken: string; database: string }): Promise<string> {
   const initial = 'location fixture initial password'
   const replacement = 'location fixture replacement password'
   const headers = { Origin: application.url }
-  expect((await page.request.post('/api/v1/auth/setup', { headers, data: { bootstrap_token: application.bootstrapToken, username: 'owner', password: initial } })).status()).toBe(200)
+  const before = Date.now()
+  const setup = await page.request.post('/api/v1/auth/setup', { headers, data: { bootstrap_token: application.bootstrapToken, username: 'owner', password: initial } })
+  const after = Date.now()
+  if (setup.status() === 401) {
+    // Read only the test-owned SQLite fixture from this separate Node process.
+    // Never report credentials, database paths, raw hashes or server messages.
+    try {
+      const { inspectBootstrapFixture, safeBootstrapCode } = await import('./bootstrap-diagnostics.ts')
+      const body: unknown = await setup.json().catch(() => undefined)
+      const code = typeof body === 'object' && body !== null && 'error' in body && typeof body.error === 'object' && body.error !== null && 'code' in body.error ? body.error.code : undefined
+      console.error('BOOTSTRAP_DIAGNOSTICS', JSON.stringify({ status: setup.status(), code: safeBootstrapCode(code),
+        originMatches: new URL(setup.url()).origin === application.url, ...inspectBootstrapFixture(application.database, application.bootstrapToken, before, after) }))
+    } catch { /* Preserve the original failed setup assertion. */ }
+  }
+  expect(setup.status()).toBe(200)
   expect((await page.request.post('/api/v1/auth/login', { headers, data: { username: 'owner', password: initial } })).status()).toBe(200)
   const csrf = await page.request.get('/api/v1/auth/csrf')
   expect(csrf.status()).toBe(200)
