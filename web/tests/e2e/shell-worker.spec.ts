@@ -68,6 +68,9 @@ applicationTest('privately installs only verified public shell assets without ca
   expect(versionResponse.headers()['cache-control']).toBe('no-store')
   expect(versionResponse.headers()['content-type']).toBe('application/json; charset=utf-8')
   expect(await versionResponse.json()).toEqual({ worker: installed.path })
+  const buildResponse = await page.request.get('/web-build.json')
+  expect(buildResponse.status()).toBe(404)
+  expect(buildResponse.headers()['cache-control']).toBe('no-store')
   const workerResponse = await page.request.get(installed.path)
   expect(workerResponse.status()).toBe(200)
   expect(workerResponse.headers()['cache-control']).toBe('public, max-age=31536000, immutable')
@@ -100,6 +103,7 @@ applicationTest('privately installs only verified public shell assets without ca
     }
   }, { cacheName: config.cacheName, name: marker })
   expect(inspection.keys).toEqual(config.assets.map((entry) => entry.path).sort())
+  expect(inspection.keys).not.toContain('/web-build.json')
   expect(inspection.keys.every((path) => !/^\/(api|auth|media|backups|exports|worker|data|secrets|dev)(\/|$)/.test(path))).toBe(true)
   expect(inspection.leaked).toBe(false)
   expect(inspection.htmlCSP).toContain("script-src 'self'")
@@ -243,6 +247,7 @@ const upgradeTest = applicationTest.extend<{}, { applicationWebDirectory: string
       cpSync(fileURLToPath(new URL('../../dist', import.meta.url)), web, { recursive: true })
       mkdirSync(join(root, 'scripts'))
       mkdirSync(join(root, 'src', 'pwa'), { recursive: true })
+      copyFileSync(fileURLToPath(new URL('../../package.json', import.meta.url)), join(root, 'package.json'))
       copyFileSync(fileURLToPath(new URL('../../scripts/build-shell-worker.mjs', import.meta.url)), join(root, 'scripts', 'build-shell-worker.mjs'))
       copyFileSync(fileURLToPath(new URL('../../src/pwa/shell-worker.js', import.meta.url)), join(root, 'src', 'pwa', 'shell-worker.js'))
       await provideFixture(web)
@@ -325,12 +330,17 @@ upgradeTest('keeps a new verified worker waiting while two tabs retain unsaved f
   writeFileSync(join(applicationWebDirectory, 'assets', 'shell-extra-AbCd1234.js'), 'export const privateUpgradeTest = true')
   writeFileSync(manifestPath, JSON.stringify(manifest))
   const versionPath = join(applicationWebDirectory, 'pwa-version.json')
+  const buildPath = join(applicationWebDirectory, 'web-build.json')
+  const packageVersion = (JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { version: string }).version
   expect(JSON.parse(readFileSync(versionPath, 'utf8'))).toEqual({ worker: first.path })
+  expect(JSON.parse(readFileSync(buildPath, 'utf8'))).toEqual({ worker: first.path, web_version: packageVersion })
   unlinkSync(versionPath)
+  unlinkSync(buildPath)
   execFileSync(process.execPath, [join(root, 'scripts', 'build-shell-worker.mjs')], { stdio: 'pipe' })
   const nextPath = readFileSync(indexPath, 'utf8').match(/name="homebox-shell-worker" content="(\/pwa-worker-[a-f0-9]{24}\.js)"/)?.[1]
   expect(nextPath).toBeTruthy()
   expect(nextPath).not.toBe(first.path)
+  expect(JSON.parse(readFileSync(buildPath, 'utf8'))).toEqual({ worker: nextPath, web_version: packageVersion })
 
   const result = await page.evaluate(async (path) => {
     const registration = await navigator.serviceWorker.register(path, { scope: '/', updateViaCache: 'none' })

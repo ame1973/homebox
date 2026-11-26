@@ -17,6 +17,7 @@ const test = applicationTest.extend<{}, { applicationWebDirectory: string }>({
     try {
       cpSync(fileURLToPath(new URL('../../dist', import.meta.url)), web, { recursive: true })
       mkdirSync(join(root, 'scripts')); mkdirSync(join(root, 'src', 'pwa'), { recursive: true })
+      copyFileSync(fileURLToPath(new URL('../../package.json', import.meta.url)), join(root, 'package.json'))
       copyFileSync(fileURLToPath(new URL('../../scripts/build-shell-worker.mjs', import.meta.url)), join(root, 'scripts', 'build-shell-worker.mjs'))
       copyFileSync(fileURLToPath(new URL('../../src/pwa/shell-worker.js', import.meta.url)), join(root, 'src', 'pwa', 'shell-worker.js'))
       const module = fileURLToPath(new URL('../../src/lib/shell-monitor.ts', import.meta.url))
@@ -67,12 +68,16 @@ function publishSecondVersion(web: string, first: string) {
   manifest['private-shell-monitor-test'] = { file: 'assets/shell-monitor-extra-AbCd1234.js', isDynamicEntry: true }
   writeFileSync(join(web, 'assets', 'shell-monitor-extra-AbCd1234.js'), 'export const shellMonitorTest = true')
   writeFileSync(manifestPath, JSON.stringify(manifest))
-  const version = join(web, 'pwa-version.json')
+  const version = join(web, 'pwa-version.json'), buildPath = join(web, 'web-build.json')
+  const packageVersion = (JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { version: string }).version
   expect(JSON.parse(readFileSync(version, 'utf8'))).toEqual({ worker: first })
+  expect(JSON.parse(readFileSync(buildPath, 'utf8'))).toEqual({ worker: first, web_version: packageVersion })
   unlinkSync(version)
+  unlinkSync(buildPath)
   execFileSync(process.execPath, [join(root, 'scripts', 'build-shell-worker.mjs')], { stdio: 'pipe' })
   const next = JSON.parse(readFileSync(version, 'utf8')) as { worker: string }
   expect(next.worker).not.toBe(first)
+  expect(JSON.parse(readFileSync(buildPath, 'utf8'))).toEqual({ worker: next.worker, web_version: packageVersion })
   return next.worker
 }
 

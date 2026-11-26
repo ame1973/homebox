@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Bind the exact web package version into the public shell worker identity and emit separate local build metadata without changing the public shell descriptor. The metadata is not a compatibility or atomic-deployment proof.
+
 - Withhold scan frames from paused video or muted/disabled tracks, and invalidate pending native or worker results on observed video pause/end/empty, track mute/end or stream membership events.
 
 - Refuse camera-frame capture from a paused video or a muted or disabled track, and discard an in-flight result if the source is no longer usable when encoding completes.

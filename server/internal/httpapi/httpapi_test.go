@@ -22,6 +22,7 @@ func fixture(t *testing.T) http.Handler {
 		"favicon.svg":                            {Data: []byte("<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>")},
 		"manifest.webmanifest":                   {Data: []byte(`{"name":"HomeBox"}`)},
 		"pwa-version.json":                       {Data: []byte("{\"worker\":\"/pwa-worker-0123456789abcdef01234567.js\"}\n")},
+		"web-build.json":                         {Data: []byte("must not be served")},
 		"assets/private.json":                    {Data: []byte("must not be served")},
 		"assets/private.sqlite":                  {Data: []byte("must not be served")},
 		"assets/app-a1b2c3d4.js.map":             {Data: []byte("must not be served")},
@@ -85,7 +86,7 @@ func TestPrivateNamespacesTraversalAndUnknownAssetsNeverFallBackToHTML(t *testin
 		"/backups/backup.sqlite", "/exports/data.csv", "/worker/claim", "/data/private.css",
 		"/secrets/private.js", "/dev/README.md", "/.git/config", "/.env", "/assets/../favicon.svg",
 		"/assets/%2e%2e/favicon.svg", "/assets/%5cprivate.js", "/assets/%00private.js",
-		"/assets/private.sqlite", "/assets/private.json", "/assets/app-a1b2c3d4.js.map", "/nested/private.html",
+		"/assets/private.sqlite", "/assets/private.json", "/web-build.json", "/assets/app-a1b2c3d4.js.map", "/nested/private.html",
 		"/assets/missing.js", "//api/v1/items",
 	} {
 		t.Run(target, func(t *testing.T) {

@@ -16,6 +16,7 @@ function fixture(t) {
   mkdirSync(join(root, 'dist', 'icons'))
   copyFileSync(new URL('../scripts/build-shell-worker.mjs', import.meta.url), join(root, 'scripts', 'build-shell-worker.mjs'))
   copyFileSync(new URL('../src/pwa/shell-worker.js', import.meta.url), join(root, 'src', 'pwa', 'shell-worker.js'))
+  writeFileSync(join(root, 'package.json'), JSON.stringify({ version: '0.1.0-dev' }))
   writeFileSync(join(root, 'dist', 'index.html'), '<!doctype html><meta name="homebox-shell-worker" content="__HOMEBOX_SHELL_WORKER__"><main>HomeBox</main>')
   for (const name of ['favicon.svg', 'manifest.webmanifest', 'icons/homebox.svg', 'icons/homebox-180.png', 'icons/homebox-192.png', 'icons/homebox-512.png']) {
     writeFileSync(join(root, 'dist', name), `public ${name}`)
@@ -40,8 +41,9 @@ function built(root) {
   const worker = readFileSync(join(root, 'dist', path), 'utf8')
   const config = JSON.parse(worker.match(/^const shellConfig = (.+)$/m)?.[1] ?? 'null')
   const version = readFileSync(join(root, 'dist', 'pwa-version.json'), 'utf8')
+  const build = readFileSync(join(root, 'dist', 'web-build.json'), 'utf8')
   assert.ok(config)
-  return { html, path, worker, config, version }
+  return { html, path, worker, config, version, build }
 }
 
 test('builds a deterministic integrity-bound private shell worker', (t) => {
@@ -53,7 +55,9 @@ test('builds a deterministic integrity-bound private shell worker', (t) => {
   assert.equal(result.html, other.html)
   assert.equal(result.worker, other.worker)
   assert.equal(result.version, other.version)
+  assert.equal(result.build, other.build)
   assert.equal(result.version, `${JSON.stringify({ worker: result.path })}\n`)
+  assert.equal(result.build, `${JSON.stringify({ worker: result.path, web_version: '0.1.0-dev' })}\n`)
   assert.equal(result.config.cacheName, `homebox-shell-v1-${result.path.slice('/pwa-worker-'.length, -'.js'.length)}`)
   assert.deepEqual(result.config.assets.map((entry) => entry.path), [
     '/assets/index-1234abcd.css', '/assets/index-AbCd1234.js', '/assets/lazy-AbCd1234.js', '/assets/worker-AbCd1234.js',
@@ -69,16 +73,19 @@ test('builds a deterministic integrity-bound private shell worker', (t) => {
 })
 
 test('changes its worker identity when a shell file or worker changes', (t) => {
-  const first = fixture(t), changed = fixture(t), workerChanged = fixture(t)
+  const first = fixture(t), changed = fixture(t), workerChanged = fixture(t), versionChanged = fixture(t)
   writeFileSync(join(changed.root, 'dist', 'assets', 'lazy-AbCd1234.js'), 'changed content')
   writeFileSync(join(workerChanged.root, 'src', 'pwa', 'shell-worker.js'), '\n// A different worker version.\n', { flag: 'a' })
-  first.run(); changed.run(); workerChanged.run()
+  writeFileSync(join(versionChanged.root, 'package.json'), JSON.stringify({ version: '0.1.0' }))
+  first.run(); changed.run(); workerChanged.run(); versionChanged.run()
   assert.notEqual(built(first.root).path, built(changed.root).path)
   assert.notEqual(built(first.root).path, built(workerChanged.root).path)
+  assert.notEqual(built(first.root).path, built(versionChanged.root).path)
+  assert.equal(JSON.parse(built(versionChanged.root).build).web_version, '0.1.0')
 })
 
 test('rejects unsafe, missing or oversized files without publishing a worker', (t) => {
-  for (const scenario of ['path traversal', 'absolute path', 'unhashed asset', 'missing file', 'oversized file', 'missing dependency', 'too many files', 'missing placeholder', 'duplicate placeholder', 'occupied version']) {
+  for (const scenario of ['path traversal', 'absolute path', 'unhashed asset', 'missing file', 'oversized file', 'missing dependency', 'too many files', 'missing placeholder', 'duplicate placeholder', 'occupied version', 'occupied build', 'missing web version', 'empty web version', 'invalid web version', 'oversized web version']) {
     const f = fixture(t)
     if (scenario === 'path traversal') f.manifest.lazy.file = 'assets/../../secrets.js'
     if (scenario === 'absolute path') f.manifest.lazy.file = '/api/v1/private.js'
@@ -92,6 +99,11 @@ test('rejects unsafe, missing or oversized files without publishing a worker', (
     if (scenario === 'missing placeholder') writeFileSync(join(f.root, 'dist', 'index.html'), '<!doctype html>')
     if (scenario === 'duplicate placeholder') writeFileSync(join(f.root, 'dist', 'index.html'), '__HOMEBOX_SHELL_WORKER__ __HOMEBOX_SHELL_WORKER__')
     if (scenario === 'occupied version') writeFileSync(join(f.root, 'dist', 'pwa-version.json'), 'existing version')
+    if (scenario === 'occupied build') writeFileSync(join(f.root, 'dist', 'web-build.json'), 'existing build')
+    if (scenario === 'missing web version') writeFileSync(join(f.root, 'package.json'), '{}')
+    if (scenario === 'empty web version') writeFileSync(join(f.root, 'package.json'), JSON.stringify({ version: '' }))
+    if (scenario === 'invalid web version') writeFileSync(join(f.root, 'package.json'), JSON.stringify({ version: '1.0.0\nother' }))
+    if (scenario === 'oversized web version') writeFileSync(join(f.root, 'package.json'), JSON.stringify({ version: '1'.repeat(33) }))
     writeFileSync(f.manifestPath, JSON.stringify(f.manifest))
     const before = readFileSync(join(f.root, 'dist', 'index.html'))
     assert.throws(f.run, undefined, scenario)
@@ -99,5 +111,7 @@ test('rejects unsafe, missing or oversized files without publishing a worker', (
     assert.ok(readdirSync(join(f.root, 'dist')).every((name) => !name.startsWith('pwa-worker-')), scenario)
     if (scenario === 'occupied version') assert.equal(readFileSync(join(f.root, 'dist', 'pwa-version.json'), 'utf8'), 'existing version')
     else assert.ok(!readdirSync(join(f.root, 'dist')).includes('pwa-version.json'), scenario)
+    if (scenario === 'occupied build') assert.equal(readFileSync(join(f.root, 'dist', 'web-build.json'), 'utf8'), 'existing build')
+    else assert.ok(!readdirSync(join(f.root, 'dist')).includes('web-build.json'), scenario)
   }
 })

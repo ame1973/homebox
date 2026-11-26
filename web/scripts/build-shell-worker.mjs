@@ -7,6 +7,8 @@ import { gzipSync } from 'node:zlib'
 const dist = new URL('../dist/', import.meta.url)
 const workerSource = await readFile(new URL('../src/pwa/shell-worker.js', import.meta.url), 'utf8')
 const generatorSource = await readFile(new URL(import.meta.url))
+const packageVersion = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')).version
+assert(typeof packageVersion === 'string' && packageVersion.length <= 32 && /^[A-Za-z0-9]+(?:[.+-][A-Za-z0-9]+)*$(?![\s\S])/.test(packageVersion), 'Invalid web version')
 const manifest = JSON.parse(await readFile(new URL('.vite/manifest.json', dist), 'utf8'))
 assert(manifest && typeof manifest === 'object' && !Array.isArray(manifest), 'Invalid Vite manifest')
 const indexURL = new URL('index.html', dist)
@@ -70,7 +72,7 @@ for (const file of [...files].sort()) {
   assets.push(entry(file, bytes))
 }
 const version = hash(JSON.stringify({
-  schema: 1, index: hash(index), assets, worker: hash(workerSource), generator: hash(generatorSource),
+  schema: 1, index: hash(index), assets, worker: hash(workerSource), generator: hash(generatorSource), webVersion: packageVersion,
 })).slice(0, 24)
 const workerPath = `/pwa-worker-${version}.js`
 const html = index.replace(placeholder, workerPath)
@@ -82,12 +84,16 @@ const config = { cacheName: `homebox-shell-v1-${version}`, assets }
 const worker = workerSource.replace('__HOMEBOX_SHELL_CONFIG__', JSON.stringify(config))
 assert(gzipSync(worker).length <= 150 * 1024, 'Shell worker exceeds 150 KiB gzip')
 const versionURL = new URL('pwa-version.json', dist)
-const occupied = await lstat(versionURL).then(() => true, (error) => {
-  if (error.code === 'ENOENT') return false
-  throw error
-})
-assert(!occupied, 'Shell version descriptor already exists')
+const buildURL = new URL('web-build.json', dist)
+for (const [url, label] of [[versionURL, 'Shell version descriptor'], [buildURL, 'Web build metadata']]) {
+  const occupied = await lstat(url).then(() => true, (error) => {
+    if (error.code === 'ENOENT') return false
+    throw error
+  })
+  assert(!occupied, `${label} already exists`)
+}
 await writeFile(new URL(workerPath.slice(1), dist), worker, { flag: 'wx' })
 await writeFile(versionURL, `${JSON.stringify({ worker: workerPath })}\n`, { flag: 'wx' })
+await writeFile(buildURL, `${JSON.stringify({ worker: workerPath, web_version: packageVersion })}\n`, { flag: 'wx' })
 await writeFile(indexURL, html)
 console.log(`Private shell worker: ${workerPath}; ${assets.length} verified public resources (${total + htmlEntry.size} bytes).`)
