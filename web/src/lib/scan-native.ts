@@ -11,6 +11,16 @@ export const requiredScanFormats: readonly ScanFormat[] = ['QR_CODE', 'EAN_13', 
 export const maxScanDimension = 1920
 export const maxScanPixels = 1920 * 1080
 
+// This checks the currently observable source, not physical presence or whether
+// a disabled track briefly recovered between two checks.
+export function isLiveScanFrame(video: HTMLVideoElement, stream: MediaStream): boolean {
+  try {
+    const tracks = stream.getTracks()
+    return document.visibilityState === 'visible' && video.srcObject === stream && video.readyState >= 2 && !video.paused && !video.ended &&
+      tracks.length > 0 && tracks.every((track) => track.kind === 'video' && track.readyState === 'live' && track.enabled && !track.muted)
+  } catch { return false }
+}
+
 interface NativeDetector {
   detect(source: ImageBitmapSource): Promise<unknown>
 }

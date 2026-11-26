@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react'
 import { createScanDecoder } from '@/lib/scan-decoder'
-import type { ScannedCode } from '@/lib/scan-native'
+import { isLiveScanFrame, type ScannedCode } from '@/lib/scan-native'
 import { subscribeSessionCleared } from '@/lib/session-lifecycle'
 
 type Decoder = NonNullable<Awaited<ReturnType<typeof createScanDecoder>>>
@@ -81,18 +81,24 @@ export function useNativeScan({ stream, video, active, onHalt }: {
   }, [])
   useEffect(() => {
     if (!stream || !active || !decoder || paused || failure || detection) return
-    const detector: Decoder = decoder
+    const detector: Decoder = decoder, source: MediaStream = stream
     const current = ++generation.current, controller = new AbortController()
     detectionAbort.current = controller
     let canceled = false, timer: ReturnType<typeof setTimeout> | undefined
-    const valid = () => !canceled && !controller.signal.aborted && !nativeTimedOut && generation.current === current && document.visibilityState === 'visible' && stream.getVideoTracks().some((track) => track.readyState === 'live')
+    const valid = () => !canceled && !controller.signal.aborted && !nativeTimedOut && generation.current === current && document.visibilityState === 'visible' && source.getVideoTracks().some((track) => track.readyState === 'live')
     const schedule = () => { if (valid()) timer = setTimeout(() => { void tick() }, 250) }
+    const ready = (element: HTMLVideoElement) => video.current === element && isLiveScanFrame(element, source) && !!element.videoWidth && !!element.videoHeight
     async function tick() {
       if (!valid()) return
       const element = video.current
-      if (!element || element.srcObject !== stream || element.readyState < 2 || !element.videoWidth || !element.videoHeight || nativeBusy) { schedule(); return }
+      if (!element || !ready(element) || nativeBusy) { schedule(); return }
       nativeBusy = true
       let expired = false
+      const frame = new AbortController(), listeners: [EventTarget, string][] = []
+      const invalidateFrame = () => {
+        if (frame.signal.aborted) return
+        frame.abort(); detector.cancel()
+      }
       const deadline = setTimeout(() => {
         expired = true
         controller.abort(); detector.cancel()
@@ -100,16 +106,26 @@ export function useNativeScan({ stream, video, active, onHalt }: {
         for (const listener of timeoutListeners) listener()
       }, 8_000)
       try {
-        const codes = await detector.detect(element, controller.signal)
-        if (expired || !valid()) return
-        if (codes.length) {
-          generation.current++
-          setDetection(boundedCodes(codes)); setPaused(true); onHalt()
-          return
+        const events: [EventTarget, string][] = [
+          [controller.signal, 'abort'], [element, 'pause'], [element, 'ended'], [element, 'emptied'],
+          [source, 'addtrack'], [source, 'removetrack'],
+          ...source.getTracks().flatMap((track): [EventTarget, string][] => [[track, 'mute'], [track, 'ended']]),
+        ]
+        for (const [target, name] of events) { target.addEventListener(name, invalidateFrame); listeners.push([target, name]) }
+        if (controller.signal.aborted) invalidateFrame()
+        if (valid() && !frame.signal.aborted && ready(element)) {
+          const codes = await detector.detect(element, frame.signal)
+          if (expired || !valid()) return
+          if (!frame.signal.aborted && ready(element) && codes.length) {
+            generation.current++
+            setDetection(boundedCodes(codes)); setPaused(true); onHalt()
+            return
+          }
         }
       } catch {
-        if (!expired && valid()) { generation.current++; setFailed(true); setPaused(true); onHalt() }
+        if (!expired && valid() && !frame.signal.aborted && ready(element)) { generation.current++; setFailed(true); setPaused(true); onHalt() }
       } finally {
+        for (const [target, name] of listeners) target.removeEventListener(name, invalidateFrame)
         clearTimeout(deadline)
         nativeBusy = false
       }

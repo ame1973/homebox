@@ -1,4 +1,4 @@
-import { maxScanDimension, maxScanPixels, requiredScanFormats, type ScanFormat, type ScannedCode } from './scan-native'
+import { isLiveScanFrame, maxScanDimension, maxScanPixels, requiredScanFormats, type ScanFormat, type ScannedCode } from './scan-native'
 import { validText } from './text-literal'
 
 type Deferred<T> = { resolve: (value: T) => void; reject: (error: Error) => void }
@@ -6,12 +6,8 @@ type Pending = Deferred<ScannedCode[]> & { id: number }
 const interrupted = () => new DOMException('Scan canceled', 'AbortError')
 const failure = () => new Error('Barcode decoder unavailable')
 
-function captureFrame(video: HTMLVideoElement) {
-  const stream = video.srcObject as MediaStream | null
-  const tracks = typeof stream?.getTracks === 'function' ? stream.getTracks() : []
-  const live = () => video.srcObject === stream && document.visibilityState === 'visible' &&
-    tracks.some((track) => track.kind === 'video' && track.readyState === 'live') &&
-    tracks.every((track) => track.kind === 'video' && track.readyState === 'live')
+function captureFrame(video: HTMLVideoElement, stream: MediaStream | null) {
+  const live = () => !!stream && isLiveScanFrame(video, stream)
   const sourceWidth = video.videoWidth, sourceHeight = video.videoHeight
   if (!live() || video.readyState < 2 || !Number.isSafeInteger(sourceWidth) || !Number.isSafeInteger(sourceHeight) ||
     sourceWidth < 1 || sourceHeight < 1 || sourceWidth > 16384 || sourceHeight > 16384 || sourceWidth * sourceHeight > 64000000) throw failure()
@@ -99,8 +95,8 @@ export async function createZXingBarcodeDecoder(formats: readonly ScanFormat[], 
     try {
       await ensureWorker(current)
       if (current.aborted || closed || !worker) throw interrupted()
-      const instance = worker, frame = captureFrame(video)
-      if (current.aborted || closed || worker !== instance) { frame.pixels.fill(0); throw interrupted() }
+      const instance = worker, stream = video.srcObject as MediaStream | null, frame = captureFrame(video, stream)
+      if (current.aborted || closed || worker !== instance || !stream || !isLiveScanFrame(video, stream)) { frame.pixels.fill(0); throw interrupted() }
       if (sequence >= Number.MAX_SAFE_INTEGER) throw failure()
       const id = ++sequence
       const reply = new Promise<ScannedCode[]>((resolve, reject) => { pending = { id, resolve, reject } })
@@ -114,7 +110,7 @@ export async function createZXingBarcodeDecoder(formats: readonly ScanFormat[], 
       }
       try {
         const codes = await reply
-        if (current.aborted || closed || worker !== instance) throw interrupted()
+        if (current.aborted || closed || worker !== instance || !stream || !isLiveScanFrame(video, stream)) throw interrupted()
         return codes
       } finally { clearTimeout(timer); current.removeEventListener('abort', abort) }
     } finally { busy = false }

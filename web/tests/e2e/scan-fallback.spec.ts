@@ -117,6 +117,30 @@ for (const mode of ['none', 'partial'] as const) test(`uses real worker pixels f
   expect(writes).toEqual([])
 })
 
+test('terminates a held real worker frame when video playback pauses', async ({ page, application }) => {
+  await installProbe(page, 'none'); await provision(page, application)
+  await page.goto('/scan')
+  await expect(page.getByText(text.fallbackFormats, { exact: true })).toBeVisible()
+  const writes = watchDomainWrites(page, ['/api/v1/items', '/api/v1/barcodes'])
+  await page.evaluate(() => { window.__fallbackProbe.hold = true })
+  await page.getByRole('button', { name: text.cameraStart }).click()
+  const video = page.getByLabel(text.cameraVideo)
+  await video.scrollIntoViewIfNeeded()
+  await expect.poll(() => page.evaluate(() => !!window.__fallbackProbe.deliver)).toBe(true)
+  await video.evaluate(async (element: HTMLVideoElement) => {
+    const paused = new Promise<void>((resolve) => element.addEventListener('pause', () => resolve(), { once: true }))
+    element.pause(); await paused
+  })
+  await expect.poll(() => page.evaluate(() => window.__fallbackProbe.terminated)).toBeGreaterThan(0)
+  expect(await page.evaluate(() => window.__fallbackProbe.tracks[0]?.readyState)).toBe('live')
+  await page.evaluate(() => { window.__fallbackProbe.deliver?.() })
+  await expect(page.getByRole('list', { name: text.nativeResults })).toHaveCount(0)
+  await video.evaluate(async (element: HTMLVideoElement) => { await element.play() })
+  await expect(page.getByRole('list', { name: text.nativeResults })).toContainText('"0042100005264"')
+  await expect.poll(() => page.evaluate(() => window.__fallbackProbe.tracks[0]?.readyState)).toBe('ended')
+  expect(writes).toEqual([])
+})
+
 test('terminates a real worker and ignores its delayed result when the page becomes hidden', async ({ page, application }) => {
   await installProbe(page, 'none'); await provision(page, application)
   await page.goto('/scan')

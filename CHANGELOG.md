@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Withhold scan frames from paused video or muted/disabled tracks, and invalidate pending native or worker results on observed video pause/end/empty, track mute/end or stream membership events.
+
 - Refuse camera-frame capture from a paused video or a muted or disabled track, and discard an in-flight result if the source is no longer usable when encoding completes.
 
 - Recognize a root-scoped public shell installed between the coordinator's two registration reads, while still rejecting foreign or nested workers.

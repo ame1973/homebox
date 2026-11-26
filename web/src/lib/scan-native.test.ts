@@ -1,7 +1,24 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createNativeBarcodeDecoder } from './scan-native'
+import { createNativeBarcodeDecoder, isLiveScanFrame } from './scan-native'
 
 afterEach(() => { vi.unstubAllGlobals() })
+
+it('requires a visible, bound, ready video-only source and fails closed on track errors', () => {
+  const visible = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
+  let throws = false
+  const tracks = [{ kind: 'video', readyState: 'live', enabled: true, muted: false }]
+  const stream = { getTracks: () => { if (throws) throw new Error('private track detail'); return tracks } } as unknown as MediaStream
+  const video = { srcObject: stream, readyState: 2, paused: false, ended: false } as HTMLVideoElement
+  try {
+    expect(isLiveScanFrame(video, stream)).toBe(true)
+    visible.mockReturnValue('hidden'); expect(isLiveScanFrame(video, stream)).toBe(false); visible.mockReturnValue('visible')
+    video.srcObject = null; expect(isLiveScanFrame(video, stream)).toBe(false); video.srcObject = stream
+    Reflect.set(video, 'readyState', 1); expect(isLiveScanFrame(video, stream)).toBe(false); Reflect.set(video, 'readyState', 2)
+    tracks.push({ kind: 'audio', readyState: 'live', enabled: true, muted: false }); expect(isLiveScanFrame(video, stream)).toBe(false)
+    tracks.length = 0; expect(isLiveScanFrame(video, stream)).toBe(false)
+    throws = true; expect(isLiveScanFrame(video, stream)).toBe(false)
+  } finally { visible.mockRestore() }
+})
 
 describe('native barcode decoder', () => {
   it('falls back when the browser does not expose its supported formats', async () => {

@@ -8,16 +8,17 @@ vi.mock('@/lib/scan-native', async (original) => ({ ...await original<typeof imp
 type Decoder = NonNullable<Awaited<ReturnType<typeof native.createNativeBarcodeDecoder>>>
 const detect = vi.fn<Decoder['detect']>()
 const decoder: Decoder = { formats: ['QR_CODE', 'EAN_13', 'UPC_A'], detect }
-const video = { current: { readyState: 2, videoWidth: 640, videoHeight: 480 } as HTMLVideoElement }
+const video = { current: Object.assign(new EventTarget(), { readyState: 2, videoWidth: 640, videoHeight: 480, paused: false, ended: false }) as HTMLVideoElement }
 function stream() {
-  const track = { readyState: 'live' } as MediaStreamTrack
-  const value = { getVideoTracks: () => [track] } as unknown as MediaStream
+  const track = Object.assign(new EventTarget(), { kind: 'video', readyState: 'live', enabled: true, muted: false }) as MediaStreamTrack
+  const value = Object.assign(new EventTarget(), { getVideoTracks: () => [track], getTracks: () => [track], getAudioTracks: () => [] }) as unknown as MediaStream
   video.current.srcObject = value
   return value
 }
 let visibility: ReturnType<typeof vi.spyOn>
 beforeEach(() => {
   detect.mockReset()
+  Object.defineProperties(video.current, { paused: { configurable: true, writable: true, value: false }, ended: { configurable: true, writable: true, value: false } })
   vi.mocked(native.createNativeBarcodeDecoder).mockReset().mockResolvedValue(decoder)
   visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
 })
@@ -189,6 +190,73 @@ it('stops on a runtime detection failure without retaining private diagnostics',
   act(() => { hook.result.current.reset() })
   expect(hook.result.current.failed).toBe(false)
   hook.unmount()
+})
+
+it.each(['paused', 'ended', 'disabled', 'muted'] as const)('waits for a usable video frame when %s', async (state) => {
+  vi.useFakeTimers()
+  detect.mockResolvedValue([])
+  const input = stream(), track = input.getVideoTracks()[0]!, halt = vi.fn()
+  if (state === 'paused' || state === 'ended') Object.defineProperty(video.current, state, { configurable: true, writable: true, value: true })
+  if (state === 'disabled') track.enabled = false
+  if (state === 'muted') Object.defineProperty(track, 'muted', { configurable: true, writable: true, value: true })
+  const hook = renderHook(() => useNativeScan({ stream: input, video, active: true, onHalt: halt }))
+  await act(async () => { await Promise.resolve() })
+  await act(async () => { await vi.advanceTimersByTimeAsync(1_000) })
+  expect(detect).not.toHaveBeenCalled()
+  expect(halt).not.toHaveBeenCalled()
+  if (state === 'paused' || state === 'ended') Object.defineProperty(video.current, state, { configurable: true, writable: true, value: false })
+  if (state === 'disabled') track.enabled = true
+  if (state === 'muted') Object.defineProperty(track, 'muted', { configurable: true, writable: true, value: false })
+  await act(async () => { await vi.advanceTimersByTimeAsync(250) })
+  expect(detect).toHaveBeenCalledOnce()
+  hook.unmount()
+})
+
+it.each(['pause', 'mute'] as const)('discards a pending native result after a transient %s', async (state) => {
+  vi.useFakeTimers()
+  let finish!: (codes: native.ScannedCode[]) => void
+  detect.mockReturnValueOnce(new Promise((resolve) => { finish = resolve })).mockResolvedValueOnce([{ format: 'UPC_A', rawValue: 'fresh' }])
+  const input = stream(), track = input.getVideoTracks()[0]!, halt = vi.fn()
+  const hook = renderHook(() => useNativeScan({ stream: input, video, active: true, onHalt: halt }))
+  await act(async () => { await Promise.resolve() })
+  await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+  expect(detect).toHaveBeenCalledOnce()
+  act(() => {
+    if (state === 'pause') { Object.defineProperty(video.current, 'paused', { configurable: true, writable: true, value: true }); video.current.dispatchEvent(new Event('pause')); Object.defineProperty(video.current, 'paused', { configurable: true, writable: true, value: false }) }
+    else { Object.defineProperty(track, 'muted', { configurable: true, writable: true, value: true }); track.dispatchEvent(new Event('mute')); Object.defineProperty(track, 'muted', { configurable: true, writable: true, value: false }) }
+  })
+  await act(async () => { finish([{ format: 'UPC_A', rawValue: 'stale' }]); await Promise.resolve() })
+  expect(hook.result.current.results).toBeUndefined()
+  expect(halt).not.toHaveBeenCalled()
+  await act(async () => { await vi.advanceTimersByTimeAsync(250) })
+  expect(hook.result.current.results).toEqual([{ format: 'UPC_A', rawValue: 'fresh' }])
+  expect(halt).toHaveBeenCalledOnce()
+  hook.unmount()
+})
+
+it('keeps an interrupted native call single-flight across remount until it actually settles', async () => {
+  vi.useFakeTimers()
+  let finish!: (codes: native.ScannedCode[]) => void
+  detect.mockReturnValueOnce(new Promise((resolve) => { finish = resolve })).mockResolvedValueOnce([{ format: 'UPC_A', rawValue: 'fresh' }])
+  const first = stream(), second = stream(), firstHalt = vi.fn(), secondHalt = vi.fn()
+  video.current.srcObject = first
+  const original = renderHook(() => useNativeScan({ stream: first, video, active: true, onHalt: firstHalt }))
+  await act(async () => { await Promise.resolve() })
+  await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+  expect(detect).toHaveBeenCalledOnce()
+  act(() => { video.current.dispatchEvent(new Event('pause')); original.unmount() })
+  video.current.srcObject = second
+  const reopened = renderHook(() => useNativeScan({ stream: second, video, active: true, onHalt: secondHalt }))
+  await act(async () => { await Promise.resolve() })
+  await act(async () => { await vi.advanceTimersByTimeAsync(1_000) })
+  expect(detect).toHaveBeenCalledOnce()
+  await act(async () => { finish([{ format: 'UPC_A', rawValue: 'stale' }]); await Promise.resolve() })
+  expect(firstHalt).not.toHaveBeenCalled()
+  expect(reopened.result.current.results).toBeUndefined()
+  await act(async () => { await vi.advanceTimersByTimeAsync(250) })
+  expect(reopened.result.current.results).toEqual([{ format: 'UPC_A', rawValue: 'fresh' }])
+  expect(secondHalt).toHaveBeenCalledOnce()
+  reopened.unmount()
 })
 
 // The timeout gate intentionally lasts until module reload; run this last.

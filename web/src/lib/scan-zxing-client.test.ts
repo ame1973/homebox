@@ -29,7 +29,7 @@ class FakeWorker {
 }
 
 let lastCanvas: HTMLCanvasElement | undefined
-let track: { kind: string; readyState: string }
+let track: { kind: string; readyState: string; enabled: boolean; muted: boolean }
 let video: HTMLVideoElement
 let draw: ReturnType<typeof vi.fn>
 function rememberCanvas(canvas: HTMLCanvasElement) { lastCanvas = canvas }
@@ -37,13 +37,13 @@ function rememberCanvas(canvas: HTMLCanvasElement) { lastCanvas = canvas }
 beforeEach(() => {
   FakeWorker.instances = []; FakeWorker.ready = true; FakeWorker.reply = []; FakeWorker.hold = false
   vi.stubGlobal('Worker', FakeWorker)
-  track = { kind: 'video', readyState: 'live' }
+  track = { kind: 'video', readyState: 'live', enabled: true, muted: false }
   const stream = { getTracks: () => [track] }
   video = document.createElement('video')
   Object.defineProperties(video, {
     srcObject: { configurable: true, value: stream, writable: true },
     videoWidth: { configurable: true, value: 80 }, videoHeight: { configurable: true, value: 40 },
-    readyState: { configurable: true, value: 4 },
+    readyState: { configurable: true, value: 4 }, paused: { configurable: true, value: false, writable: true }, ended: { configurable: true, value: false, writable: true },
   })
   Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' })
   draw = vi.fn()
@@ -161,6 +161,50 @@ describe('ZXing worker adapter', () => {
     Object.defineProperty(video, 'videoWidth', { configurable: true, value: 16385 })
     await expect(decoder.detect(video, signal)).rejects.toThrow()
     expect(FakeWorker.instances[0]!.messages).toEqual([])
+    decoder.close()
+  })
+
+  it.each(['paused', 'ended', 'disabled', 'muted'] as const)('does not send a %s video frame to the worker', async (state) => {
+    const decoder = await createZXingBarcodeDecoder(['QR_CODE'], new AbortController().signal)
+    if (state === 'paused' || state === 'ended') Object.defineProperty(video, state, { configurable: true, value: true, writable: true })
+    if (state === 'disabled') track.enabled = false
+    if (state === 'muted') track.muted = true
+    await expect(decoder.detect(video, new AbortController().signal)).rejects.toThrow()
+    expect(draw).not.toHaveBeenCalled()
+    expect(FakeWorker.instances[0]!.messages).toEqual([])
+    decoder.close()
+  })
+
+  it.each(['paused', 'disabled', 'muted'] as const)('discards a worker result when its video becomes %s', async (state) => {
+    FakeWorker.hold = true
+    const decoder = await createZXingBarcodeDecoder(['QR_CODE'], new AbortController().signal)
+    const worker = FakeWorker.instances[0]!, pending = decoder.detect(video, new AbortController().signal)
+    await vi.waitFor(() => expect(worker.messages).toHaveLength(1))
+    if (state === 'paused') Object.defineProperty(video, 'paused', { configurable: true, value: true, writable: true })
+    if (state === 'disabled') track.enabled = false
+    if (state === 'muted') track.muted = true
+    worker.emit({ type: 'result', id: 1, codes: [{ format: 'QR_CODE', rawValue: 'stale' }] })
+    await expect(pending).rejects.toThrow()
+    decoder.close()
+  })
+
+  it('discards the canvas if playback pauses while the frame is drawn', async () => {
+    const decoder = await createZXingBarcodeDecoder(['QR_CODE'], new AbortController().signal)
+    draw.mockImplementationOnce(() => { Object.defineProperty(video, 'paused', { configurable: true, value: true, writable: true }) })
+    await expect(decoder.detect(video, new AbortController().signal)).rejects.toThrow()
+    expect(FakeWorker.instances[0]!.messages).toEqual([])
+    expect(lastCanvas?.width).toBe(0)
+    decoder.close()
+  })
+
+  it('does not install a worker result after its source stream changes', async () => {
+    FakeWorker.hold = true
+    const decoder = await createZXingBarcodeDecoder(['QR_CODE'], new AbortController().signal)
+    const worker = FakeWorker.instances[0]!, pending = decoder.detect(video, new AbortController().signal)
+    await vi.waitFor(() => expect(worker.messages).toHaveLength(1))
+    video.srcObject = null
+    worker.emit({ type: 'result', id: 1, codes: [{ format: 'QR_CODE', rawValue: 'stale' }] })
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
     decoder.close()
   })
 

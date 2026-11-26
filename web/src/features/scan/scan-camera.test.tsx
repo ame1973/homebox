@@ -18,6 +18,8 @@ const text = messages.scan
 class FakeTrack extends EventTarget {
   readonly kind = 'video'
   readyState: 'live' | 'ended' = 'live'
+  enabled = true
+  muted = false
   readonly stop = vi.fn(() => { this.readyState = 'ended' })
   readonly applyConstraints = vi.fn(async (_constraints?: MediaTrackConstraints) => {})
   readonly torch: boolean
@@ -25,7 +27,7 @@ class FakeTrack extends EventTarget {
   getCapabilities() { return { torch: this.torch } }
 }
 function fakeStream(track: FakeTrack): MediaStream {
-  return { getTracks: () => [track], getVideoTracks: () => [track], getAudioTracks: () => [] } as unknown as MediaStream
+  return Object.assign(new EventTarget(), { getTracks: () => [track], getVideoTracks: () => [track], getAudioTracks: () => [] }) as unknown as MediaStream
 }
 const acquire = vi.fn<(constraints?: MediaStreamConstraints) => Promise<MediaStream>>()
 const originalDevices = Object.getOwnPropertyDescriptor(navigator, 'mediaDevices')
@@ -53,6 +55,7 @@ afterEach(() => {
 
 function readyVideo() {
   vi.spyOn(HTMLMediaElement.prototype, 'readyState', 'get').mockReturnValue(2)
+  vi.spyOn(HTMLMediaElement.prototype, 'paused', 'get').mockReturnValue(false)
   vi.spyOn(HTMLVideoElement.prototype, 'videoWidth', 'get').mockReturnValue(640)
   vi.spyOn(HTMLVideoElement.prototype, 'videoHeight', 'get').mockReturnValue(480)
 }

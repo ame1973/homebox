@@ -9,10 +9,10 @@ vi.mock('@/lib/scan-decoder', () => ({ createScanDecoder: vi.fn() }))
 type Decoder = NonNullable<Awaited<ReturnType<typeof scan.createScanDecoder>>>
 const detect = vi.fn<Decoder['detect']>(), cancel = vi.fn(), close = vi.fn()
 const decoder: Decoder = { formats: ['QR_CODE', 'EAN_13', 'UPC_A'], nativeFormats: ['EAN_13'], fallbackFormats: ['QR_CODE', 'UPC_A'], fallbackUnavailable: false, detect, cancel, close }
-const video = { current: { readyState: 2, videoWidth: 640, videoHeight: 480 } as HTMLVideoElement }
+const video = { current: Object.assign(new EventTarget(), { readyState: 2, videoWidth: 640, videoHeight: 480, paused: false, ended: false }) as HTMLVideoElement }
 function stream() {
-  const track = { readyState: 'live' } as MediaStreamTrack
-  const value = { getVideoTracks: () => [track] } as unknown as MediaStream
+  const track = Object.assign(new EventTarget(), { kind: 'video', readyState: 'live', enabled: true, muted: false }) as MediaStreamTrack
+  const value = Object.assign(new EventTarget(), { getVideoTracks: () => [track], getTracks: () => [track] }) as unknown as MediaStream
   video.current.srcObject = value
   return value
 }
@@ -57,6 +57,47 @@ it.each(['pause', 'hidden', 'pagehide', 'session', 'inactive', 'unmount'] as con
   await act(async () => { finish([{ format: 'QR_CODE', rawValue: 'private late worker result' }]); await Promise.resolve() })
   expect(halt).not.toHaveBeenCalled()
   if (reason !== 'unmount') { expect(hook.result.current.results).toBeUndefined(); hook.unmount() }
+})
+
+it.each(['pause', 'mute', 'addtrack', 'removetrack'] as const)('cancels a pending frame immediately on %s and scans a fresh frame after recovery', async (reason) => {
+  let finish!: (codes: ScannedCode[]) => void
+  detect.mockReturnValueOnce(new Promise((resolve) => { finish = resolve })).mockResolvedValueOnce([{ format: 'QR_CODE', rawValue: 'fresh' }])
+  const input = stream(), track = input.getVideoTracks()[0]!, halt = vi.fn()
+  const hook = renderHook(() => useNativeScan({ stream: input, video, active: true, onHalt: halt }))
+  await waitFor(() => expect(detect).toHaveBeenCalledOnce())
+  const signal = detect.mock.calls[0]![1]
+  act(() => {
+    if (reason === 'pause') { Object.defineProperty(video.current, 'paused', { configurable: true, writable: true, value: true }); video.current.dispatchEvent(new Event('pause')); Object.defineProperty(video.current, 'paused', { configurable: true, writable: true, value: false }) }
+    else if (reason === 'mute') { Object.defineProperty(track, 'muted', { configurable: true, writable: true, value: true }); track.dispatchEvent(new Event('mute')); Object.defineProperty(track, 'muted', { configurable: true, writable: true, value: false }) }
+    else input.dispatchEvent(new Event(reason))
+  })
+  expect(signal.aborted).toBe(true)
+  expect(cancel).toHaveBeenCalled()
+  await act(async () => { finish([{ format: 'QR_CODE', rawValue: 'stale' }]); await Promise.resolve() })
+  expect(hook.result.current.results).toBeUndefined()
+  expect(halt).not.toHaveBeenCalled()
+  await waitFor(() => expect(hook.result.current.results).toEqual([{ format: 'QR_CODE', rawValue: 'fresh' }]))
+  expect(halt).toHaveBeenCalledOnce()
+  hook.unmount()
+})
+
+it.each(['result', 'error'] as const)('withholds a pending %s while a track remains disabled and resumes with a fresh frame', async (outcome) => {
+  let finish!: (codes: ScannedCode[]) => void, fail!: (error: Error) => void
+  detect.mockReturnValueOnce(new Promise((resolve, reject) => { finish = resolve; fail = reject })).mockResolvedValueOnce([{ format: 'QR_CODE', rawValue: 'fresh' }])
+  const input = stream(), track = input.getVideoTracks()[0]!, halt = vi.fn()
+  const hook = renderHook(() => useNativeScan({ stream: input, video, active: true, onHalt: halt }))
+  await waitFor(() => expect(detect).toHaveBeenCalledOnce())
+  await act(async () => {
+    track.enabled = false
+    if (outcome === 'result') finish([{ format: 'QR_CODE', rawValue: 'stale' }]); else fail(new Error('private stale error'))
+    await Promise.resolve()
+  })
+  expect(hook.result.current.results).toBeUndefined()
+  expect(hook.result.current.failed).toBe(false)
+  expect(halt).not.toHaveBeenCalled()
+  track.enabled = true
+  await waitFor(() => expect(hook.result.current.results).toEqual([{ format: 'QR_CODE', rawValue: 'fresh' }]))
+  hook.unmount()
 })
 
 it('aborts discovery on page suspension and closes a late worker', async () => {

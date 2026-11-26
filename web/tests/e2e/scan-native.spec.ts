@@ -120,6 +120,57 @@ test('pauses a pending detection without stopping the camera and resumes only on
   expect(writes).toEqual([])
 })
 
+test('discards a held native result after the video pauses and resumes', async ({ page, application }) => {
+  await installNativeProbe(page); await provision(page, application); await openScan(page)
+  const writes = watchDomainWrites(page, ['/api/v1/items', '/api/v1/barcodes'])
+  await page.evaluate(() => { window.__nativeScanProbe.hold = true })
+  await page.getByRole('button', { name: text.cameraStart }).click()
+  const video = page.getByLabel(text.cameraVideo)
+  await video.scrollIntoViewIfNeeded()
+  await expect.poll(() => page.evaluate(() => !!window.__nativeScanProbe.finish)).toBe(true)
+  await video.evaluate(async (element: HTMLVideoElement) => {
+    const paused = new Promise<void>((resolve) => element.addEventListener('pause', () => resolve(), { once: true }))
+    element.pause(); await paused; await element.play()
+  })
+  expect(await trackState(page, 0)).toBe('live')
+  await page.evaluate(() => {
+    window.__nativeScanProbe.queue.push([{ format: 'upc_a', rawValue: 'fresh after playback' }])
+    window.__nativeScanProbe.finish?.([{ format: 'qr_code', rawValue: 'stale before playback' }])
+  })
+  const results = page.getByRole('list', { name: text.nativeResults })
+  await expect(results).toContainText('fresh after playback')
+  await expect(results).not.toContainText('stale before playback')
+  expect(await page.evaluate(() => window.__nativeScanProbe.calls)).toBe(2)
+  expect(await trackState(page, 0)).toBe('ended')
+  expect(writes).toEqual([])
+})
+
+test('does not install a held native result from a disabled track', async ({ page, application }) => {
+  await installNativeProbe(page); await provision(page, application); await openScan(page)
+  await page.evaluate(() => { window.__nativeScanProbe.hold = true })
+  await page.getByRole('button', { name: text.cameraStart }).click()
+  await expect.poll(() => page.evaluate(() => !!window.__nativeScanProbe.finish)).toBe(true)
+  await page.evaluate(async () => {
+    const track = window.__nativeScanProbe.tracks[0]
+    if (!track) throw new Error('Missing video track')
+    track.enabled = false
+    window.__nativeScanProbe.finish?.([{ format: 'qr_code', rawValue: 'stale disabled track' }])
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+  })
+  await expect(page.getByRole('list', { name: text.nativeResults })).toHaveCount(0)
+  expect(await trackState(page, 0)).toBe('live')
+  await page.evaluate(() => {
+    const track = window.__nativeScanProbe.tracks[0]
+    if (!track) throw new Error('Missing video track')
+    window.__nativeScanProbe.queue.push([{ format: 'upc_a', rawValue: 'fresh enabled track' }])
+    track.enabled = true
+  })
+  const results = page.getByRole('list', { name: text.nativeResults })
+  await expect(results).toContainText('fresh enabled track')
+  await expect(results).not.toContainText('stale disabled track')
+  expect(await trackState(page, 0)).toBe('ended')
+})
+
 test('discards a late old-camera result and serializes detection while switching cameras', async ({ page, application }) => {
   await installNativeProbe(page); await provision(page, application); await openScan(page)
   await page.evaluate(() => { window.__nativeScanProbe.hold = true })

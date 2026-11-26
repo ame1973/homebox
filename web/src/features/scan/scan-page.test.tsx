@@ -78,14 +78,16 @@ it('uses a chosen exact native result only as a new explicitly submitted lookup'
   class Track extends EventTarget {
     readonly kind = 'video'
     readyState: 'live' | 'ended' = 'live'
+    enabled = true
+    muted = false
     stop() { this.readyState = 'ended' }
     getCapabilities() { return {} }
   }
-  const track = new Track(), stream = { getTracks: () => [track], getVideoTracks: () => [track] } as unknown as MediaStream
+  const track = new Track(), stream = Object.assign(new EventTarget(), { getTracks: () => [track], getVideoTracks: () => [track] }) as unknown as MediaStream
   Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia: vi.fn().mockResolvedValue(stream) } })
   Object.defineProperty(HTMLMediaElement.prototype, 'srcObject', { configurable: true, writable: true, value: null })
   vi.stubGlobal('isSecureContext', true)
-  const spies = [vi.spyOn(HTMLMediaElement.prototype, 'readyState', 'get').mockReturnValue(2), vi.spyOn(HTMLVideoElement.prototype, 'videoWidth', 'get').mockReturnValue(640),
+  const spies = [vi.spyOn(HTMLMediaElement.prototype, 'readyState', 'get').mockReturnValue(2), vi.spyOn(HTMLMediaElement.prototype, 'paused', 'get').mockReturnValue(false), vi.spyOn(HTMLVideoElement.prototype, 'videoWidth', 'get').mockReturnValue(640),
     vi.spyOn(HTMLVideoElement.prototype, 'videoHeight', 'get').mockReturnValue(480), vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(),
     vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {}), vi.spyOn(native, 'createNativeBarcodeDecoder').mockResolvedValue({
       formats: ['UPC_A'], detect: vi.fn().mockResolvedValue([{ format: 'UPC_A', rawValue: '\0é\r\n001' }]),
