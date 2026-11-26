@@ -4,7 +4,9 @@
 
 ### Changed
 
-- Read paired web-build metadata through a bounded internal validator that checks the canonical public descriptor and the named regular worker. It does not verify HTML or worker bytes or expose a version endpoint.
+- Expose a protected system version observation and stateless browser adapter using the actual dataset, paired web build and exact write-client allowlist. Unknown minimum policies and model inventory remain explicitly null; offline sync and compatibility UI are not implied.
+
+- Read paired web-build metadata through a bounded internal validator that checks the canonical public descriptor and the named regular worker. The reader itself does not verify HTML or worker bytes.
 
 - Bind the exact web package version into the public shell worker identity and emit separate local build metadata without changing the public shell descriptor. The metadata is not a compatibility or atomic-deployment proof.
 

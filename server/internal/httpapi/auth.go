@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"net/http"
 	"slices"
 	"strconv"
@@ -14,6 +15,7 @@ import (
 )
 
 type authAPI struct {
+	assets       fs.FS
 	auth         *store.Auth
 	locations    *store.Locations
 	taxonomy     *store.Taxonomy
@@ -57,7 +59,7 @@ func (a *authAPI) serve(w http.ResponseWriter, r *http.Request, requestID string
 		return
 	}
 	if method == "" {
-		if a.serveConnectivity(w, r, requestID) || a.serveSyncStatus(w, r, requestID) || a.serveMediaRecoveryStatus(w, r, requestID) || a.serveLocations(w, r, requestID) || a.serveTaxonomy(w, r, requestID) || a.serveAssets(w, r, requestID) || a.serveHoldings(w, r, requestID) || a.servePurchases(w, r, requestID) || a.serveMediaReads(w, r, requestID) || a.serveBarcodeSearch(w, r, requestID) || a.serveCatalogLinks(w, r, requestID) || a.serveCatalog(w, r, requestID) {
+		if a.serveVersion(w, r, requestID) || a.serveConnectivity(w, r, requestID) || a.serveSyncStatus(w, r, requestID) || a.serveMediaRecoveryStatus(w, r, requestID) || a.serveLocations(w, r, requestID) || a.serveTaxonomy(w, r, requestID) || a.serveAssets(w, r, requestID) || a.serveHoldings(w, r, requestID) || a.servePurchases(w, r, requestID) || a.serveMediaReads(w, r, requestID) || a.serveBarcodeSearch(w, r, requestID) || a.serveCatalogLinks(w, r, requestID) || a.serveCatalog(w, r, requestID) {
 			return
 		}
 		// Worker credentials are a separate boundary, never an administrator session.

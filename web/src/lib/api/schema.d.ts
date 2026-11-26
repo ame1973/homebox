@@ -4251,15 +4251,21 @@ export interface components {
         readonly Version: {
             readonly api_version: string;
             readonly dataset_epoch: string;
-            readonly min_supported_client: string;
-            readonly min_web_build_id: string;
-            readonly model_index_versions: readonly string[];
+            /** @description Informational minimum when a real range policy exists; null means unknown, not unrestricted. */
+            readonly min_supported_client: string | null;
+            /** @description Informational minimum when build ordering is defined; null means unknown, not unrestricted. */
+            readonly min_web_build_id: string | null;
+            /** @description Null means no authoritative inventory is available; an empty array means a verified empty inventory. */
+            readonly model_index_versions: readonly string[] | null;
             /** @constant */
             readonly offline_projection_version: 1;
             /** @constant */
             readonly projection_version: 1;
             readonly schema_version: number;
             readonly server_instance_id: string;
+            /** @description Exact accepted write-header values, not a minimum-version range or authorization to write. */
+            readonly supported_write_client_versions: readonly string[];
+            /** @description Identity from the observed public shell descriptor, not an ordered release or deployment proof. */
             readonly web_build_id: string;
             readonly web_version: string;
         };
@@ -9739,8 +9745,6 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
-                    readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
                 content: {

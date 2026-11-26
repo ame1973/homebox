@@ -77,7 +77,7 @@ func New(cfg Config) (http.Handler, error) {
 	if err != nil {
 		return nil, fmt.Errorf("media service is required: %w", err)
 	}
-	api := &authAPI{auth: cfg.Auth, locations: locations, taxonomy: taxonomy, catalog: catalog, inventory: inventory, purchases: purchases, assetFinance: assetFinance, media: media, mediaFiles: cfg.MediaFiles, origin: policy, limiter: newRequestLimiter()}
+	api := &authAPI{assets: assets, auth: cfg.Auth, locations: locations, taxonomy: taxonomy, catalog: catalog, inventory: inventory, purchases: purchases, assetFinance: assetFinance, media: media, mediaFiles: cfg.MediaFiles, origin: policy, limiter: newRequestLimiter()}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestID := rand.Text()
 		w.Header().Set("X-Request-ID", requestID)

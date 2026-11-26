@@ -8613,6 +8613,7 @@ paths:
     get:
       operationId: get_system_version
       summary: Version handshake
+      x-max-body-bytes: 0
       tags:
       - system
       responses:
@@ -8627,12 +8628,6 @@ paths:
               schema:
                 const: no-store
               description: Protected API data is never cached by the service worker.
-            ETag:
-              schema:
-                type: string
-                minLength: 3
-                maxLength: 64
-              description: Quoted resource revision when a versioned resource is returned.
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -11889,8 +11884,17 @@ components:
         offline_projection_version:
           const: 1
         dataset_epoch: *id001
-        server_instance_id: *id001
-        web_build_id: *id001
+        server_instance_id:
+          type: string
+          minLength: 32
+          maxLength: 32
+          pattern: '^[a-f0-9]{32}$'
+        web_build_id:
+          type: string
+          minLength: 24
+          maxLength: 24
+          pattern: '^[a-f0-9]{24}$'
+          description: Identity from the observed public shell descriptor, not an ordered release or deployment proof.
         web_version:
           type: string
           minLength: 1
@@ -11900,17 +11904,37 @@ components:
           minimum: 1
           maximum: 9007199254740991
         min_supported_client:
-          type: string
-          minLength: 1
-          maxLength: 32
-        min_web_build_id: *id001
+          description: Informational minimum when a real range policy exists; null means unknown, not unrestricted.
+          anyOf:
+          - type: string
+            minLength: 1
+            maxLength: 32
+          - type: 'null'
+        min_web_build_id:
+          description: Informational minimum when build ordering is defined; null means unknown, not unrestricted.
+          anyOf:
+          - *id001
+          - type: 'null'
         model_index_versions:
+          description: Null means no authoritative inventory is available; an empty array means a verified empty inventory.
+          anyOf:
+          - type: array
+            items:
+              type: string
+              minLength: 1
+              maxLength: 256
+            maxItems: 500
+          - type: 'null'
+        supported_write_client_versions:
+          description: Exact accepted write-header values, not a minimum-version range or authorization to write.
           type: array
+          minItems: 1
+          maxItems: 16
+          uniqueItems: true
           items:
             type: string
             minLength: 1
-            maxLength: 256
-          maxItems: 500
+            maxLength: 32
       required:
       - api_version
       - projection_version
@@ -11923,6 +11947,7 @@ components:
       - min_supported_client
       - min_web_build_id
       - model_index_versions
+      - supported_write_client_versions
     Change:
       type: object
       required:
