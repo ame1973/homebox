@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Read paired web-build metadata through a bounded internal validator that checks the canonical public descriptor and the named regular worker. It does not verify HTML or worker bytes or expose a version endpoint.
+
 - Bind the exact web package version into the public shell worker identity and emit separate local build metadata without changing the public shell descriptor. The metadata is not a compatibility or atomic-deployment proof.
 
 - Withhold scan frames from paused video or muted/disabled tracks, and invalidate pending native or worker results on observed video pause/end/empty, track mute/end or stream membership events.
