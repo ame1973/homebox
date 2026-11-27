@@ -216,11 +216,11 @@ func TestSyncApprovedSearchCoveragePagesSourceAndCanonicalIdentities(t *testing.
 			identities = append(identities, projectionPair("unit", id))
 		}
 		sort.Strings(identities)
-		first, err := readSyncSearchProjectionIDs(t.Context(), tx, "", false)
+		first, err := readSyncPairProjectionIDs(t.Context(), tx, "search_doc", "", false)
 		if err != nil || len(first) != 100 || first[99] != identities[99] {
 			t.Fatal("first canonical search page changed its boundary", first, err)
 		}
-		second, err := readSyncSearchProjectionIDs(t.Context(), tx, first[99], true)
+		second, err := readSyncPairProjectionIDs(t.Context(), tx, "search_doc", first[99], true)
 		if err != nil || len(second) != 100 || second[99] != identities[199] {
 			t.Fatal("second canonical search page changed its boundary", second, err)
 		}

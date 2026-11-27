@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Verify Stock source and canonical current-projection coverage, preserving zero balances and separate measurement units.
+
 - Verify present Unit source and current-projection coverage, including disposed or unlocated Units, without enabling public synchronization.
 
 - Verify current approved Item and Unit search coverage in both directions, rejecting missing, unreviewed, noncanonical and orphan search projections without enabling bootstrap.

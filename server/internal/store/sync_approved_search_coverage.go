@@ -66,7 +66,7 @@ func verifySyncApprovedSearchCoverage(ctx context.Context, tx *sql.Tx) (syncAppr
 	var actual syncApprovedSearchCoverage
 	after, continued := "", false
 	for {
-		ids, err := readSyncSearchProjectionIDs(ctx, tx, after, continued)
+		ids, err := readSyncPairProjectionIDs(ctx, tx, "search_doc", after, continued)
 		if err != nil {
 			return syncApprovedSearchCoverage{}, err
 		}
@@ -99,10 +99,13 @@ func verifySyncApprovedSearchCoverage(ctx context.Context, tx *sql.Tx) (syncAppr
 	return coverage, nil
 }
 
-func readSyncSearchProjectionIDs(ctx context.Context, tx *sql.Tx, after string, continued bool) ([]string, error) {
+func readSyncPairProjectionIDs(ctx context.Context, tx *sql.Tx, kind, after string, continued bool) ([]string, error) {
+	if kind != "search_doc" && kind != "stock" {
+		return nil, ErrDomainState
+	}
 	query := `SELECT CASE WHEN length(CAST(entity_id AS BLOB))<=? THEN entity_id END
- FROM current_projections WHERE entity_type='search_doc'`
-	args := []any{maxSyncIdentityBytes}
+ FROM current_projections WHERE entity_type=?`
+	args := []any{maxSyncIdentityBytes, kind}
 	if continued {
 		query += " AND entity_id>?"
 		args = append(args, after)
@@ -119,7 +122,7 @@ func readSyncSearchProjectionIDs(ctx context.Context, tx *sql.Tx, after string, 
 		if err = rows.Scan(&id); err != nil {
 			return nil, errors.Join(err, rows.Close())
 		}
-		if !id.Valid || !validProjectionIdentity("search_doc", id.String) || (continued || len(ids) > 0) && id.String <= previous {
+		if !id.Valid || !validProjectionIdentity(kind, id.String) || (continued || len(ids) > 0) && id.String <= previous {
 			return nil, errors.Join(ErrDomainState, rows.Close())
 		}
 		ids = append(ids, id.String)
