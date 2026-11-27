@@ -79,6 +79,17 @@ it('provides authenticated settings navigation and actual client version without
   expect(auth.fetchCSRF).not.toHaveBeenCalled()
 })
 
+it('keeps local device storage settings reachable offline even after a denied account observation', async () => {
+  Object.defineProperty(navigator, 'onLine', { configurable: true, value: false })
+  const work = mount('/settings')
+  act(() => { work.client.setQueryData(['auth', 'me'], null) })
+  expect(await screen.findByRole('region', { name: messages.deviceStorage.title })).toBeVisible()
+  expect(screen.getByText(messages.deviceStorage.notBackup)).toBeVisible()
+  expect(api.fetchCategoriesPage).not.toHaveBeenCalled()
+  expect(api.fetchTagsPage).not.toHaveBeenCalled()
+  expect(auth.fetchAdmin).not.toHaveBeenCalled()
+})
+
 it('creates a root only after explicit review with no unrelated parent revision', async () => {
   mount('/settings/categories/new')
   await editor()

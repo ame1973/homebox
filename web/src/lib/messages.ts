@@ -138,6 +138,16 @@ export const messages = {
     versionHelp: '查看頁面版本、伺服器寫入版本與模型索引的已知狀態。',
     accountHelp: '更改管理員密碼，或明確登出這部裝置。', appearance: '外觀偏好', appearanceHelp: '可使用上方的外觀選單，選擇淺色、深色或跟隨系統。', clientVersion: '前端版本',
   },
+  deviceStorage: {
+    title: '此瀏覽器的儲存空間',
+    intro: '這是此網站來源的整體估算，可能包含應用程式外殼及其他同來源資料；不是 NAS 容量，也不代表離線資料已完整。',
+    usage: '已使用（估計）', quota: '儲存上限（估計）', persistence: '瀏覽器保留狀態',
+    persistent: '瀏覽器回報已允許持續儲存', notPersistent: '瀏覽器尚未允許持續儲存', unknown: '無法取得',
+    loading: '正在檢查瀏覽器儲存空間…', waiting: '正在等候瀏覽器回應…', refresh: '重新檢查', request: '要求持續儲存',
+    requestDenied: '瀏覽器未允許持續儲存；可以稍後再次明確要求。', requestFailed: '無法確認請求結果，請稍後重新檢查。',
+    notBackup: '持續儲存仍可能被使用者或系統清除，不是備份。離線副本及持久草稿尚未提供。',
+    requestHelp: '持續儲存可降低瀏覽器自動清除本站資料的機會。按下按鈕才會提出要求；離開畫面不一定會取消。',
+  },
   taxonomy: {
     ...mutationMessages,
     categoryIntro: '以階層整理物品類別。移動分類只改分類關係，不會搬動物品的實體位置。', tagIntro: '管理物品可共用的標籤。相似的名稱仍保留不同的識別碼，不會自動合併。',

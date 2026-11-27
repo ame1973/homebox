@@ -13,6 +13,7 @@ import { messages } from '@/lib/messages'
 import { settingsReturnPath, taxonomyCreateRoute, taxonomyListRoute, type TaxonomyKind } from '@/lib/settings-navigation'
 import { useOnline } from '@/lib/use-online'
 import { clearSessionQueries } from '@/features/auth/use-auth-action'
+import StorageStatus from '@/features/system/storage-status'
 import { version } from '../../../package.json'
 import { TaxonomyEditor } from './editor'
 import { TaxonomyList } from './list'
@@ -37,7 +38,7 @@ function SettingsOverview() {
   return <div className="max-w-3xl space-y-7"><ul className="divide-y rounded-lg border bg-card">
     {[[settings.categories, settings.categoryHelp, '/settings/categories'], [settings.tags, settings.tagHelp, '/settings/tags'], [settings.recovery, settings.recoveryHelp, '/settings/media-recovery'], [settings.sync, settings.syncHelp, '/settings/sync-status'], [settings.version, settings.versionHelp, '/settings/version'], [settings.account, settings.accountHelp, '/settings/account']].map(([label, help, path]) =>
       <li key={path} className="p-5"><Link to={path!} className="block min-h-12 space-y-2 rounded-md py-2 focus-visible:outline-2 focus-visible:outline-ring"><span className="block text-xl font-semibold underline-offset-4 hover:underline">{label}</span><span className="block text-base leading-relaxed text-muted-foreground">{help}</span></Link></li>)}
-  </ul><section className="space-y-3"><h2 className="text-xl font-semibold">{settings.appearance}</h2><p className="text-base leading-relaxed text-muted-foreground">{settings.appearanceHelp}</p><p className="text-sm text-muted-foreground">{settings.clientVersion}：{version}</p></section></div>
+  </ul><StorageStatus /><section className="space-y-3"><h2 className="text-xl font-semibold">{settings.appearance}</h2><p className="text-base leading-relaxed text-muted-foreground">{settings.appearanceHelp}</p><p className="text-sm text-muted-foreground">{settings.clientVersion}：{version}</p></section></div>
 }
 
 export default function SettingsPage({ kind = 'categories', mode }: { kind?: TaxonomyKind; mode: Mode }) {
@@ -114,7 +115,8 @@ export default function SettingsPage({ kind = 'categories', mode }: { kind?: Tax
     {!online && <Alert role="status" className="p-4"><WifiOff aria-hidden="true" /><AlertTitle>{text.offline}</AlertTitle><AlertDescription className="text-base leading-relaxed">{text.offlineHelp}</AlertDescription></Alert>}
     {route.state?.taxonomyNotice === 'confirmed' && <Alert role="status" className="p-4"><AlertDescription className="text-base">{text.done}</AlertDescription></Alert>}
     <MutationNotice operation={operation} online={permitted} onReadCurrent={readCurrent} />
-    {transitioning || denied || pending && (mode === 'home' || !collection) ? <p role="status" className="flex min-h-28 items-center gap-3 text-base"><LoaderCircle className="size-6 animate-spin motion-reduce:animate-none" aria-hidden="true" />{auth.isPending || denied || transitioning ? text.checking : text.loading}</p>
+    {!online && mode === 'home' ? <SettingsOverview />
+      : transitioning || denied || pending && (mode === 'home' || !collection) ? <p role="status" className="flex min-h-28 items-center gap-3 text-base"><LoaderCircle className="size-6 animate-spin motion-reduce:animate-none" aria-hidden="true" />{auth.isPending || denied || transitioning ? text.checking : text.loading}</p>
       : fatal ? <TaxonomyError error={fatal} />
         : mode === 'home' ? <SettingsOverview />
           : missing ? <section className="space-y-4 py-8"><h2 className="text-xl font-semibold">{text.missing}</h2><p className="text-base leading-relaxed text-muted-foreground">{text.missingHelp}</p></section>
