@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Validate private signed snapshot metadata against the completed session, stored manifest, ordinal range and retention boundary without returning projection contents or enabling bootstrap.
+
 - Add a read-only server-storage Settings screen that distinguishes filesystem values from unmeasured Media and backups, and clears private observations on session loss or suspension.
 
 - Expose a protected, bodyless database-filesystem storage observation and stateless browser adapter; unmeasured Media and backup sizes remain explicitly null.
