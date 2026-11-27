@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Read private snapshot pages only after verifying sealed counts, exact row proofs, ordering and completed-session authority; public bootstrap remains unavailable.
+
 - Document bootstrap rejection during host-clock rollback and make private browser fixtures wait for issuance without retrying setup.
 
 - Add private immutable snapshot proof storage and an independent key dependency without claiming legacy provenance or enabling bootstrap.

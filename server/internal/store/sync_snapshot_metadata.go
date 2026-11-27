@@ -25,29 +25,69 @@ func (a *Auth) readSyncSnapshotMetadata(ctx context.Context, token, signed strin
 		return syncSnapshotMetadata{}, err
 	}
 	defer tx.Rollback()
+	session, _, err := a.beginSyncSnapshotRead(ctx, tx, token)
+	if err != nil {
+		return syncSnapshotMetadata{}, err
+	}
+	metadata, err := a.readSyncSnapshotScope(ctx, tx, session, signed)
+	if err != nil {
+		return syncSnapshotMetadata{}, err
+	}
+	if err = a.recheckSyncSnapshotRead(ctx, tx, token, session, metadata.Cursor); err != nil {
+		return syncSnapshotMetadata{}, err
+	}
+	if err = tx.Commit(); err != nil {
+		return syncSnapshotMetadata{}, err
+	}
+	return metadata, nil
+}
+
+// Complete session activity before observing snapshot state. Capture and verify
+// the signer on both sides because activity can run SQL triggers.
+func (a *Auth) beginSyncSnapshotRead(ctx context.Context, tx *sql.Tx, token string) (AuthSession, bool, error) {
 	session, err := a.loadSession(ctx, tx, token, a.now().UTC())
 	if err != nil {
-		return syncSnapshotMetadata{}, err
+		return AuthSession{}, false, err
 	}
 	if err = requireCompleteSession(session); err != nil {
-		return syncSnapshotMetadata{}, err
+		return AuthSession{}, false, err
 	}
-	snapshotPinned, err := verifySyncSnapshotSigner(ctx, tx, a.serverSecret)
+	initialPinned, err := verifySyncSnapshotSigner(ctx, tx, a.serverSecret)
 	if err != nil {
-		return syncSnapshotMetadata{}, err
+		return AuthSession{}, false, err
 	}
-	// Activity can trigger SQL changes. Observe the dataset and manifest only
-	// afterward, then revalidate the session and expiry before committing.
 	if err = finishDomainSession(ctx, a, tx, token, session); err != nil {
-		return syncSnapshotMetadata{}, err
+		return AuthSession{}, false, err
 	}
-	currentPinned, err := verifySyncSnapshotSigner(ctx, tx, a.serverSecret)
+	pinned, err := verifySyncSnapshotSigner(ctx, tx, a.serverSecret)
 	if err != nil {
-		return syncSnapshotMetadata{}, err
+		return AuthSession{}, false, err
 	}
-	if currentPinned != snapshotPinned {
-		return syncSnapshotMetadata{}, ErrAuthState
+	if pinned != initialPinned {
+		return AuthSession{}, false, ErrAuthState
 	}
+	return session, pinned, nil
+}
+
+// Recheck the completed session and snapshot lifetime after the final read.
+func (a *Auth) recheckSyncSnapshotRead(ctx context.Context, tx *sql.Tx, token string, session AuthSession, cursor syncSnapshotCursor) error {
+	now := a.now().UTC()
+	if _, err := checkDomainSession(ctx, a, tx, token, session, now); err != nil {
+		return err
+	}
+	start, end, _ := syncSnapshotTimes(cursor)
+	if now.Before(start) {
+		return ErrInvalidCursor
+	}
+	if !now.Before(end) {
+		return ErrSyncSnapshotExpired
+	}
+	return nil
+}
+
+// The caller owns the authorized transaction and must recheck the session and
+// snapshot lifetime before committing or returning any contents.
+func (a *Auth) readSyncSnapshotScope(ctx context.Context, tx *sql.Tx, session AuthSession, signed string) (syncSnapshotMetadata, error) {
 	dataset, err := readSyncDataset(ctx, tx)
 	if err != nil {
 		return syncSnapshotMetadata{}, err
@@ -99,20 +139,6 @@ func (a *Auth) readSyncSnapshotMetadata(ctx context.Context, token, signed strin
 	}
 	if cursor.NextOrdinal > total {
 		return syncSnapshotMetadata{}, ErrInvalidCursor
-	}
-	now := a.now().UTC()
-	if _, err = checkDomainSession(ctx, a, tx, token, session, now); err != nil {
-		return syncSnapshotMetadata{}, err
-	}
-	start, end, _ := syncSnapshotTimes(cursor)
-	if now.Before(start) {
-		return syncSnapshotMetadata{}, ErrInvalidCursor
-	}
-	if !now.Before(end) {
-		return syncSnapshotMetadata{}, ErrSyncSnapshotExpired
-	}
-	if err = tx.Commit(); err != nil {
-		return syncSnapshotMetadata{}, err
 	}
 	return syncSnapshotMetadata{Cursor: cursor, TotalRows: total}, nil
 }
