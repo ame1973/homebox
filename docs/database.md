@@ -138,6 +138,12 @@ Use the actual returned filename, not the example name. Verification checks the 
 
 **These are sensitive local recovery snapshots, not full disaster-recovery backups.** They can contain credential hashes, contain no media archive, and are not encrypted. Keep them inside the private data volume; do not expose them through HTTP or copy them to an unprotected destination. Full user-exportable/off-host backups must use the encrypted backup-set workflow when it is implemented. Never delete the only verified recovery copy automatically.
 
+## Database storage observation groundwork
+
+An internal completed-session read can observe the logical file lengths of the owned database and its existing SQLite WAL, shared-memory and rollback-journal sidecars, together with the total and unprivileged-available space reported by that filesystem. It validates the database identity and private regular-file metadata, bounds arithmetic to JavaScript-safe integers, and revalidates the session before returning. Metadata calls do not open another descriptor on the active database inode; opening and closing one could release SQLite's process-scoped POSIX locks.
+
+These observations are not allocated disk blocks, a space reservation, a filesystem-integrity check, or an account quota measurement. File and filesystem values can change during or immediately after the read; identity checks do not eliminate all same-UID filesystem races. Media and backup directories are not scanned, so their sizes remain unknown. This internal operation is not yet an HTTP endpoint or a complete storage inventory.
+
 ## Architecture builds and tests
 
 ```sh

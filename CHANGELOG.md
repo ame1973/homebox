@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Add an authorized internal database-filesystem observation using private metadata checks and safe byte arithmetic, without scanning Media or backups. It is not yet an HTTP storage endpoint.
+
 - Show origin-wide browser storage estimates and persistence status in Settings, with an explicit persistence request and clear offline/backup limits.
 
 - Diagnose a rejected browser-test bootstrap using only bounded relationships from its disposable fixture, without logging credentials or retrying the setup request.
