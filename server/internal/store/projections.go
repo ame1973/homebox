@@ -157,6 +157,12 @@ func readProjectionSource(ctx context.Context, tx *sql.Tx, key projectionKey) ([
 			return nil, err
 		}
 		return json.Marshal(value.AttributeData)
+	case "ai_review":
+		value, err := loadSyncReviewSource(ctx, tx, key.id)
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(value.Data)
 	case "item_tag":
 		parts, valid := projectionPairParts(key.id)
 		if !valid {

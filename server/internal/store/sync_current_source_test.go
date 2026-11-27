@@ -268,7 +268,7 @@ func TestCurrentProjectionSourceRejectsPersistedUnreviewedSearch(t *testing.T) {
 	requireDomainState(t, s, before)
 }
 
-func TestCurrentProjectionSourceRejectsUnsupportedReviewSource(t *testing.T) {
+func TestCurrentProjectionSourceAcceptsRedactedPendingReviewSource(t *testing.T) {
 	s, catalog, _, token := catalogFixture(t)
 	item := createCatalogItem(t, catalog, token, ItemCreate{Name: "Review owner"})
 	payload, err := json.Marshal(map[string]any{"id": "review", "item_id": item.ID, "state": "needs_review", "effective_value": nil, "field_key": "keyword", "media_id": nil})
@@ -292,8 +292,32 @@ func TestCurrentProjectionSourceRejectsUnsupportedReviewSource(t *testing.T) {
 		if _, err = tx.ExecContext(t.Context(), "INSERT INTO current_projections(entity_type,entity_id,entity_revision,payload_json,updated_at) VALUES('ai_review','review',1,?,'2026')", string(payload)); err != nil {
 			t.Fatal(err)
 		}
-		if err = validateCurrentProjectionSource(t.Context(), tx, "ai_review", "review", 1, payload); !errors.Is(err, ErrDomainState) {
-			t.Fatal("an unimplemented review source was certified", err)
+		if err = validateCurrentProjectionSource(t.Context(), tx, "ai_review", "review", 1, payload); err != nil {
+			t.Fatal("redacted pending review source was rejected", err)
+		}
+		source, err := readProjectionSource(t.Context(), tx, projectionKey{"ai_review", "review"})
+		if err != nil || bytes.Contains(source, []byte("Unreviewed")) {
+			t.Fatal("pending raw OCR escaped into the source projection", err)
+		}
+		unsafe, err := json.Marshal(map[string]any{"id": "review", "item_id": item.ID, "state": "needs_review", "effective_value": "Unreviewed", "field_key": "keyword", "media_id": nil})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = tx.ExecContext(t.Context(), "UPDATE current_projections SET payload_json=? WHERE entity_type='ai_review' AND entity_id='review'", string(unsafe)); err != nil {
+			t.Fatal(err)
+		}
+		if err = validateCurrentProjectionSource(t.Context(), tx, "ai_review", "review", 1, unsafe); !errors.Is(err, ErrDomainState) {
+			t.Fatal("persisted pending raw OCR was certified", err)
+		}
+		unsafe, err = json.Marshal(map[string]any{"id": "review", "item_id": item.ID, "state": "accepted", "effective_value": "Unreviewed", "field_key": "keyword", "media_id": nil})
+		if err != nil || validateSyncRecord("ai_review", "review", "upsert", 1, 1, unsafe) != nil {
+			t.Fatal("fixture did not create schema-valid false approval", err)
+		}
+		if _, err = tx.ExecContext(t.Context(), "UPDATE current_projections SET payload_json=? WHERE entity_type='ai_review' AND entity_id='review'", string(unsafe)); err != nil {
+			t.Fatal(err)
+		}
+		if err = validateCurrentProjectionSource(t.Context(), tx, "ai_review", "review", 1, unsafe); !errors.Is(err, ErrDomainState) {
+			t.Fatal("schema-valid false approval of pending OCR was certified", err)
 		}
 	}()
 	requireDomainState(t, s, before)
