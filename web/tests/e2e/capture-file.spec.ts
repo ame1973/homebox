@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright'
 import type { Page } from '@playwright/test'
 import { messages } from '../../src/lib/messages.ts'
-import { test, expect } from './auth-fixture.ts'
+import { test, expect, type Application } from './auth-fixture.ts'
 import { leaveDocument, permitBFCache, returnFromBFCache } from './bfcache-helpers.ts'
 import { noOverflow, provision, watchDomainWrites } from './domain-helpers.ts'
 
@@ -109,7 +109,7 @@ async function installProbe(page: Page, transport?: 'broadcast' | 'storage') {
   }, transport)
 }
 
-async function openCapture(page: Page, application: { url: string; bootstrapToken: string; database: string }) {
+async function openCapture(page: Page, application: Application) {
   await provision(page, application)
   await page.goto('/photos/capture?owner_type=item&owner_id=synthetic-owner')
   await expect(page.getByLabel(text.fileInput)).toBeEnabled()

@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { cleanupPrivateApplication } from './private-application.ts'
 import { waitForBootstrapWindow } from './bootstrap-clock.ts'
 
-type Application = { url: string; bootstrapToken: string; database: string }
+export type Application = { url: string; bootstrapToken: string; database: string; bootstrapExpiresAt: string; bootstrapFixtureCheckedAt: number }
 
 // Private per-test stores avoid sharing a setup token/account/rate window across
 // viewports or bypassing the production limiter with a test-only HTTP endpoint.
@@ -40,6 +40,7 @@ export const test = base.extend<{ application: Application; applicationDatabaseF
       let metadata: unknown
       try { metadata = JSON.parse(delivery) } catch { throw new Error('Invalid private bootstrap metadata') }
       const expires = typeof metadata === 'object' && metadata !== null && 'expires_at' in metadata ? metadata.expires_at : undefined
+      if (typeof expires !== 'string') throw new Error('Invalid private bootstrap metadata')
       child = spawn(homeboxBinary, ['serve', '--listen', '127.0.0.1:0', '--database', database, '--web-dir', applicationWebDirectory], { stdio: ['ignore', 'pipe', 'pipe'] })
       const server = child
       server.stderr?.resume()
@@ -57,7 +58,8 @@ export const test = base.extend<{ application: Application; applicationDatabaseF
         })
       })
       if (await waitForBootstrapWindow(expires)) console.warn('Private bootstrap clock was before issuance; waited before the first setup request')
-      await provideFixture({ url: ready.public_origin, bootstrapToken: readFileSync(tokenFile, 'utf8').trim(), database })
+      const bootstrapFixtureCheckedAt = Date.now()
+      await provideFixture({ url: ready.public_origin, bootstrapToken: readFileSync(tokenFile, 'utf8').trim(), database, bootstrapExpiresAt: expires, bootstrapFixtureCheckedAt })
     } catch (error) {
       failure = { error }
       throw error

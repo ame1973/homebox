@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Recheck the private browser-test clock immediately before each explicit setup action and report only bounded fixture/request relationships after a 401; setup is never automatically retried.
+
 - Read private snapshot pages only after verifying sealed counts, exact row proofs, ordering and completed-session authority; public bootstrap remains unavailable.
 
 - Document bootstrap rejection during host-clock rollback and make private browser fixtures wait for issuance without retrying setup.

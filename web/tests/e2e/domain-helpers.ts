@@ -1,14 +1,18 @@
 import type { Page } from '@playwright/test'
-import { expect } from './auth-fixture.ts'
+import { expect, type Application } from './auth-fixture.ts'
+import { runInBootstrapWindow } from './bootstrap-clock.ts'
 
 // Domain browser tests use real setup/rotation and isolated serving stores. Never
 // record provisioning/cookies in traces, videos or automatic failure images.
-export async function provision(page: Page, application: { url: string; bootstrapToken: string; database: string }): Promise<string> {
+export async function provision(page: Page, application: Application): Promise<string> {
   const initial = 'location fixture initial password'
   const replacement = 'location fixture replacement password'
   const headers = { Origin: application.url }
-  const before = Date.now()
-  const setup = await page.request.post('/api/v1/auth/setup', { headers, data: { bootstrap_token: application.bootstrapToken, username: 'owner', password: initial } })
+  let before = 0
+  const setup = await runInBootstrapWindow(application.bootstrapExpiresAt, (checkedAt) => {
+    before = checkedAt
+    return page.request.post('/api/v1/auth/setup', { headers, data: { bootstrap_token: application.bootstrapToken, username: 'owner', password: initial } })
+  })
   const after = Date.now()
   if (setup.status() === 401) {
     // Read only the test-owned SQLite fixture from this separate Node process.
@@ -18,7 +22,7 @@ export async function provision(page: Page, application: { url: string; bootstra
       const body: unknown = await setup.json().catch(() => undefined)
       const code = typeof body === 'object' && body !== null && 'error' in body && typeof body.error === 'object' && body.error !== null && 'code' in body.error ? body.error.code : undefined
       console.error('BOOTSTRAP_DIAGNOSTICS', JSON.stringify({ status: setup.status(), code: safeBootstrapCode(code),
-        originMatches: new URL(setup.url()).origin === application.url, ...inspectBootstrapFixture(application.database, application.bootstrapToken, before, after) }))
+        originMatches: new URL(setup.url()).origin === application.url, ...inspectBootstrapFixture(application.database, application.bootstrapToken, before, after, application.bootstrapFixtureCheckedAt) }))
     } catch { /* Preserve the original failed setup assertion. */ }
   }
   expect(setup.status()).toBe(200)

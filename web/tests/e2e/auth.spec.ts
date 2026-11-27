@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
-import { test, expect } from './auth-fixture.ts'
+import { test, expect, type Application } from './auth-fixture.ts'
+import { runInBootstrapWindow } from './bootstrap-clock.ts'
 import { messages } from '../../src/lib/messages.ts'
 
 // Credential bodies/cookies must not enter traces, videos, or automatic failure images.
@@ -9,13 +10,13 @@ const initialPassword = 'browser initial private password'
 const newPassword = 'browser replacement private password'
 const input = (page: import('@playwright/test').Page, label: string) => page.getByLabel(new RegExp(`^${label}`))
 
-async function setup(page: import('@playwright/test').Page, token: string) {
+async function setup(page: import('@playwright/test').Page, application: Application) {
   await page.goto('/setup')
-  await input(page, text.bootstrap).fill(token)
+  await input(page, text.bootstrap).fill(application.bootstrapToken)
   await input(page, text.username).fill('owner')
   await input(page, text.password).fill(initialPassword)
   await input(page, text.confirmation).fill(initialPassword)
-  await page.getByRole('button', { name: text.setup, exact: true }).click()
+  await runInBootstrapWindow(application.bootstrapExpiresAt, () => page.getByRole('button', { name: text.setup, exact: true }).click())
   await expect(page.getByText(text.setupDone, { exact: true })).toBeVisible()
 }
 
@@ -36,7 +37,7 @@ async function changePassword(page: import('@playwright/test').Page) {
 test('real setup, mandatory rotation, fresh login and explicit logout', async ({ page, context, application }, info) => {
   const posts: string[] = []
   page.on('request', (request) => { if (request.method() === 'POST') posts.push(new URL(request.url()).pathname) })
-  await setup(page, application.bootstrapToken)
+  await setup(page, application)
   expect((await context.cookies()).filter((cookie) => cookie.name === 'homebox_session')).toHaveLength(0)
   await login(page)
   await expect(page.getByText(text.mandatory, { exact: true })).toBeVisible()
@@ -117,7 +118,7 @@ test('dirty navigation, keyboard validation and offline reconnect never replay c
 })
 
 test('a committed password change with a malformed reply is uncertain, not replayed', async ({ page, application }) => {
-  await setup(page, application.bootstrapToken)
+  await setup(page, application)
   await login(page)
   let writes = 0
   await page.route('**/api/v1/auth/password', async (route) => {

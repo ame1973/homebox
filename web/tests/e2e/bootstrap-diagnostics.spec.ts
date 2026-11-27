@@ -23,7 +23,8 @@ test('reports only safe fixture relationships for a real rejected bootstrap', as
   const output = String(diagnostics[0]?.[1]), info = JSON.parse(output)
   expect(info).toMatchObject({ status: 401, code: 'AUTHENTICATION_REQUIRED', originMatches: true,
     tokenCanonical: true, databaseReadable: true, rowPresent: true, tokenMatches: false, epochMatches: true, accountCount: 0 })
-  for (const secret of [wrong, application.bootstrapToken, application.database, createHash('sha256').update(wrong).digest('hex'), 'location fixture initial password']) {
+  for (const field of ['fixtureBeforeCreated', 'requestBeforeFixtureCheck']) expect([true, false, null]).toContain(info[field])
+  for (const secret of [wrong, application.bootstrapToken, application.database, application.bootstrapExpiresAt, String(application.bootstrapFixtureCheckedAt), createHash('sha256').update(wrong).digest('hex'), 'location fixture initial password']) {
     expect(JSON.stringify(messages)).not.toContain(secret)
   }
   // This is a separate explicit test action, not an automatic setup retry.
