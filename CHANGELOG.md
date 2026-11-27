@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Verify canonical Item/Tag membership source and current-projection coverage without enabling public synchronization.
+
 - Verify independently identified Barcode, Alias and Attribute source coverage without collapsing shared barcodes or rewriting legacy values.
 
 - Verify Stock source and canonical current-projection coverage, preserving zero balances and separate measurement units.

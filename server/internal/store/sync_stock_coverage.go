@@ -15,9 +15,9 @@ type syncStockCoverage struct {
 	Zero    int64
 }
 
-type syncStockSourcePair struct {
-	ItemID     string
-	LocationID string
+type syncItemPair struct {
+	ItemID    string
+	RelatedID string
 }
 
 func verifySyncStockCoverage(ctx context.Context, tx *sql.Tx) (syncStockCoverage, error) {
@@ -30,7 +30,7 @@ func verifySyncStockCoverage(ctx context.Context, tx *sql.Tx) (syncStockCoverage
 	var coverage syncStockCoverage
 	afterItem, afterLocation, continued := "", "", false
 	for {
-		pairs, err := readSyncStockSourcePairs(ctx, tx, afterItem, afterLocation, continued)
+		pairs, err := readSyncItemPairSources(ctx, tx, "stock", afterItem, afterLocation, continued)
 		if err != nil {
 			return syncStockCoverage{}, err
 		}
@@ -52,7 +52,7 @@ func verifySyncStockCoverage(ctx context.Context, tx *sql.Tx) (syncStockCoverage
 			break
 		}
 		last := pairs[len(pairs)-1]
-		afterItem, afterLocation, continued = last.ItemID, last.LocationID, true
+		afterItem, afterLocation, continued = last.ItemID, last.RelatedID, true
 	}
 	if coverage.Nonzero > maxSafeInteger-coverage.Zero {
 		return syncStockCoverage{}, ErrDomainState
@@ -89,31 +89,41 @@ func verifySyncStockCoverage(ctx context.Context, tx *sql.Tx) (syncStockCoverage
 	return coverage, nil
 }
 
-func readSyncStockSourcePairs(ctx context.Context, tx *sql.Tx, afterItem, afterLocation string, continued bool) ([]syncStockSourcePair, error) {
-	query := `SELECT CASE WHEN length(CAST(item_id AS BLOB))<=512 THEN item_id END,
- CASE WHEN length(CAST(location_id AS BLOB))<=512 THEN location_id END FROM stock_balances`
+// Source tuples use SQLite bytewise ordering, independently of JSON pair order.
+func readSyncItemPairSources(ctx context.Context, tx *sql.Tx, kind, afterItem, afterRelated string, continued bool) ([]syncItemPair, error) {
+	var table, related string
+	switch kind {
+	case "stock":
+		table, related = "stock_balances", "location_id"
+	case "item_tag":
+		table, related = "item_tags", "tag_id"
+	default:
+		return nil, ErrDomainState
+	}
+	query := "SELECT CASE WHEN length(CAST(item_id AS BLOB))<=512 THEN item_id END, " +
+		"CASE WHEN length(CAST(" + related + " AS BLOB))<=512 THEN " + related + " END FROM " + table
 	var args []any
 	if continued {
-		query += " WHERE (item_id,location_id)>(?,?)"
-		args = append(args, afterItem, afterLocation)
+		query += " WHERE (item_id," + related + ")>(?,?)"
+		args = append(args, afterItem, afterRelated)
 	}
-	query += " ORDER BY item_id,location_id LIMIT 100"
+	query += " ORDER BY item_id," + related + " LIMIT 100"
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
-	pairs := make([]syncStockSourcePair, 0, 100)
-	previous := syncStockSourcePair{ItemID: afterItem, LocationID: afterLocation}
+	pairs := make([]syncItemPair, 0, 100)
+	previous := syncItemPair{ItemID: afterItem, RelatedID: afterRelated}
 	for rows.Next() {
-		var item, location sql.NullString
-		if err = rows.Scan(&item, &location); err != nil {
+		var item, other sql.NullString
+		if err = rows.Scan(&item, &other); err != nil {
 			return nil, errors.Join(err, rows.Close())
 		}
-		if !item.Valid || !location.Valid || !validDomainID(item.String) || !validDomainID(location.String) ||
-			(continued || len(pairs) > 0) && (item.String < previous.ItemID || item.String == previous.ItemID && location.String <= previous.LocationID) {
+		if !item.Valid || !other.Valid || !validDomainID(item.String) || !validDomainID(other.String) ||
+			(continued || len(pairs) > 0) && (item.String < previous.ItemID || item.String == previous.ItemID && other.String <= previous.RelatedID) {
 			return nil, errors.Join(ErrDomainState, rows.Close())
 		}
-		pair := syncStockSourcePair{ItemID: item.String, LocationID: location.String}
+		pair := syncItemPair{ItemID: item.String, RelatedID: other.String}
 		pairs = append(pairs, pair)
 		previous = pair
 	}
@@ -123,8 +133,8 @@ func readSyncStockSourcePairs(ctx context.Context, tx *sql.Tx, afterItem, afterL
 	return pairs, nil
 }
 
-func verifySyncStockCoverageEntry(ctx context.Context, tx *sql.Tx, pair syncStockSourcePair) (bool, error) {
-	stock, err := loadStock(ctx, tx, pair.ItemID, pair.LocationID)
+func verifySyncStockCoverageEntry(ctx context.Context, tx *sql.Tx, pair syncItemPair) (bool, error) {
+	stock, err := loadStock(ctx, tx, pair.ItemID, pair.RelatedID)
 	if errors.Is(err, ErrNotFound) {
 		return false, ErrDomainState
 	}
@@ -139,13 +149,13 @@ func verifySyncStockCoverageEntry(ctx context.Context, tx *sql.Tx, pair syncStoc
 	}
 	// ponytail: validate each actual location path per balance; batch within the
 	// same transaction if measured snapshot latency requires it.
-	if _, err = holdingLocationPath(ctx, tx, pair.LocationID, false); err != nil {
+	if _, err = holdingLocationPath(ctx, tx, pair.RelatedID, false); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return false, ErrDomainState
 		}
 		return false, err
 	}
-	identity := projectionPair(pair.ItemID, pair.LocationID)
+	identity := projectionPair(pair.ItemID, pair.RelatedID)
 	var payload sql.NullString
 	err = tx.QueryRowContext(ctx, `SELECT CASE WHEN length(CAST(payload_json AS BLOB))<=? THEN payload_json END
  FROM current_projections WHERE entity_type='stock' AND entity_id=?`, maxSyncPageBytes, identity).Scan(&payload)

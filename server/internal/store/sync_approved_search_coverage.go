@@ -100,7 +100,7 @@ func verifySyncApprovedSearchCoverage(ctx context.Context, tx *sql.Tx) (syncAppr
 }
 
 func readSyncPairProjectionIDs(ctx context.Context, tx *sql.Tx, kind, after string, continued bool) ([]string, error) {
-	if kind != "search_doc" && kind != "stock" {
+	if kind != "search_doc" && kind != "stock" && kind != "item_tag" {
 		return nil, ErrDomainState
 	}
 	query := `SELECT CASE WHEN length(CAST(entity_id AS BLOB))<=? THEN entity_id END

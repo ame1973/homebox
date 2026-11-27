@@ -159,12 +159,12 @@ func TestSyncStockCoveragePagesAcrossItemBoundary(t *testing.T) {
 	seedSyncStockCoverage(t, s, owners[0], ids)
 	seedSyncStockCoverage(t, s, owners[1], ids[:1])
 	withQueryOnlySearchTx(t, s, func(tx *sql.Tx) {
-		first, err := readSyncStockSourcePairs(t.Context(), tx, "", "", false)
-		if err != nil || len(first) != 100 || first[99] != (syncStockSourcePair{ItemID: "item-a", LocationID: "location-099"}) {
+		first, err := readSyncItemPairSources(t.Context(), tx, "stock", "", "", false)
+		if err != nil || len(first) != 100 || first[99] != (syncItemPair{ItemID: "item-a", RelatedID: "location-099"}) {
 			t.Fatal("first source page changed its Item boundary", first, err)
 		}
-		second, err := readSyncStockSourcePairs(t.Context(), tx, first[99].ItemID, first[99].LocationID, true)
-		if err != nil || len(second) != 1 || second[0] != (syncStockSourcePair{ItemID: "item-b", LocationID: "location-000"}) {
+		second, err := readSyncItemPairSources(t.Context(), tx, "stock", first[99].ItemID, first[99].RelatedID, true)
+		if err != nil || len(second) != 1 || second[0] != (syncItemPair{ItemID: "item-b", RelatedID: "location-000"}) {
 			t.Fatal("second source page changed its Item boundary", second, err)
 		}
 		coverage, err := verifySyncStockCoverage(t.Context(), tx)
@@ -205,12 +205,12 @@ func TestSyncStockCoveragePagesExactCompositeIDsAndWithholdsLateMissingRow(t *te
 	seedSyncStockCoverage(t, s, owner, ids)
 	before := domainState(t, s)
 	withQueryOnlySearchTx(t, s, func(tx *sql.Tx) {
-		first, err := readSyncStockSourcePairs(t.Context(), tx, "", "", false)
-		if err != nil || len(first) != 100 || first[99].LocationID != "location-098\x00-家庭" {
+		first, err := readSyncItemPairSources(t.Context(), tx, "stock", "", "", false)
+		if err != nil || len(first) != 100 || first[99].RelatedID != "location-098\x00-家庭" {
 			t.Fatal("the first Stock page changed its embedded-NUL boundary", first, err)
 		}
-		second, err := readSyncStockSourcePairs(t.Context(), tx, first[99].ItemID, first[99].LocationID, true)
-		if err != nil || len(second) != 100 || second[99].LocationID != "location-197\x00-第二" {
+		second, err := readSyncItemPairSources(t.Context(), tx, "stock", first[99].ItemID, first[99].RelatedID, true)
+		if err != nil || len(second) != 100 || second[99].RelatedID != "location-197\x00-第二" {
 			t.Fatal("the second Stock page changed its embedded-NUL boundary", second, err)
 		}
 		coverage, err := verifySyncStockCoverage(t.Context(), tx)
