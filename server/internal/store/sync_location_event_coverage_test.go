@@ -60,58 +60,58 @@ func TestSyncLocationEventCoverageRejectsDamageWithoutPartialCounts(t *testing.T
 		want   error
 	}{
 		{"missing projection", func(t *testing.T, tx *sql.Tx) {
-			execSyncEventDamage(t, tx, "DELETE FROM current_projections WHERE entity_type='location_event' AND entity_id=?", id)
+			execSyncCoverageSQL(t, tx, "DELETE FROM current_projections WHERE entity_type='location_event' AND entity_id=?", id)
 		}, errSyncLocationEventUncovered},
 		{"changed projection", func(t *testing.T, tx *sql.Tx) {
-			execSyncEventDamage(t, tx, "UPDATE current_projections SET payload_json=json_set(payload_json,'$.occurred_at','different') WHERE entity_type='location_event' AND entity_id=?", id)
+			execSyncCoverageSQL(t, tx, "UPDATE current_projections SET payload_json=json_set(payload_json,'$.occurred_at','different') WHERE entity_type='location_event' AND entity_id=?", id)
 		}, ErrDomainState},
 		{"counter mismatch", func(t *testing.T, tx *sql.Tx) {
-			execSyncEventDamage(t, tx, "UPDATE projection_revisions SET revision=revision+1 WHERE entity_type='location_event' AND entity_id=?", id)
+			execSyncCoverageSQL(t, tx, "UPDATE projection_revisions SET revision=revision+1 WHERE entity_type='location_event' AND entity_id=?", id)
 		}, ErrDomainState},
 		{"missing counter", func(t *testing.T, tx *sql.Tx) {
-			execSyncEventDamage(t, tx, "DELETE FROM current_projections WHERE entity_type='location_event' AND entity_id=?", id)
-			execSyncEventDamage(t, tx, "DELETE FROM projection_revisions WHERE entity_type='location_event' AND entity_id=?", id)
+			execSyncCoverageSQL(t, tx, "DELETE FROM current_projections WHERE entity_type='location_event' AND entity_id=?", id)
+			execSyncCoverageSQL(t, tx, "DELETE FROM projection_revisions WHERE entity_type='location_event' AND entity_id=?", id)
 		}, ErrDomainState},
 		{"orphan projection", func(t *testing.T, tx *sql.Tx) {
-			execSyncEventDamage(t, tx, "INSERT INTO projection_revisions VALUES('location_event','orphan',1)")
-			execSyncEventDamage(t, tx, `INSERT INTO current_projections(entity_type,entity_id,entity_revision,payload_json,updated_at) VALUES('location_event','orphan',1,'{"id":"orphan"}','2026')`)
+			execSyncCoverageSQL(t, tx, "INSERT INTO projection_revisions VALUES('location_event','orphan',1)")
+			execSyncCoverageSQL(t, tx, `INSERT INTO current_projections(entity_type,entity_id,entity_revision,payload_json,updated_at) VALUES('location_event','orphan',1,'{"id":"orphan"}','2026')`)
 		}, ErrDomainState},
 		{"invalid event text", func(t *testing.T, tx *sql.Tx) {
-			execSyncEventDamage(t, tx, "DROP TRIGGER location_events_no_update")
-			execSyncEventDamage(t, tx, "UPDATE location_events SET occurred_at='' WHERE id=?", id)
+			execSyncCoverageSQL(t, tx, "DROP TRIGGER location_events_no_update")
+			execSyncCoverageSQL(t, tx, "UPDATE location_events SET occurred_at='' WHERE id=?", id)
 		}, ErrDomainState},
 		{"oversized event text", func(t *testing.T, tx *sql.Tx) {
-			execSyncEventDamage(t, tx, "DROP TRIGGER location_events_no_update")
-			execSyncEventDamage(t, tx, "UPDATE location_events SET occurred_at=? WHERE id=?", strings.Repeat("家", 13334), id)
+			execSyncCoverageSQL(t, tx, "DROP TRIGGER location_events_no_update")
+			execSyncCoverageSQL(t, tx, "UPDATE location_events SET occurred_at=? WHERE id=?", strings.Repeat("家", 13334), id)
 		}, ErrDomainState},
 		{"invalid UTF-8 event text", func(t *testing.T, tx *sql.Tx) {
-			execSyncEventDamage(t, tx, "DROP TRIGGER location_events_no_update")
-			execSyncEventDamage(t, tx, "UPDATE location_events SET occurred_at=CAST(X'ff' AS TEXT) WHERE id=?", id)
+			execSyncCoverageSQL(t, tx, "DROP TRIGGER location_events_no_update")
+			execSyncCoverageSQL(t, tx, "UPDATE location_events SET occurred_at=CAST(X'ff' AS TEXT) WHERE id=?", id)
 		}, ErrDomainState},
 		{"owner projection differs", func(t *testing.T, tx *sql.Tx) {
-			execSyncEventDamage(t, tx, "UPDATE locations SET name='changed actual owner' WHERE id=?", subject.ID)
+			execSyncCoverageSQL(t, tx, "UPDATE locations SET name='changed actual owner' WHERE id=?", subject.ID)
 		}, ErrDomainState},
 		{"oversized historical parent", func(t *testing.T, tx *sql.Tx) {
-			execSyncEventDamage(t, tx, "PRAGMA defer_foreign_keys=ON")
-			execSyncEventDamage(t, tx, "DROP TRIGGER location_events_no_update")
-			execSyncEventDamage(t, tx, "UPDATE location_events SET to_parent_id=? WHERE id=?", strings.Repeat("家", 171), id)
+			execSyncCoverageSQL(t, tx, "PRAGMA defer_foreign_keys=ON")
+			execSyncCoverageSQL(t, tx, "DROP TRIGGER location_events_no_update")
+			execSyncCoverageSQL(t, tx, "UPDATE location_events SET to_parent_id=? WHERE id=?", strings.Repeat("家", 171), id)
 		}, ErrDomainState},
 		{"missing historical parent", func(t *testing.T, tx *sql.Tx) {
-			execSyncEventDamage(t, tx, "PRAGMA defer_foreign_keys=ON")
-			execSyncEventDamage(t, tx, "DROP TRIGGER location_events_no_update")
-			execSyncEventDamage(t, tx, "UPDATE location_events SET to_parent_id='missing-parent' WHERE id=?", id)
-			execSyncEventDamage(t, tx, "UPDATE current_projections SET payload_json=json_set(payload_json,'$.to_parent_id','missing-parent') WHERE entity_type='location_event' AND entity_id=?", id)
+			execSyncCoverageSQL(t, tx, "PRAGMA defer_foreign_keys=ON")
+			execSyncCoverageSQL(t, tx, "DROP TRIGGER location_events_no_update")
+			execSyncCoverageSQL(t, tx, "UPDATE location_events SET to_parent_id='missing-parent' WHERE id=?", id)
+			execSyncCoverageSQL(t, tx, "UPDATE current_projections SET payload_json=json_set(payload_json,'$.to_parent_id','missing-parent') WHERE entity_type='location_event' AND entity_id=?", id)
 		}, ErrDomainState},
 		{"oversized owner identity", func(t *testing.T, tx *sql.Tx) {
-			execSyncEventDamage(t, tx, "PRAGMA defer_foreign_keys=ON")
-			execSyncEventDamage(t, tx, "DROP TRIGGER location_events_no_update")
-			execSyncEventDamage(t, tx, "UPDATE location_events SET location_id=? WHERE id=?", strings.Repeat("家", 171), id)
+			execSyncCoverageSQL(t, tx, "PRAGMA defer_foreign_keys=ON")
+			execSyncCoverageSQL(t, tx, "DROP TRIGGER location_events_no_update")
+			execSyncCoverageSQL(t, tx, "UPDATE location_events SET location_id=? WHERE id=?", strings.Repeat("家", 171), id)
 		}, ErrDomainState},
 		{"missing retained owner", func(t *testing.T, tx *sql.Tx) {
-			execSyncEventDamage(t, tx, "PRAGMA defer_foreign_keys=ON")
-			execSyncEventDamage(t, tx, "DROP TRIGGER location_events_no_update")
-			execSyncEventDamage(t, tx, "UPDATE location_events SET location_id='missing-owner' WHERE id=?", id)
-			execSyncEventDamage(t, tx, "UPDATE current_projections SET payload_json=json_set(payload_json,'$.location_id','missing-owner') WHERE entity_type='location_event' AND entity_id=?", id)
+			execSyncCoverageSQL(t, tx, "PRAGMA defer_foreign_keys=ON")
+			execSyncCoverageSQL(t, tx, "DROP TRIGGER location_events_no_update")
+			execSyncCoverageSQL(t, tx, "UPDATE location_events SET location_id='missing-owner' WHERE id=?", id)
+			execSyncCoverageSQL(t, tx, "UPDATE current_projections SET payload_json=json_set(payload_json,'$.location_id','missing-owner') WHERE entity_type='location_event' AND entity_id=?", id)
 		}, ErrDomainState},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -138,7 +138,7 @@ func TestSyncLocationEventCoverageRejectsDamageWithoutPartialCounts(t *testing.T
 	requireDomainState(t, s, before)
 }
 
-func execSyncEventDamage(t *testing.T, tx *sql.Tx, query string, args ...any) {
+func execSyncCoverageSQL(t *testing.T, tx *sql.Tx, query string, args ...any) {
 	t.Helper()
 	if _, err := tx.ExecContext(t.Context(), query, args...); err != nil {
 		t.Fatal(err)
@@ -177,9 +177,9 @@ func TestSyncLocationEventCoverageAcceptsMaximumWidthSourceFields(t *testing.T) 
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	execSyncEventDamage(t, tx, "INSERT INTO location_events(id,location_id,from_parent_id,occurred_at) VALUES('max-event',?,?,?)", owner.ID, parent, strings.Repeat("😀", 10000))
-	execSyncEventDamage(t, tx, "INSERT INTO projection_revisions VALUES('location_event','max-event',1)")
-	execSyncEventDamage(t, tx, `INSERT INTO current_projections(entity_type,entity_id,entity_revision,payload_json,updated_at)
+	execSyncCoverageSQL(t, tx, "INSERT INTO location_events(id,location_id,from_parent_id,occurred_at) VALUES('max-event',?,?,?)", owner.ID, parent, strings.Repeat("😀", 10000))
+	execSyncCoverageSQL(t, tx, "INSERT INTO projection_revisions VALUES('location_event','max-event',1)")
+	execSyncCoverageSQL(t, tx, `INSERT INTO current_projections(entity_type,entity_id,entity_revision,payload_json,updated_at)
  SELECT 'location_event',id,1,json_object('id',id,'location_id',location_id,'from_parent_id',from_parent_id,'to_parent_id',to_parent_id,'occurred_at',occurred_at),'2026'
  FROM location_events WHERE id='max-event'`)
 	if _, err = tx.ExecContext(t.Context(), "PRAGMA query_only=ON"); err != nil {
@@ -212,7 +212,7 @@ func TestSyncLocationEventCoverageWithholdsOversizedCurrent(t *testing.T) {
 		}
 		defer tx.Rollback()
 		oversized := `{"data":"` + strings.Repeat("x", maxSyncPageBytes) + `"}`
-		execSyncEventDamage(t, tx, "UPDATE current_projections SET payload_json=? WHERE entity_type='location_event' AND entity_id=?", oversized, id)
+		execSyncCoverageSQL(t, tx, "UPDATE current_projections SET payload_json=? WHERE entity_type='location_event' AND entity_id=?", oversized, id)
 		count, err := verifySyncLocationEventCoverage(t.Context(), tx)
 		if !errors.Is(err, errSyncPayloadTooLarge) || count != 0 {
 			t.Fatal("an oversized event projection returned coverage", count, err)
@@ -251,7 +251,7 @@ func TestSyncLocationEventCoveragePagesExactIDsAndWithholdsLateMissingRow(t *tes
 			t.Fatal(err)
 		}
 		defer tx.Rollback()
-		execSyncEventDamage(t, tx, "DELETE FROM current_projections WHERE entity_type='location_event' AND entity_id='zz-uncovered'")
+		execSyncCoverageSQL(t, tx, "DELETE FROM current_projections WHERE entity_type='location_event' AND entity_id='zz-uncovered'")
 		count, err := verifySyncLocationEventCoverage(t.Context(), tx)
 		if !errors.Is(err, errSyncLocationEventUncovered) || count != 0 {
 			t.Fatal("a late missing event returned partial coverage", count, err)
@@ -268,9 +268,9 @@ func seedSyncLocationCoverageEvents(t *testing.T, s *Store, owner string, ids []
 	}
 	defer tx.Rollback()
 	for _, id := range ids {
-		execSyncEventDamage(t, tx, "INSERT INTO location_events(id,location_id,occurred_at) VALUES(?,?,'legacy')", id, owner)
-		execSyncEventDamage(t, tx, "INSERT INTO projection_revisions VALUES('location_event',?,1)", id)
-		execSyncEventDamage(t, tx, `INSERT INTO current_projections(entity_type,entity_id,entity_revision,payload_json,updated_at)
+		execSyncCoverageSQL(t, tx, "INSERT INTO location_events(id,location_id,occurred_at) VALUES(?,?,'legacy')", id, owner)
+		execSyncCoverageSQL(t, tx, "INSERT INTO projection_revisions VALUES('location_event',?,1)", id)
+		execSyncCoverageSQL(t, tx, `INSERT INTO current_projections(entity_type,entity_id,entity_revision,payload_json,updated_at)
  SELECT 'location_event',id,1,json_object('id',id,'location_id',location_id,'from_parent_id',from_parent_id,'to_parent_id',to_parent_id,'occurred_at',occurred_at),'2026'
  FROM location_events WHERE id=?`, id)
 	}

@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Verify present Category and Tag source and current-projection coverage privately, without treating deleted counters as tombstone-history proof.
+
 - Verify retained Location movement source and current-projection coverage privately, including deleted owners and historical parents, without enabling bootstrap.
 
 - Verify retained Location source and current-projection coverage in a private transaction without claiming complete sync readiness or historical tombstone proof.
