@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Verify current AI review projection coverage against redacted retained source without enabling public synchronization.
+
 - Derive private AI review projections from retained source without selecting pending or rejected raw OCR into offline values.
 
 - Verify active and voided Disposal source coverage through the complete financial correction chain without enabling public synchronization.
