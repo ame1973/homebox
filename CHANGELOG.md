@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Compare all 22 kinds of current sync projections with authoritative source in one private transaction, without enabling bootstrap.
+
 - Verify current AI review projection coverage against redacted retained source without enabling public synchronization.
 
 - Derive private AI review projections from retained source without selecting pending or rejected raw OCR into offline values.
