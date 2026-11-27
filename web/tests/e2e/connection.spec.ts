@@ -50,8 +50,11 @@ test('keyboard navigation, menu touch targets and persisted theme', async ({ pag
     expect((await item.boundingBox())?.height).toBeGreaterThanOrEqual(44)
   }
   expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze()).violations).toEqual([])
+  await expect(system).toBeFocused()
   await page.keyboard.press('ArrowDown')
+  await expect(page.getByRole('menuitemradio', { name: messages.theme.light })).toBeFocused()
   await page.keyboard.press('ArrowDown')
+  await expect(page.getByRole('menuitemradio', { name: messages.theme.dark })).toBeFocused()
   await page.keyboard.press('Enter')
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
   await expect(trigger).toBeFocused()
