@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Verify current approved Item and Unit search coverage in both directions, rejecting missing, unreviewed, noncanonical and orphan search projections without enabling bootstrap.
+
 - Synchronize the purchase-history concurrency browser test with its intercepted response and check that held reads expose no partial history.
 
 - Check present Item projections and their current approved search source privately, without claiming complete search coverage or enabling bootstrap.
