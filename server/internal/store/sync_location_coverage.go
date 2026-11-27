@@ -91,6 +91,10 @@ func readSyncCoverageIDs(ctx context.Context, tx *sql.Tx, kind, after string, co
 		query = "SELECT CASE WHEN length(CAST(id AS BLOB))<=512 THEN id END FROM purchases"
 	case "purchase_line":
 		query = "SELECT CASE WHEN length(CAST(id AS BLOB))<=512 THEN id END FROM purchase_lines"
+	case "media":
+		query = "SELECT CASE WHEN length(CAST(id AS BLOB))<=512 THEN id END FROM media"
+	case "media_link":
+		query = "SELECT CASE WHEN length(CAST(id AS BLOB))<=512 THEN id END FROM media_links"
 	default:
 		return nil, ErrDomainState
 	}
