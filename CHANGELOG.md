@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Verify Purchase headers and active or voided Line coverage against actual financial correction source without enabling public synchronization.
+
 - Verify retained inventory-event source and current projections, including deleted Unit and Location history, without enabling public synchronization.
 
 - Verify canonical Item/Tag membership source and current-projection coverage without enabling public synchronization.
