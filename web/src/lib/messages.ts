@@ -131,11 +131,12 @@ export const messages = {
   },
   settings: {
     nav: '設定', title: 'HomeBox 設定', intro: '整理物品使用的分類與標籤，或管理管理員帳號。手機、平板與電腦提供相同操作。',
-    overview: '設定首頁', categories: '分類', tags: '標籤', account: '帳號與密碼', recovery: '照片復原狀態', sync: '同步診斷', version: '版本與相容性', navigation: '設定導覽', back: '回到設定',
+    overview: '設定首頁', categories: '分類', tags: '標籤', account: '帳號與密碼', recovery: '照片復原狀態', sync: '同步診斷', version: '版本與相容性', storage: '伺服器儲存空間', navigation: '設定導覽', back: '回到設定',
     categoryHelp: '以階層整理物品類別；同名分類保留各自的識別碼。', tagHelp: '管理可共用的物品標籤；名稱保留大小寫、空白與原始字元。',
     recoveryHelp: '查看照片檔案復原程序的狀態；這不會啟動復原或刪除檔案。',
     syncHelp: '查看伺服器投影與保留狀態；這不會啟動離線同步。',
     versionHelp: '查看頁面版本、伺服器寫入版本與模型索引的已知狀態。',
+    storageHelp: '查看資料庫所在檔案系統的容量，並區分尚未測量的範圍。',
     accountHelp: '更改管理員密碼，或明確登出這部裝置。', appearance: '外觀偏好', appearanceHelp: '可使用上方的外觀選單，選擇淺色、深色或跟隨系統。', clientVersion: '前端版本',
   },
   deviceStorage: {
@@ -147,6 +148,19 @@ export const messages = {
     requestDenied: '瀏覽器未允許持續儲存；可以稍後再次明確要求。', requestFailed: '無法確認請求結果，請稍後重新檢查。',
     notBackup: '持續儲存仍可能被使用者或系統清除，不是備份。離線副本及持久草稿尚未提供。',
     requestHelp: '持續儲存可降低瀏覽器自動清除本站資料的機會。按下按鈕才會提出要求；離開畫面不一定會取消。',
+  },
+  serverStorage: {
+    title: '伺服器儲存空間', intro: '查看資料庫所在檔案系統的容量。照片與備份可能位於其他位置。',
+    back: '回到設定', refresh: '重新讀取', checking: '正在確認登入狀態…', loading: '正在讀取伺服器儲存空間…',
+    offline: '目前離線', offlineHelp: '無法確認伺服器目前的儲存空間。重新連線後會再次讀取，不會修改資料。',
+    readError: '無法讀取伺服器儲存空間。請確認連線與主機狀態，再重新讀取。', invalidRoute: '此頁不接受額外的網址資料。請從設定頁重新開啟。',
+    sessionCleared: '登入狀態已變更，先前讀取的儲存資訊已清除。請重新登入。',
+    filesystem: '資料庫檔案系統', database: '資料庫與 SQLite 相關檔案', free: '可用空間', total: '總容量',
+    filesystemHelp: '資料庫數值是檔案長度，不是實際配置的磁碟空間。可用空間不一定反映帳號配額，讀取後也可能改變。',
+    otherScopes: '其他儲存範圍', media: '照片與媒體檔案', backup: '備份檔案', unknown: '尚未測量',
+    otherHelp: '尚未測量不代表沒有檔案；這些範圍可能位於其他檔案系統。', bytes: '位元組', measuredAt: '伺服器測量時間',
+    readOnlyHelp: '此頁只讀取狀態，不會保留空間、檢查檔案完整性或建立備份。',
+    restoreTitle: '先前的儲存資訊已清除', restoreHelp: '返回前讀取的資訊可能已過期。請重新確認登入，繼續後會再讀取目前狀態。',
   },
   taxonomy: {
     ...mutationMessages,

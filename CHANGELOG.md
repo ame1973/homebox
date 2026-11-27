@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Add a read-only server-storage Settings screen that distinguishes filesystem values from unmeasured Media and backups, and clears private observations on session loss or suspension.
+
 - Expose a protected, bodyless database-filesystem storage observation and stateless browser adapter; unmeasured Media and backup sizes remain explicitly null.
 
 - Calculate migration free-space checks using the filesystem fragment size when reported, with checked arithmetic and rejection of inconsistent counts.

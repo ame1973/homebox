@@ -29,14 +29,14 @@ type Mode = 'home' | 'list' | 'create' | 'edit'
 
 function SettingsNavigation() {
   return <nav aria-label={settings.navigation} className="flex max-w-full flex-wrap gap-2">
-    {[[settings.overview, '/settings'], [settings.categories, '/settings/categories'], [settings.tags, '/settings/tags'], [settings.recovery, '/settings/media-recovery'], [settings.sync, '/settings/sync-status'], [settings.version, '/settings/version'], [settings.account, '/settings/account']].map(([label, path]) =>
+    {[[settings.overview, '/settings'], [settings.categories, '/settings/categories'], [settings.tags, '/settings/tags'], [settings.recovery, '/settings/media-recovery'], [settings.sync, '/settings/sync-status'], [settings.version, '/settings/version'], [settings.storage, '/settings/storage'], [settings.account, '/settings/account']].map(([label, path]) =>
       <Button key={path} asChild variant="outline" className={`${control} aria-[current=page]:border-primary aria-[current=page]:bg-muted`}><NavLink to={path!} end={path === '/settings'}>{label}</NavLink></Button>)}
   </nav>
 }
 
 function SettingsOverview() {
   return <div className="max-w-3xl space-y-7"><ul className="divide-y rounded-lg border bg-card">
-    {[[settings.categories, settings.categoryHelp, '/settings/categories'], [settings.tags, settings.tagHelp, '/settings/tags'], [settings.recovery, settings.recoveryHelp, '/settings/media-recovery'], [settings.sync, settings.syncHelp, '/settings/sync-status'], [settings.version, settings.versionHelp, '/settings/version'], [settings.account, settings.accountHelp, '/settings/account']].map(([label, help, path]) =>
+    {[[settings.categories, settings.categoryHelp, '/settings/categories'], [settings.tags, settings.tagHelp, '/settings/tags'], [settings.recovery, settings.recoveryHelp, '/settings/media-recovery'], [settings.sync, settings.syncHelp, '/settings/sync-status'], [settings.version, settings.versionHelp, '/settings/version'], [settings.storage, settings.storageHelp, '/settings/storage'], [settings.account, settings.accountHelp, '/settings/account']].map(([label, help, path]) =>
       <li key={path} className="p-5"><Link to={path!} className="block min-h-12 space-y-2 rounded-md py-2 focus-visible:outline-2 focus-visible:outline-ring"><span className="block text-xl font-semibold underline-offset-4 hover:underline">{label}</span><span className="block text-base leading-relaxed text-muted-foreground">{help}</span></Link></li>)}
   </ul><StorageStatus /><section className="space-y-3"><h2 className="text-xl font-semibold">{settings.appearance}</h2><p className="text-base leading-relaxed text-muted-foreground">{settings.appearanceHelp}</p><p className="text-sm text-muted-foreground">{settings.clientVersion}：{version}</p></section></div>
 }

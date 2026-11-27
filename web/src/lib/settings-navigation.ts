@@ -22,7 +22,7 @@ export function settingsReturnPath(value: unknown): string | undefined {
   try {
     const url = new URL(value, 'https://homebox.invalid')
     if (url.origin !== 'https://homebox.invalid') return undefined
-    if (url.pathname === '/settings/media-recovery' || url.pathname === '/settings/sync-status' || url.pathname === '/settings/version') return value.includes('?') ? undefined : url.pathname
+    if (url.pathname === '/settings/media-recovery' || url.pathname === '/settings/sync-status' || url.pathname === '/settings/version' || url.pathname === '/settings/storage') return value.includes('?') ? undefined : url.pathname
     if ((url.pathname === '/settings' || url.pathname === '/settings/account') && !url.search) return url.pathname
     const match = /^\/settings\/(categories|tags)(?:\/([^/]+)(\/edit)?)?$/.exec(url.pathname)
     if (!match) return undefined

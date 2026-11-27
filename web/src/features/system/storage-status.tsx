@@ -2,9 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { mutationControl as control } from '@/components/mutation-review'
 import { messages } from '@/lib/messages'
+import { formatBytes } from '@/lib/format-bytes'
 
 const text = messages.deviceStorage
-const number = new Intl.NumberFormat('zh-TW', { maximumFractionDigits: 1 })
 const action = `${control} px-[10px]! aria-disabled:cursor-not-allowed aria-disabled:opacity-50`
 type Observation = { usage: number | null; quota: number | null; persistent: boolean | null; canRequest: boolean }
 const unavailable: Observation = { usage: null, quota: null, persistent: null, canRequest: false }
@@ -14,11 +14,7 @@ function bytes(value: unknown): number | null {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null
 }
 function displayBytes(value: number | null): string {
-  if (value === null) return text.unknown
-  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB']
-  let amount = value, unit = 0
-  while (amount >= 1024 && unit < units.length - 1) { amount /= 1024; unit++ }
-  return `${number.format(amount)} ${units[unit]}`
+  return value === null ? text.unknown : formatBytes(value)
 }
 
 // An estimate can stall independently of the app; a late read is never applied.

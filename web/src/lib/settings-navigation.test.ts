@@ -13,7 +13,7 @@ it('keeps imported new/tree IDs distinct from the static create routes without r
   }
 })
 
-it.each(['/settings', '/settings/account', '/settings/media-recovery', '/settings/sync-status', '/settings/version', '/settings/categories', '/settings/tags', '/settings/categories/new', '/settings/tags/new',
+it.each(['/settings', '/settings/account', '/settings/media-recovery', '/settings/sync-status', '/settings/version', '/settings/storage', '/settings/categories', '/settings/tags', '/settings/categories/new', '/settings/tags/new',
   '/settings/categories/new/edit', '/settings/tags/tree/edit', '/settings/categories/NEW/edit', '/settings/categories/%E6%88%BF%E9%96%93/edit',
   '/settings/categories/new?parent=parent', '/settings/categories/NEW?parent=parent'])('preserves only implemented settings return path %s', (path) => {
   expect(settingsReturnPath(path)).toBe(path)
@@ -24,7 +24,7 @@ it.each([null, undefined, {}, 7, '', '/login', '/settings-extra', '/settings/sys
   'https://evil.example/settings', '//evil.example/settings', '/settings/categories/room', '/settings/tags/room/unknown',
   '/settings/categories/room/edit?secret=value', '/settings/categories/new?parent=room&extra=value', '/settings/categories/new?parent=a&parent=b',
   '/settings/categories/new?parent=', '/settings/categories/new?parent=..', '/settings/categories/new?parent=%2Felsewhere',
-  '/settings/tags/new?parent=parent', '/settings?unknown=value', '/settings/account?unknown=value', '/settings/media-recovery?', '/settings/media-recovery?failure=private', '/settings/media-recovery#private', '/settings/sync-status?', '/settings/sync-status?epoch=private', '/settings/sync-status#private', '/settings/version?', '/settings/version?private=value', '/settings/version#private', '/settings/categories/room/edit#secret',
+  '/settings/tags/new?parent=parent', '/settings?unknown=value', '/settings/account?unknown=value', '/settings/media-recovery?', '/settings/media-recovery?failure=private', '/settings/media-recovery#private', '/settings/sync-status?', '/settings/sync-status?epoch=private', '/settings/sync-status#private', '/settings/version?', '/settings/version?private=value', '/settings/version#private', '/settings/storage?', '/settings/storage?private=value', '/settings/storage#private', '/settings/categories/room/edit#secret',
   '/settings/categories/%2Felsewhere/edit', '/settings/categories/%5celsewhere/edit', '/settings/categories/%00/edit',
   '/settings/categories/%EF/edit', '/settings/categories/room\\elsewhere/edit', `/settings/categories/${'😀'.repeat(129)}/edit`, 'x'.repeat(2049)])('rejects unsafe or unimplemented settings return path %j', (path) => {
   expect(settingsReturnPath(path)).toBeUndefined()
