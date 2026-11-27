@@ -235,12 +235,12 @@ it('stops an active stream immediately on session purge and blocks reacquisition
 
 it('stops on a cross-tab BroadcastChannel signal and closes its listener on unmount', async () => {
   const channels: FakeChannel[] = []
-  class FakeChannel {
-    onmessage: ((event: { data: unknown }) => void) | null = null
+  class FakeChannel extends EventTarget {
     readonly name: string
     close = vi.fn()
     postMessage = vi.fn()
-    constructor(name: string) { this.name = name; channels.push(this) }
+    constructor(name: string) { super(); this.name = name; channels.push(this) }
+    emit(data: unknown) { this.dispatchEvent(new MessageEvent('message', { data })) }
   }
   vi.stubGlobal('BroadcastChannel', FakeChannel)
   const video = new FakeTrack()
@@ -249,20 +249,19 @@ it('stops on a cross-tab BroadcastChannel signal and closes its listener on unmo
   const receiver = channels[0]
   if (!receiver) throw new Error('Missing session listener')
   await act(async () => { await hook.result.current.start() })
-  act(() => { receiver.onmessage?.({ data: 'unrelated' }) })
+  act(() => { receiver.emit('unrelated') })
   expect(video.stop).not.toHaveBeenCalled()
-  act(() => { receiver.onmessage?.({ data: 'cleared' }) })
+  act(() => { receiver.emit('cleared') })
   expect(video.stop).toHaveBeenCalledOnce()
   expect(hook.result.current.status).toBe('idle')
   await act(async () => { await hook.result.current.start() })
   expect(acquire).toHaveBeenCalledOnce()
   const client = createQueryClient()
   act(() => { clearSessionQueries(client) })
-  const sender = channels[1]
-  if (!sender) throw new Error('Missing session sender')
-  expect(sender.name).toBe('homebox:session-cleared')
-  expect(sender.postMessage).toHaveBeenCalledExactlyOnceWith('cleared')
-  expect(sender.close).toHaveBeenCalledOnce()
+  expect(channels).toHaveLength(1)
+  expect(receiver.name).toBe('homebox:session-cleared')
+  expect(receiver.postMessage).toHaveBeenCalledExactlyOnceWith('cleared')
+  expect(receiver.close).not.toHaveBeenCalled()
   expect(localStorage.getItem('homebox:session-cleared')).toBeNull()
   hook.unmount()
   expect(receiver.close).toHaveBeenCalledOnce()

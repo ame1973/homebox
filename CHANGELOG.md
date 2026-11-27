@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Avoid re-delivering a document's own session-clear broadcast as a delayed remote signal after login, while retaining cross-window and storage fallback notifications.
+
 - Recheck the private browser-test clock immediately before each explicit setup action and report only bounded fixture/request relationships after a 401; setup is never automatically retried.
 
 - Read private snapshot pages only after verifying sealed counts, exact row proofs, ordering and completed-session authority; public bootstrap remains unavailable.

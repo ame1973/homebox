@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { Admin } from '@/lib/api/auth'
 import { createQueryClient } from '@/lib/query'
-import { notifyPageSuspended } from '@/lib/session-lifecycle'
+import { notifyPageSuspended, notifySessionCleared } from '@/lib/session-lifecycle'
 import { monitorForegroundConnectivity, type ConnectivityObservation } from '@/lib/foreground-connectivity'
 import { messages } from '@/lib/messages'
 import { ConnectivityIndicator } from './connectivity-indicator'
@@ -132,6 +132,36 @@ it('cancels an old auth read on session clear and ignores its late success', asy
   expect(screen.getByText(text.phases.checking)).toBeVisible()
   complete(client)
   expect(monitor).toHaveBeenCalledTimes(2)
+})
+
+it('keeps a newly completed session after its own delayed broadcast', async () => {
+  class LoopbackChannel extends EventTarget {
+    static instances: LoopbackChannel[] = []
+    closed = false
+    constructor(_name: string) { super(); LoopbackChannel.instances.push(this) }
+    postMessage(data: unknown) {
+      for (const target of LoopbackChannel.instances) {
+        if (target !== this && !target.closed) queueMicrotask(() => { if (!target.closed) target.dispatchEvent(new MessageEvent('message', { data })) })
+      }
+    }
+    close() { this.closed = true }
+  }
+  vi.stubGlobal('BroadcastChannel', LoopbackChannel)
+  const client = mount()
+  complete(client)
+  await waitFor(() => expect(monitor).toHaveBeenCalledTimes(1))
+  await act(async () => {
+    notifySessionCleared()
+    client.setQueryData(['auth', 'me'], { ...owner, revision: 3 })
+    await Promise.resolve()
+  })
+  await waitFor(() => expect(monitor).toHaveBeenCalledTimes(2))
+  expect(screen.getByText(text.phases.checking)).toBeVisible()
+  expect(stops[0]).toHaveBeenCalledOnce()
+  const foreign = new LoopbackChannel('homebox:session-cleared')
+  await act(async () => { foreign.postMessage('cleared'); await Promise.resolve() })
+  await waitFor(() => expect(screen.queryByLabelText(text.label)).not.toBeInTheDocument())
+  foreign.close()
 })
 
 it('redacts the last observation synchronously before pagehide until a fresh session check', async () => {
