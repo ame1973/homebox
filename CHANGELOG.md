@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Verify active and voided Disposal source coverage through the complete financial correction chain without enabling public synchronization.
+
 - Verify Asset profile, Usage and Cost source coverage with independent correction chains, without enabling public synchronization.
 
 - Verify Media metadata and independent link projection coverage without opening files or enabling public synchronization.

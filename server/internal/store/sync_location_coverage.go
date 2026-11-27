@@ -99,6 +99,9 @@ func readSyncCoverageIDs(ctx context.Context, tx *sql.Tx, kind, after string, co
 	case "asset":
 		column = "item_unit_id"
 		query = "SELECT CASE WHEN length(CAST(item_unit_id AS BLOB))<=512 THEN item_unit_id END FROM asset_profiles"
+	case "disposal":
+		column = "item_unit_id"
+		query = "SELECT CASE WHEN length(CAST(item_unit_id AS BLOB))<=512 THEN item_unit_id END FROM asset_disposals"
 	case "usage":
 		query = "SELECT CASE WHEN length(CAST(id AS BLOB))<=512 THEN id END FROM asset_usage_events"
 	case "cost":
