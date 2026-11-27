@@ -206,6 +206,29 @@ func TestSessionIdleAndAbsoluteExpiryAndClockRollback(t *testing.T) {
 	})
 }
 
+func TestBootstrapRejectsClockRollbackWithoutConsumingToken(t *testing.T) {
+	s, a, now := authFixture(t)
+	token, expires, err := a.IssueBootstrap(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	issued := *now
+	if !expires.Equal(issued.Add(30 * time.Minute)) {
+		t.Fatal("bootstrap expiry did not follow the documented 30-minute lifetime")
+	}
+	*now = issued.Add(-time.Nanosecond)
+	if admin, err := a.Setup(t.Context(), token, "admin", testAdminPassword); !errors.Is(err, ErrAuthentication) || admin != (Admin{}) {
+		t.Fatal("a setup request before token issuance was accepted", err)
+	}
+	if scalar[int](t, s.db, "SELECT COUNT(*) FROM admin_accounts") != 0 || scalar[int](t, s.db, "SELECT COUNT(*) FROM auth_bootstrap") != 1 {
+		t.Fatal("clock rollback consumed the bootstrap token or created an account")
+	}
+	*now = issued
+	if admin, err := a.Setup(t.Context(), token, "admin", testAdminPassword); err != nil || admin.ID == "" {
+		t.Fatal("the unconsumed token did not work when the clock recovered", err)
+	}
+}
+
 func TestBootstrapExpiryIsCheckedAgainAfterHashing(t *testing.T) {
 	s, a, now := authFixture(t)
 	token, expires, err := a.IssueBootstrap(t.Context())

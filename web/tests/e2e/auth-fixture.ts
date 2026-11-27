@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { cleanupPrivateApplication } from './private-application.ts'
+import { waitForBootstrapWindow } from './bootstrap-clock.ts'
 
 type Application = { url: string; bootstrapToken: string; database: string }
 
@@ -35,7 +36,10 @@ export const test = base.extend<{ application: Application; applicationDatabaseF
         applicationDatabaseFixture.prepare(database)
         execFileSync(homeboxBinary, ['db', 'check', '--database', database], { stdio: 'pipe' })
       }
-      execFileSync(homeboxBinary, ['auth', 'bootstrap', '--database', database, '--output', tokenFile], { stdio: 'pipe' })
+      const delivery = execFileSync(homeboxBinary, ['auth', 'bootstrap', '--database', database, '--output', tokenFile], { stdio: 'pipe', encoding: 'utf8' })
+      let metadata: unknown
+      try { metadata = JSON.parse(delivery) } catch { throw new Error('Invalid private bootstrap metadata') }
+      const expires = typeof metadata === 'object' && metadata !== null && 'expires_at' in metadata ? metadata.expires_at : undefined
       child = spawn(homeboxBinary, ['serve', '--listen', '127.0.0.1:0', '--database', database, '--web-dir', applicationWebDirectory], { stdio: ['ignore', 'pipe', 'pipe'] })
       const server = child
       server.stderr?.resume()
@@ -52,6 +56,7 @@ export const test = base.extend<{ application: Application; applicationDatabaseF
           }
         })
       })
+      if (await waitForBootstrapWindow(expires)) console.warn('Private bootstrap clock was before issuance; waited before the first setup request')
       await provideFixture({ url: ready.public_origin, bootstrapToken: readFileSync(tokenFile, 'utf8').trim(), database })
     } catch (error) {
       failure = { error }

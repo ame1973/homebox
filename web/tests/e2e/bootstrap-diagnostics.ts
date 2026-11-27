@@ -11,7 +11,7 @@ export function safeBootstrapCode(value: unknown): string {
 export function inspectBootstrapFixture(database: string, token: string, before: number, after: number) {
   const tokenCanonical = /^[A-Za-z0-9_-]{43}$/.test(token) && Buffer.from(token, 'base64url').toString('base64url') === token
   const unavailable = { tokenCanonical, databaseReadable: false, rowPresent: null, tokenMatches: null,
-    epochMatches: null, requestBeforeCreated: null, responseAfterExpiry: null, accountCount: null }
+    epochMatches: null, requestBeforeCreated: null, responseBeforeCreated: null, responseAfterExpiry: null, accountCount: null }
   try {
     const db = new DatabaseSync(database, { readOnly: true })
     try {
@@ -20,12 +20,14 @@ export function inspectBootstrapFixture(database: string, token: string, before:
         token_hash: string; created_at: string; expires_at: string; dataset_epoch: string; actual_epoch: string | null
       } | undefined
       const count = db.prepare('SELECT count(*) AS value FROM admin_accounts').get() as { value: number }
+      // Date.parse and Date.now discard sub-millisecond ordering at equality.
       const created = row ? Date.parse(row.created_at) : NaN, expires = row ? Date.parse(row.expires_at) : NaN
       const result = { tokenCanonical, databaseReadable: true, rowPresent: !!row,
         tokenMatches: row ? row.token_hash === createHash('sha256').update(token).digest('hex') : null,
         epochMatches: row ? row.actual_epoch !== null && row.dataset_epoch === row.actual_epoch : null,
-        requestBeforeCreated: row && Number.isFinite(created) && Number.isFinite(before) ? before < created : null,
-        responseAfterExpiry: row && Number.isFinite(expires) && Number.isFinite(after) ? after >= expires : null,
+        requestBeforeCreated: row && Number.isFinite(created) && Number.isFinite(before) && before !== created ? before < created : null,
+        responseBeforeCreated: row && Number.isFinite(created) && Number.isFinite(after) && after !== created ? after < created : null,
+        responseAfterExpiry: row && Number.isFinite(expires) && Number.isFinite(after) && after !== expires ? after > expires : null,
         accountCount: Number.isSafeInteger(count.value) && count.value >= 0 ? count.value : null }
       db.exec('COMMIT')
       return result

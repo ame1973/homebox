@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Document bootstrap rejection during host-clock rollback and make private browser fixtures wait for issuance without retrying setup.
+
 - Add private immutable snapshot proof storage and an independent key dependency without claiming legacy provenance or enabling bootstrap.
 
 - Bind private snapshot manifest counts and frozen row bytes to independent HMAC domains; snapshot production, source validation and bootstrap remain unfinished.
