@@ -66,6 +66,7 @@ func verifySyncLocationCoverage(ctx context.Context, tx *sql.Tx) (syncLocationCo
 
 func readSyncCoverageIDs(ctx context.Context, tx *sql.Tx, kind, after string, continued bool) ([]string, error) {
 	var query string
+	column := "id"
 	switch kind {
 	case "location":
 		query = "SELECT CASE WHEN length(CAST(id AS BLOB))<=512 THEN id END FROM locations"
@@ -95,15 +96,22 @@ func readSyncCoverageIDs(ctx context.Context, tx *sql.Tx, kind, after string, co
 		query = "SELECT CASE WHEN length(CAST(id AS BLOB))<=512 THEN id END FROM media"
 	case "media_link":
 		query = "SELECT CASE WHEN length(CAST(id AS BLOB))<=512 THEN id END FROM media_links"
+	case "asset":
+		column = "item_unit_id"
+		query = "SELECT CASE WHEN length(CAST(item_unit_id AS BLOB))<=512 THEN item_unit_id END FROM asset_profiles"
+	case "usage":
+		query = "SELECT CASE WHEN length(CAST(id AS BLOB))<=512 THEN id END FROM asset_usage_events"
+	case "cost":
+		query = "SELECT CASE WHEN length(CAST(id AS BLOB))<=512 THEN id END FROM asset_cost_events"
 	default:
 		return nil, ErrDomainState
 	}
 	var args []any
 	if continued {
-		query += " WHERE id>?"
+		query += " WHERE " + column + ">?"
 		args = append(args, after)
 	}
-	query += " ORDER BY id LIMIT 100"
+	query += " ORDER BY " + column + " LIMIT 100"
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err

@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Verify Asset profile, Usage and Cost source coverage with independent correction chains, without enabling public synchronization.
+
 - Verify Media metadata and independent link projection coverage without opening files or enabling public synchronization.
 
 - Verify Purchase headers and active or voided Line coverage against actual financial correction source without enabling public synchronization.
