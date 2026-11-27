@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Check present Item projections and their current approved search source privately, without claiming complete search coverage or enabling bootstrap.
+
 - Verify present Category and Tag source and current-projection coverage privately, without treating deleted counters as tombstone-history proof.
 
 - Verify retained Location movement source and current-projection coverage privately, including deleted owners and historical parents, without enabling bootstrap.
