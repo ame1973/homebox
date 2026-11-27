@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Verify retained Location source and current-projection coverage in a private transaction without claiming complete sync readiness or historical tombstone proof.
+
 - Verify private current projection bytes and counters against selected read-only source fields, without claiming complete cross-domain authority or enabling bootstrap.
 
 - Avoid re-delivering a document's own session-clear broadcast as a delayed remote signal after login, while retaining cross-window and storage fallback notifications.
