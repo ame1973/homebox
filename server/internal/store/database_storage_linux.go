@@ -81,17 +81,11 @@ func (a *Auth) ReadDatabaseStorage(ctx context.Context, token string) (DatabaseS
 }
 
 func databaseFilesystemBytes(blockSize, fragmentSize int64, blocks, available uint64) (int64, int64, error) {
-	if blockSize <= 0 || blockSize > maxSafeInteger || fragmentSize < 0 || fragmentSize > maxSafeInteger || available > blocks {
+	unit, valid := filesystemAllocationUnit(blockSize, fragmentSize)
+	if !valid || blockSize > maxSafeInteger || fragmentSize > maxSafeInteger || available > blocks || blocks > uint64(maxSafeInteger)/unit {
 		return 0, 0, ErrDomainState
 	}
-	// Linux reports filesystem block counts in fragment-size units when present.
-	if fragmentSize == 0 {
-		fragmentSize = blockSize
-	}
-	if blocks > uint64(maxSafeInteger)/uint64(fragmentSize) {
-		return 0, 0, ErrDomainState
-	}
-	return int64(blocks) * fragmentSize, int64(available) * fragmentSize, nil
+	return int64(blocks * unit), int64(available * unit), nil
 }
 
 func addDatabaseFileBytes(total, size int64) (int64, error) {

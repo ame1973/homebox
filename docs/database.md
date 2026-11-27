@@ -75,7 +75,7 @@ Before changing an existing database, the runner:
 
 1. Validates known history, checksums, SQLite integrity, and foreign keys.
 2. For legacy adoption, compares actual schema definitions with the exact supported reference, checks tree cycles/tracking modes, and requires any necessary unit mapping.
-3. Checks free space on both the database and snapshot filesystems. Each check requires at least twice the logical database size plus a configurable reserve (default 16 MiB).
+3. Checks unprivileged available space on both the database and snapshot filesystems. Each check requires at least twice the logical database size plus a configurable reserve (default 16 MiB). Reported block counts use the filesystem fragment size when present, or the transfer block size if no fragment size is reported; invalid or overflowing counts fail closed. These checks do not reserve space or necessarily account for user quotas, and available space may change before or during the upgrade.
 4. Takes a consistent snapshot through SQLite's Online Backup API, including committed WAL contents. It does **not** copy the active main database file.
 5. Converts the completed snapshot to a self-contained rollback-journal database, verifies integrity/FKs, computes SHA-256, and publishes a checksum marker.
 6. Applies all pending migrations and checksum records in one transaction. A failure rolls back every pending migration, including preceding migrations from the same attempt.

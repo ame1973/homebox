@@ -105,14 +105,32 @@ func requireSpace(path string, databaseBytes, reserve uint64) error {
 	if err := unix.Statfs(path, &stat); err != nil {
 		return err
 	}
-	if stat.Bsize <= 0 || stat.Bavail > math.MaxUint64/uint64(stat.Bsize) || databaseBytes > (math.MaxUint64-reserve)/2 {
-		return ErrInsufficientSpace
+	_, err := checkMigrationSpace(stat, databaseBytes, reserve)
+	return err
+}
+
+// Filesystem block counts use fragment-size units where reported. Some older
+// filesystems omit that value; in that case use the transfer block size.
+func filesystemAllocationUnit(blockSize, fragmentSize int64) (uint64, bool) {
+	if blockSize <= 0 || fragmentSize < 0 {
+		return 0, false
 	}
-	available := stat.Bavail * uint64(stat.Bsize)
+	if fragmentSize == 0 {
+		fragmentSize = blockSize
+	}
+	return uint64(fragmentSize), true
+}
+
+func checkMigrationSpace(stat unix.Statfs_t, databaseBytes, reserve uint64) (uint64, error) {
+	unit, valid := filesystemAllocationUnit(stat.Bsize, stat.Frsize)
+	if !valid || stat.Bavail > stat.Blocks || stat.Bavail > math.MaxUint64/unit || databaseBytes > (math.MaxUint64-reserve)/2 {
+		return 0, ErrInsufficientSpace
+	}
+	available := stat.Bavail * unit
 	if available < databaseBytes*2+reserve {
-		return fmt.Errorf("%w: need %d bytes, available %d", ErrInsufficientSpace, databaseBytes*2+reserve, available)
+		return available, fmt.Errorf("%w: need %d bytes, available %d", ErrInsufficientSpace, databaseBytes*2+reserve, available)
 	}
-	return nil
+	return available, nil
 }
 
 func syncDirectory(path string) error {
