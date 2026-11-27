@@ -169,11 +169,11 @@ func TestSyncLocationCoveragePagesExactIDsAndWithholdsALateMissingRow(t *testing
 	seedSyncCoverageLocations(t, s, ids)
 	before := domainState(t, s)
 	withQueryOnlySearchTx(t, s, func(tx *sql.Tx) {
-		first, err := readSyncLocationCoverageIDs(t.Context(), tx, "", false)
+		first, err := readSyncCoverageIDs(t.Context(), tx, "location", "", false)
 		if err != nil || len(first) != 100 || first[99] != firstBoundary {
 			t.Fatal("the first page did not preserve its embedded-NUL boundary", first, err)
 		}
-		second, err := readSyncLocationCoverageIDs(t.Context(), tx, first[99], true)
+		second, err := readSyncCoverageIDs(t.Context(), tx, "location", first[99], true)
 		if err != nil || len(second) != 100 || second[99] != secondBoundary {
 			t.Fatal("the second page did not preserve its embedded-NUL boundary", second, err)
 		}

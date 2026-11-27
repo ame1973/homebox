@@ -26,7 +26,7 @@ func verifySyncLocationCoverage(ctx context.Context, tx *sql.Tx) (syncLocationCo
 	var coverage syncLocationCoverage
 	after, continued := "", false
 	for {
-		ids, err := readSyncLocationCoverageIDs(ctx, tx, after, continued)
+		ids, err := readSyncCoverageIDs(ctx, tx, "location", after, continued)
 		if err != nil {
 			return syncLocationCoverage{}, err
 		}
@@ -64,8 +64,16 @@ func verifySyncLocationCoverage(ctx context.Context, tx *sql.Tx) (syncLocationCo
 	return coverage, nil
 }
 
-func readSyncLocationCoverageIDs(ctx context.Context, tx *sql.Tx, after string, continued bool) ([]string, error) {
-	query := "SELECT CASE WHEN length(CAST(id AS BLOB))<=512 THEN id END FROM locations"
+func readSyncCoverageIDs(ctx context.Context, tx *sql.Tx, kind, after string, continued bool) ([]string, error) {
+	var query string
+	switch kind {
+	case "location":
+		query = "SELECT CASE WHEN length(CAST(id AS BLOB))<=512 THEN id END FROM locations"
+	case "location_event":
+		query = "SELECT CASE WHEN length(CAST(id AS BLOB))<=512 THEN id END FROM location_events"
+	default:
+		return nil, ErrDomainState
+	}
 	var args []any
 	if continued {
 		query += " WHERE id>?"
