@@ -64,14 +64,27 @@ test('retains the server currency lock when all current Lines were financially v
 
 test('withholds a mixed real history interval and recovers only on a fresh read', async ({ page, application }) => {
   await provision(page, application); const { purchase, item } = await seed(page, application.url), source = await current(page, purchase.id, item.id); let changed = false
+  let release!: () => void, committed!: () => void, delivered!: () => void
+  const held = new Promise<void>((resolve) => { release = resolve })
+  const changedSource = new Promise<void>((resolve) => { committed = resolve })
+  const finished = new Promise<void>((resolve) => { delivered = resolve })
   await page.route((url) => url.pathname === `/api/v1/purchases/${purchase.id}/line-corrections`, async (route) => {
     if (changed || route.request().method() !== 'GET') { await route.continue(); return }
-    const response = await route.fetch(); changed = true
+    const response = await route.fetch(); expect(response.status()).toBe(200); changed = true
     const update = await page.request.patch(`/api/v1/purchases/${purchase.id}`, { headers: await writeContext(page, application.url, source.purchase.revision), data: { receipt_note: '並行變更後的備註' } }); expect(update.status()).toBe(200)
-    await route.fulfill({ response })
+    committed(); await held
+    try { await route.fulfill({ response }) } finally { delivered() }
   })
   const writes = watchDomainWrites(page, ['/api/v1/purchases'])
-  await page.goto(`/purchases/${purchase.id}/line-corrections`); await expect(page.getByText(purchaseText.invalidRead, { exact: true })).toBeVisible()
+  try {
+    await page.goto(`/purchases/${purchase.id}/line-corrections`)
+    await changedSource
+    await expect(page.getByRole('button', { name: purchaseText.refresh, exact: true })).toBeDisabled()
+    await expect(page.getByText(purchaseText.invalidRead, { exact: true })).toHaveCount(0)
+    await expect(page.getByText(text.noHistory, { exact: true })).toHaveCount(0)
+    await expect(page.getByText(`${text.historyCount}0`, { exact: true })).toHaveCount(0)
+  } finally { release() }
+  await finished; await expect(page.getByText(purchaseText.invalidRead, { exact: true })).toBeVisible()
   await expect(page.getByText(text.noHistory, { exact: true })).toHaveCount(0); await expect(page.getByText(`${text.historyCount}0`, { exact: true })).toHaveCount(0)
   await page.getByRole('button', { name: purchaseText.refresh, exact: true }).click(); await expect(page.getByText(text.noHistory, { exact: true })).toBeVisible(); await expect(page.getByText(JSON.stringify('並行變更後的備註'), { exact: true })).toBeVisible(); expect(writes).toHaveLength(0)
 })
