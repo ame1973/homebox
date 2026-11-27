@@ -1955,7 +1955,10 @@ export interface paths {
             readonly path?: never;
             readonly cookie?: never;
         };
-        /** Storage overview */
+        /**
+         * Database filesystem storage observation
+         * @description Read the completed-session database and filesystem observation. Media and backup sizes remain null until independently measured; free space refers only to the database filesystem. The request accepts no query, body or content encoding, and the result is not a reservation, quota or full storage inventory.
+         */
         readonly get: operations["get_system_storage"];
         readonly put?: never;
         readonly post?: never;
@@ -4091,13 +4094,19 @@ export interface components {
             readonly source_location_id: string;
             readonly target_location_id: string;
         };
+        /** @description Observed logical database and existing SQLite sidecar lengths, plus database-filesystem capacity. Values can change during or immediately after measurement and do not prove integrity, physical allocation, user quota or a reservation. Media and backup scopes can reside on different filesystems and are not included in the database count. */
         readonly StorageStatus: {
-            readonly backup_bytes?: number;
+            /** @description Null when backup storage has not been measured; zero is a measured value, not a substitute for unknown. */
+            readonly backup_bytes: number | null;
+            /** @description Sum of logical lengths of the owned database and its existing SQLite sidecars, not allocated disk blocks. */
             readonly database_bytes: number;
+            /** @description Total bytes reported by the database filesystem, not a total across Media or backup mounts. */
+            readonly database_filesystem_total_bytes: number;
+            /** @description Filesystem-reported bytes available to unprivileged processes on the database filesystem, not necessarily the user's quota. Never greater than database_filesystem_total_bytes. */
             readonly free_bytes: number;
-            /** Format: date-time */
-            readonly measured_at: string;
-            readonly media_bytes: number;
+            readonly measured_at: string & unknown;
+            /** @description Null when Media storage has not been measured; zero is a measured value, not a substitute for unknown. */
+            readonly media_bytes: number | null;
         };
         readonly SyncEmbedding: {
             readonly dimension: number;
@@ -9711,8 +9720,6 @@ export interface operations {
                 headers: {
                     /** @description Protected API data is never cached by the service worker. */
                     readonly "Cache-Control"?: "no-store";
-                    /** @description Quoted resource revision when a versioned resource is returned. */
-                    readonly ETag?: string;
                     readonly [name: string]: unknown;
                 };
                 content: {

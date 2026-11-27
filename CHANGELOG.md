@@ -4,9 +4,11 @@
 
 ### Changed
 
+- Expose a protected, bodyless database-filesystem storage observation and stateless browser adapter; unmeasured Media and backup sizes remain explicitly null.
+
 - Calculate migration free-space checks using the filesystem fragment size when reported, with checked arithmetic and rejection of inconsistent counts.
 
-- Add an authorized internal database-filesystem observation using private metadata checks and safe byte arithmetic, without scanning Media or backups. It is not yet an HTTP storage endpoint.
+- Add an authorized internal database-filesystem observation using private metadata checks and safe byte arithmetic, without scanning Media or backups.
 
 - Show origin-wide browser storage estimates and persistence status in Settings, with an explicit persistence request and clear offline/backup limits.
 

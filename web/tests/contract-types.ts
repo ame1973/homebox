@@ -1073,6 +1073,26 @@ const scopedConnectivity = purchaseTransport.GET('/system/connectivity', { param
 const uncancellableConnectivity = connectivitySDK.probeConnectivity()
 void [connectivityStatus, connectivityReply, connectivityRead, connectivityTransport, missingConnectivity, unknownConnectivity, privateConnectivity, scopedConnectivity, uncancellableConnectivity]
 
+// Storage is a live database-filesystem observation, not a complete inventory.
+import * as systemStorageSDK from '../src/lib/api/system-storage'
+const storageStatus = { database_bytes: 2048, media_bytes: null, free_bytes: 8192, backup_bytes: null,
+  database_filesystem_total_bytes: 16384, measured_at: '2026-11-27T12:00:00Z' } as const satisfies components['schemas']['StorageStatus']
+const storageReply = storageStatus satisfies operations['get_system_storage']['responses'][200]['content']['application/json']
+const measuredStorage = { ...storageStatus, media_bytes: 0, backup_bytes: 0 } satisfies components['schemas']['StorageStatus']
+const storageRead = systemStorageSDK.fetchSystemStorage(new AbortController().signal)
+const storageTransport = purchaseTransport.GET('/system/storage')
+// @ts-expect-error Unmeasured backup storage must be represented explicitly.
+const missingBackup: components['schemas']['StorageStatus'] = { database_bytes: 0, media_bytes: null, free_bytes: 0, database_filesystem_total_bytes: 0, measured_at: '2026-11-27T12:00:00Z' }
+// @ts-expect-error An observed byte count is not a string.
+const stringStorage: components['schemas']['StorageStatus'] = { ...storageStatus, database_bytes: '2048' }
+// @ts-expect-error Private filesystem paths are not part of the response.
+const privateStorage: components['schemas']['StorageStatus'] = { ...storageStatus, path: '/private' }
+// @ts-expect-error Storage has no caller-selected query or resource identity.
+const scopedStorage = purchaseTransport.GET('/system/storage', { params: { query: { path: '/private' } } })
+// @ts-expect-error A storage read requires caller-owned cancellation.
+const uncancellableStorage = systemStorageSDK.fetchSystemStorage()
+void [storageStatus, storageReply, measuredStorage, storageRead, storageTransport, missingBackup, stringStorage, privateStorage, scopedStorage, uncancellableStorage]
+
 // Sync status is a bounded diagnostic, not an offline snapshot or cursor.
 import * as syncStatusSDK from '../src/lib/api/sync-status'
 const syncStatus = { dataset_epoch: 'epoch', server_instance_id: 'a'.repeat(32), projection_version: 1, min_retained_seq: 0, high_watermark: 0,
