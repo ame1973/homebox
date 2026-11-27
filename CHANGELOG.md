@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Bind private snapshot manifest counts and frozen row bytes to independent HMAC domains; proof storage, source validation and bootstrap remain unfinished.
+
 - Validate private signed snapshot metadata against the completed session, stored manifest, ordinal range and retention boundary without returning projection contents or enabling bootstrap.
 
 - Add a read-only server-storage Settings screen that distinguishes filesystem values from unmeasured Media and backups, and clears private observations on session loss or suspension.
