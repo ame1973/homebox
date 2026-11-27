@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Verify independently identified Barcode, Alias and Attribute source coverage without collapsing shared barcodes or rewriting legacy values.
+
 - Verify Stock source and canonical current-projection coverage, preserving zero balances and separate measurement units.
 
 - Verify present Unit source and current-projection coverage, including disposed or unlocated Units, without enabling public synchronization.

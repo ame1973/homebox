@@ -79,6 +79,12 @@ func readSyncCoverageIDs(ctx context.Context, tx *sql.Tx, kind, after string, co
 		query = "SELECT CASE WHEN length(CAST(id AS BLOB))<=512 THEN id END FROM items"
 	case "unit":
 		query = "SELECT CASE WHEN length(CAST(id AS BLOB))<=512 THEN id END FROM item_units"
+	case "barcode":
+		query = "SELECT CASE WHEN length(CAST(id AS BLOB))<=512 THEN id END FROM item_barcodes"
+	case "alias":
+		query = "SELECT CASE WHEN length(CAST(id AS BLOB))<=512 THEN id END FROM item_aliases"
+	case "attribute":
+		query = "SELECT CASE WHEN length(CAST(id AS BLOB))<=512 THEN id END FROM item_attributes"
 	default:
 		return nil, ErrDomainState
 	}
