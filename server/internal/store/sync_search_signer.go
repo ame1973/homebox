@@ -43,6 +43,10 @@ func pinSyncSearchSigner(ctx context.Context, tx *sql.Tx, expected []byte) error
 		return err
 	}
 	pinned, err := verifySyncSearchSigner(ctx, tx, expected)
+	if err != nil {
+		return err
+	}
+	snapshotPinned, err := verifySyncSnapshotSigner(ctx, tx, expected)
 	if err != nil || pinned {
 		return err
 	}
@@ -68,6 +72,13 @@ func pinSyncSearchSigner(ctx context.Context, tx *sql.Tx, expected []byte) error
 		return err
 	}
 	if currentReceiptPinned != receiptPinned {
+		return ErrAuthState
+	}
+	currentSnapshotPinned, err := verifySyncSnapshotSigner(ctx, tx, expected)
+	if err != nil {
+		return err
+	}
+	if currentSnapshotPinned != snapshotPinned {
 		return ErrAuthState
 	}
 	if err = tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM sync_search_proofs)").Scan(&existing); err != nil {

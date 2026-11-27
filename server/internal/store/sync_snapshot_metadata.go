@@ -32,13 +32,21 @@ func (a *Auth) readSyncSnapshotMetadata(ctx context.Context, token, signed strin
 	if err = requireCompleteSession(session); err != nil {
 		return syncSnapshotMetadata{}, err
 	}
+	snapshotPinned, err := verifySyncSnapshotSigner(ctx, tx, a.serverSecret)
+	if err != nil {
+		return syncSnapshotMetadata{}, err
+	}
 	// Activity can trigger SQL changes. Observe the dataset and manifest only
 	// afterward, then revalidate the session and expiry before committing.
 	if err = finishDomainSession(ctx, a, tx, token, session); err != nil {
 		return syncSnapshotMetadata{}, err
 	}
-	if _, err = verifySyncSearchSigner(ctx, tx, a.serverSecret); err != nil {
+	currentPinned, err := verifySyncSnapshotSigner(ctx, tx, a.serverSecret)
+	if err != nil {
 		return syncSnapshotMetadata{}, err
+	}
+	if currentPinned != snapshotPinned {
+		return syncSnapshotMetadata{}, ErrAuthState
 	}
 	dataset, err := readSyncDataset(ctx, tx)
 	if err != nil {

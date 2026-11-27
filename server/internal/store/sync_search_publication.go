@@ -36,6 +36,13 @@ func (m *mutationTx) stageSearchProof(identity string, revision, seq int64, payl
 	if receiptPinned != m.receiptPinned {
 		return ErrAuthState
 	}
+	snapshotPinned, err := verifySyncSnapshotSigner(m.ctx, m.tx, m.auth.serverSecret)
+	if err != nil {
+		return err
+	}
+	if snapshotPinned != m.snapshotSignerPinned {
+		return ErrAuthState
+	}
 	if err = pinSyncSearchSigner(m.ctx, m.tx, m.auth.serverSecret); err != nil {
 		return err
 	}
@@ -76,6 +83,13 @@ func (m *mutationTx) verifyPublishedSearchProof(dataset syncDataset, identity st
 		return err
 	}
 	if currentReceiptPinned != receiptPinned {
+		return ErrAuthState
+	}
+	snapshotPinned, err := verifySyncSnapshotSigner(m.ctx, m.tx, m.auth.serverSecret)
+	if err != nil {
+		return err
+	}
+	if snapshotPinned != m.snapshotSignerPinned {
 		return ErrAuthState
 	}
 	currentDataset, err := readSyncDataset(m.ctx, m.tx)

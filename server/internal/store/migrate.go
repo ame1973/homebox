@@ -201,6 +201,18 @@ func (s *Store) migrate(ctx context.Context, cfg Config, all []migrations.Migrat
 			return report, fmt.Errorf("validate new search signer: %w", ErrDomainState)
 		}
 	}
+	if version < 29 && len(all) >= 29 {
+		var snapshotDependencies int
+		if err = tx.QueryRowContext(ctx, `SELECT
+ (SELECT EXISTS(SELECT 1 FROM sync_snapshot_signer)) +
+ (SELECT EXISTS(SELECT 1 FROM sync_snapshot_seals)) +
+ (SELECT EXISTS(SELECT 1 FROM sync_snapshot_row_proofs))`).Scan(&snapshotDependencies); err != nil {
+			return report, err
+		}
+		if snapshotDependencies != 0 {
+			return report, fmt.Errorf("validate new snapshot proof storage: %w", ErrDomainState)
+		}
+	}
 	finalVersion, finalLedger, err := history(ctx, tx, all)
 	if err != nil {
 		return report, err

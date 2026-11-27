@@ -37,19 +37,20 @@ type pendingProjection struct {
 // one revision/change per transaction; payloads are built from the final SQL state.
 // Authentication must use its independently keyed credential fingerprint instead.
 type mutationTx struct {
-	ctx                context.Context
-	tx                 *sql.Tx
-	auth               *Auth
-	dataset            syncDataset
-	now                time.Time
-	eventID            string
-	reason             string
-	note               string
-	pending            map[projectionKey]pendingProjection
-	finalChecks        []func() error
-	searchProofChecks  []func() error
-	receiptPinned      bool
-	searchSignerPinned bool
+	ctx                  context.Context
+	tx                   *sql.Tx
+	auth                 *Auth
+	dataset              syncDataset
+	now                  time.Time
+	eventID              string
+	reason               string
+	note                 string
+	pending              map[projectionKey]pendingProjection
+	finalChecks          []func() error
+	searchProofChecks    []func() error
+	receiptPinned        bool
+	searchSignerPinned   bool
+	snapshotSignerPinned bool
 }
 
 type domainResult interface{ validateDomainResult() error }
@@ -114,6 +115,7 @@ func runDomainMutationWithFinalCheck[T domainResult](ctx context.Context, a *Aut
 	}
 	var result T
 	var finalChecks, searchProofChecks []func() error
+	var newKeyed, expectedSnapshotSigner bool
 	if reply.body != "" {
 		if keyed && !secretPinned {
 			return zero, ErrDomainState
@@ -141,14 +143,18 @@ func runDomainMutationWithFinalCheck[T domainResult](ctx context.Context, a *Aut
 		if initialDataset.Epoch != epoch {
 			return zero, ErrDomainState
 		}
-		var receiptPinned, searchSignerPinned bool
+		var receiptPinned, searchSignerPinned, snapshotSignerPinned bool
 		if err = tx.QueryRowContext(ctx, `SELECT
  (SELECT EXISTS(SELECT 1 FROM auth_keyed_receipt_secret WHERE singleton=1)),
- (SELECT EXISTS(SELECT 1 FROM sync_search_signer WHERE singleton=1))`).Scan(&receiptPinned, &searchSignerPinned); err != nil {
+ (SELECT EXISTS(SELECT 1 FROM sync_search_signer WHERE singleton=1)),
+ (SELECT EXISTS(SELECT 1 FROM sync_snapshot_signer WHERE singleton=1))`).Scan(&receiptPinned, &searchSignerPinned, &snapshotSignerPinned); err != nil {
 			return zero, err
 		}
 		m := &mutationTx{ctx: ctx, tx: tx, auth: a, dataset: initialDataset, now: now, eventID: eventID,
-			pending: make(map[projectionKey]pendingProjection), receiptPinned: receiptPinned, searchSignerPinned: searchSignerPinned}
+			pending: make(map[projectionKey]pendingProjection), receiptPinned: receiptPinned, searchSignerPinned: searchSignerPinned, snapshotSignerPinned: snapshotSignerPinned}
+		if keyed {
+			newKeyed, expectedSnapshotSigner = true, snapshotSignerPinned
+		}
 		result, err = apply(m)
 		if err != nil {
 			return zero, err
@@ -251,6 +257,17 @@ func runDomainMutationWithFinalCheck[T domainResult](ctx context.Context, a *Aut
 		}
 		if lastReply != reply {
 			return zero, ErrDomainState
+		}
+	}
+	// New keyed commands must preserve the independent snapshot dependency.
+	// Frozen receipt replay deliberately does not depend on current snapshots.
+	if newKeyed {
+		pinned, err := verifySyncSnapshotSigner(ctx, tx, a.serverSecret)
+		if err != nil {
+			return zero, err
+		}
+		if pinned != expectedSnapshotSigner {
+			return zero, ErrAuthState
 		}
 	}
 	if err = tx.Commit(); err != nil {

@@ -29,7 +29,8 @@ func (s *Store) loadAuthServerSecret(ctx context.Context) ([]byte, error) {
  (SELECT COUNT(*) FROM auth_reauth_grants) +
  (SELECT COUNT(*) FROM api_idempotency WHERE operation IN ('post_auth_logout','post_auth_password','post_auth_reauth')) +
  (SELECT COUNT(*) FROM auth_keyed_receipt_secret) + (SELECT COUNT(*) FROM sync_search_signer) +
- (SELECT EXISTS(SELECT 1 FROM sync_search_proofs))`).Scan(&outstanding); err != nil {
+ (SELECT EXISTS(SELECT 1 FROM sync_search_proofs)) + (SELECT EXISTS(SELECT 1 FROM sync_snapshot_signer)) +
+ (SELECT EXISTS(SELECT 1 FROM sync_snapshot_seals)) + (SELECT EXISTS(SELECT 1 FROM sync_snapshot_row_proofs))`).Scan(&outstanding); err != nil {
 			return nil, err
 		}
 		if outstanding != 0 {
@@ -53,19 +54,22 @@ func (s *Store) loadAuthServerSecret(ctx context.Context) ([]byte, error) {
 	if len(secret) != sha256.Size {
 		return nil, ErrAuthState
 	}
-	if _, err = verifySyncSearchSigner(ctx, tx, secret); err != nil {
+	if _, err = verifySyncSnapshotSigner(ctx, tx, secret); err != nil {
 		return nil, err
 	}
 	// The key-initialization audit can trigger SQL writes after the initial
-	// dependency check. It must not assign a new key to late search state.
+	// dependency check. It must not assign a new key to late proof state.
 	if initialized {
-		var searchDependencies int
+		var proofDependencies int
 		if err = tx.QueryRowContext(ctx, `SELECT
  (SELECT EXISTS(SELECT 1 FROM sync_search_signer)) +
- (SELECT EXISTS(SELECT 1 FROM sync_search_proofs))`).Scan(&searchDependencies); err != nil {
+ (SELECT EXISTS(SELECT 1 FROM sync_search_proofs)) +
+ (SELECT EXISTS(SELECT 1 FROM sync_snapshot_signer)) +
+ (SELECT EXISTS(SELECT 1 FROM sync_snapshot_seals)) +
+ (SELECT EXISTS(SELECT 1 FROM sync_snapshot_row_proofs))`).Scan(&proofDependencies); err != nil {
 			return nil, err
 		}
-		if searchDependencies != 0 {
+		if proofDependencies != 0 {
 			return nil, ErrAuthState
 		}
 	}

@@ -418,6 +418,35 @@ func TestStagedMediaUploadRollsBackEveryDurableDatabaseBoundary(t *testing.T) {
 	}
 }
 
+func TestStagedMediaUploadPreservesSnapshotSignerAndJournalOnRollback(t *testing.T) {
+	s, a, library, token, staging, objects := privateUploadFixture(t)
+	pinTestSnapshotSigner(t, s, a)
+	marker := bytes.Clone(scalar[[]byte](t, s.db, "SELECT key_proof FROM sync_snapshot_signer"))
+	execSQL(t, s.db, "DROP TRIGGER sync_snapshot_signer_no_delete")
+	execSQL(t, s.db, `CREATE TRIGGER remove_snapshot_during_upload AFTER INSERT ON mutation_events WHEN NEW.operation='post_media' BEGIN
+ DELETE FROM sync_snapshot_signer; END`)
+	before, raw := domainState(t, s), privateUploadPNG(t, "synthetic private marker")
+	if result, err := library.uploadStagedMedia(t.Context(), token, "snapshot-upload-proof", "image/png", raw, staging, objects); !errors.Is(err, ErrAuthState) || result != (Media{}) {
+		t.Fatal("snapshot signer loss returned a Media acknowledgement", result, err)
+	}
+	requireDomainState(t, s, before)
+	if !bytes.Equal(scalar[[]byte](t, s.db, "SELECT key_proof FROM sync_snapshot_signer"), marker) ||
+		scalar[int](t, s.db, "SELECT COUNT(*) FROM auth_keyed_receipt_secret") != 0 ||
+		scalar[int](t, s.db, "SELECT COUNT(*) FROM media_pending_objects") != 2 {
+		t.Fatal("failed upload changed a signer or lost its recovery journal")
+	}
+	requirePendingUploadStages(t, s, staging, 2)
+	entries, err := os.ReadDir(objects)
+	if err != nil || len(entries) != 2 {
+		t.Fatal("failed upload removed potentially shared fixture objects", err)
+	}
+	execSQL(t, s.db, "DROP TRIGGER remove_snapshot_during_upload")
+	if retry, err := library.uploadStagedMedia(t.Context(), token, "snapshot-upload-proof", "image/png", raw, staging, objects); err != nil || retry.Revision != 1 {
+		t.Fatal("explicit retry did not reuse the preserved fixture objects", err)
+	}
+	requirePendingUploadStages(t, s, staging, 4)
+}
+
 func TestStagedMediaUploadRejectsUnsafeImagesAndUnauthorizedSessions(t *testing.T) {
 	s, _, library, token, staging, objects := privateUploadFixture(t)
 	raw := privateUploadPNG(t, "private")
