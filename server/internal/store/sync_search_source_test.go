@@ -115,6 +115,9 @@ func TestCurrentSearchProjectionVerificationReadsOnlyApprovedActualSource(t *tes
 			if err := validateSearchProjectionSource(t.Context(), tx, record.identity, record.revision, original); err != nil || !bytes.Equal(original, beforeBytes) {
 				t.Fatal("source-only check rejected or changed actual projection", err)
 			}
+			if err := validateCurrentProjectionSource(t.Context(), tx, "search_doc", record.identity, record.revision, original); err != nil {
+				t.Fatal("general current-source check rejected reviewed search", err)
+			}
 			var value searchData
 			if err := json.Unmarshal(original, &value); err != nil {
 				t.Fatal(err)
@@ -129,6 +132,9 @@ func TestCurrentSearchProjectionVerificationReadsOnlyApprovedActualSource(t *tes
 			}
 			if err := validateSearchProjectionSource(t.Context(), tx, record.identity, record.revision, bad); !errors.Is(err, ErrDomainState) {
 				t.Fatal("schema-valid unreviewed contamination was accepted", err)
+			}
+			if err := validateCurrentProjectionSource(t.Context(), tx, "search_doc", record.identity, record.revision, bad); !errors.Is(err, ErrDomainState) {
+				t.Fatal("general source check accepted unreviewed search", err)
 			}
 			var indented bytes.Buffer
 			if err := json.Indent(&indented, original, "", "  "); err != nil {

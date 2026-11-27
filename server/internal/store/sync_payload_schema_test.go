@@ -2,6 +2,8 @@ package store
 
 import (
 	"database/sql"
+	"encoding/json"
+	"errors"
 	"reflect"
 	"testing"
 
@@ -85,6 +87,7 @@ func TestActualDomainProjectionPayloadsMatchOfflineContract(t *testing.T) {
 	if _, err := assets.Dispose(t.Context(), token, "schema-create-disposal", unit.ID, profile.Revision+2, disposalInput(unit.Revision, 25)); err != nil {
 		t.Fatal(err)
 	}
+	requireCurrentProjectionSources(t, s, []string{"location", "location_event", "category", "tag", "item", "barcode", "alias", "attribute", "item_tag", "unit", "stock", "inventory_event", "search_doc", "purchase", "purchase_line", "asset", "usage", "cost", "disposal"})
 	if _, err := catalog.DeleteBarcode(t.Context(), token, "schema-delete-barcode", barcode.ID, barcode.Revision); err != nil {
 		t.Fatal(err)
 	}
@@ -169,6 +172,119 @@ func TestActualDomainProjectionPayloadsMatchOfflineContract(t *testing.T) {
 	}
 }
 
+func requireCurrentProjectionSources(t *testing.T, s *Store, expected []string) {
+	t.Helper()
+	current := currentProjectionState(t, s)
+	found := make(map[string]bool)
+	before := domainState(t, s)
+	withQueryOnlySearchTx(t, s, func(tx *sql.Tx) {
+		for key, projection := range current {
+			if err := validateCurrentProjectionSource(t.Context(), tx, key.kind, key.id, projection.Revision, []byte(projection.Payload)); err != nil {
+				t.Fatalf("actual current projection did not match source %s: %v", key.kind, err)
+			}
+			found[key.kind] = true
+		}
+	})
+	for _, kind := range expected {
+		if !found[kind] {
+			t.Fatal("fixture did not contain expected current source kind", kind)
+		}
+		var selected projectionKey
+		var projection projectionValue
+		for key, value := range current {
+			if key.kind == kind {
+				selected, projection = key, value
+				break
+			}
+		}
+		t.Run("rejects mismatched source "+kind, func(t *testing.T) {
+			tx, err := s.db.BeginTx(t.Context(), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer tx.Rollback()
+			payload := []byte(projection.Payload)
+			if kind == "item_tag" {
+				parts, valid := projectionPairParts(selected.id)
+				if !valid {
+					t.Fatal("fixture has invalid item-tag identity")
+				}
+				if _, err = tx.ExecContext(t.Context(), "DELETE FROM item_tags WHERE item_id=? AND tag_id=?", parts[0], parts[1]); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				payload = differentProjectionPayload(t, kind, payload)
+				if err = validateSyncRecord(kind, selected.id, "upsert", projection.Revision, 1, payload); err != nil {
+					t.Fatal("fixture mismatch was not a valid projection", err)
+				}
+				if _, err = tx.ExecContext(t.Context(), "UPDATE current_projections SET payload_json=? WHERE entity_type=? AND entity_id=?", string(payload), kind, selected.id); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err = validateCurrentProjectionSource(t.Context(), tx, kind, selected.id, projection.Revision, payload); !errors.Is(err, ErrDomainState) {
+				t.Fatal("source mismatch was certified", err)
+			}
+		})
+	}
+	requireDomainState(t, s, before)
+}
+
+func differentProjectionPayload(t *testing.T, kind string, original []byte) []byte {
+	t.Helper()
+	var value map[string]json.RawMessage
+	if err := json.Unmarshal(original, &value); err != nil {
+		t.Fatal(err)
+	}
+	fields := map[string]string{
+		"location": "name", "category": "name", "tag": "name", "item": "name", "unit": "notes",
+		"barcode": "raw_value", "alias": "alias", "attribute": "attribute_value", "search_doc": "approved_text",
+		"location_event": "occurred_at", "inventory_event": "action", "purchase": "receipt_note", "purchase_line": "note",
+		"usage": "note", "cost": "note", "disposal": "note", "media_link": "description",
+	}
+	var field string
+	var replacement any
+	if field = fields[kind]; field != "" {
+		var text string
+		if err := json.Unmarshal(value[field], &text); err != nil {
+			t.Fatal("fixture field is not text", kind, field, err)
+		}
+		replacement = text + "!"
+	} else {
+		switch kind {
+		case "stock":
+			field = "quantity_base"
+		case "asset":
+			field = "estimated_residual_minor"
+		case "media":
+			field = "width"
+		default:
+			t.Fatal("unhandled projection fixture kind", kind)
+		}
+		var number int64
+		if string(value[field]) != "null" {
+			if err := json.Unmarshal(value[field], &number); err != nil {
+				t.Fatal("fixture field is not an integer", kind, field, err)
+			}
+		}
+		if number == maxSafeInteger {
+			number--
+		} else {
+			number++
+		}
+		replacement = number
+	}
+	encoded, err := json.Marshal(replacement)
+	if err != nil {
+		t.Fatal(err)
+	}
+	value[field] = encoded
+	payload, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return payload
+}
+
 // Legacy fixture metadata is not evidence of verified image bytes. The real
 // attachment operation publishes both independent Media and link projections.
 func TestActualMediaAttachmentPayloadsMatchOfflineContract(t *testing.T) {
@@ -191,6 +307,7 @@ func TestActualMediaAttachmentPayloadsMatchOfflineContract(t *testing.T) {
 			t.Fatal("actual Media record failed identity validation", key, err)
 		}
 	}
+	requireCurrentProjectionSources(t, fixture.store, []string{"media", "media_link"})
 	if _, err := library.Unlink(t.Context(), fixture.token, "schema-unlink-media", link.ID, link.Revision); err != nil {
 		t.Fatal(err)
 	}

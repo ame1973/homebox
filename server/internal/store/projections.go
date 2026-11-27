@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 )
@@ -8,9 +9,22 @@ import (
 // Build each payload once from final authoritative state. Search publication also
 // rebuilds its derived FTS row here, never copying an unverified historical cache.
 func (m *mutationTx) projectionPayload(key projectionKey) ([]byte, error) {
+	if key.kind == "search_doc" {
+		value, err := m.materializeSearch(key.id)
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(value)
+	}
+	return readProjectionSource(m.ctx, m.tx, key)
+}
+
+// This serializer only reads source. It does not establish session authority,
+// current-row identity, complete source coverage or file-byte integrity.
+func readProjectionSource(ctx context.Context, tx *sql.Tx, key projectionKey) ([]byte, error) {
 	switch key.kind {
 	case "location":
-		value, err := loadLocation(m.ctx, m.tx, key.id)
+		value, err := loadLocation(ctx, tx, key.id)
 		if err != nil {
 			return nil, err
 		}
@@ -18,7 +32,7 @@ func (m *mutationTx) projectionPayload(key projectionKey) ([]byte, error) {
 	case "location_event":
 		var movement locationMovement
 		var from, to sql.NullString
-		err := m.tx.QueryRowContext(m.ctx, `SELECT id,location_id,occurred_at,from_parent_id,to_parent_id FROM location_events WHERE id=?`, key.id).
+		err := tx.QueryRowContext(ctx, `SELECT id,location_id,occurred_at,from_parent_id,to_parent_id FROM location_events WHERE id=?`, key.id).
 			Scan(&movement.ID, &movement.LocationID, &movement.OccurredAt, &from, &to)
 		if err != nil {
 			return nil, err
@@ -31,25 +45,25 @@ func (m *mutationTx) projectionPayload(key projectionKey) ([]byte, error) {
 		}
 		return json.Marshal(movement)
 	case "category":
-		value, err := loadCategory(m.ctx, m.tx, key.id)
+		value, err := loadCategory(ctx, tx, key.id)
 		if err != nil {
 			return nil, err
 		}
 		return json.Marshal(value.CategoryData)
 	case "tag":
-		value, err := loadTag(m.ctx, m.tx, key.id)
+		value, err := loadTag(ctx, tx, key.id)
 		if err != nil {
 			return nil, err
 		}
 		return json.Marshal(value.TagData)
 	case "item":
-		value, err := loadItem(m.ctx, m.tx, key.id)
+		value, err := loadItem(ctx, tx, key.id)
 		if err != nil {
 			return nil, err
 		}
 		return json.Marshal(value.ItemData)
 	case "unit":
-		value, err := loadUnit(m.ctx, m.tx, key.id)
+		value, err := loadUnit(ctx, tx, key.id)
 		if err != nil {
 			return nil, err
 		}
@@ -59,29 +73,29 @@ func (m *mutationTx) projectionPayload(key projectionKey) ([]byte, error) {
 		if !valid {
 			return nil, ErrDomainState
 		}
-		value, err := loadStock(m.ctx, m.tx, parts[0], parts[1])
+		value, err := loadStock(ctx, tx, parts[0], parts[1])
 		if err != nil {
 			return nil, err
 		}
 		return json.Marshal(value.StockData)
 	case "inventory_event":
-		value, err := loadInventoryEvent(m.ctx, m.tx, key.id)
+		value, err := loadInventoryEvent(ctx, tx, key.id)
 		if err != nil {
 			return nil, err
 		}
 		return json.Marshal(value)
 	case "purchase":
-		value, err := loadPurchase(m.ctx, m.tx, key.id)
+		value, err := loadPurchase(ctx, tx, key.id)
 		if err != nil {
 			return nil, err
 		}
 		return json.Marshal(value.PurchaseData)
 	case "purchase_line":
-		value, err := loadPurchaseLine(m.ctx, m.tx, key.id)
+		value, err := loadPurchaseLine(ctx, tx, key.id)
 		if err != nil {
 			return nil, err
 		}
-		active, err := purchaseLineIsActive(m.ctx, m.tx, value)
+		active, err := purchaseLineIsActive(ctx, tx, value)
 		if err != nil {
 			return nil, err
 		}
@@ -90,55 +104,55 @@ func (m *mutationTx) projectionPayload(key projectionKey) ([]byte, error) {
 		}
 		return json.Marshal(value.PurchaseLineData)
 	case "asset":
-		value, err := loadAsset(m.ctx, m.tx, key.id)
+		value, err := loadAsset(ctx, tx, key.id)
 		if err != nil {
 			return nil, err
 		}
 		return json.Marshal(value.AssetData)
 	case "usage":
-		value, err := loadUsage(m.ctx, m.tx, key.id)
+		value, err := loadUsage(ctx, tx, key.id)
 		if err != nil {
 			return nil, err
 		}
 		return json.Marshal(value.UsageData)
 	case "cost":
-		value, err := loadCost(m.ctx, m.tx, key.id)
+		value, err := loadCost(ctx, tx, key.id)
 		if err != nil {
 			return nil, err
 		}
 		return json.Marshal(value.CostData)
 	case "disposal":
-		value, err := loadDisposal(m.ctx, m.tx, key.id)
+		value, err := loadDisposal(ctx, tx, key.id)
 		if err != nil {
 			return nil, err
 		}
 		return json.Marshal(value.DisposalData)
 	case "media":
-		value, err := loadMedia(m.ctx, m.tx, key.id)
+		value, err := loadMedia(ctx, tx, key.id)
 		if err != nil {
 			return nil, err
 		}
 		return json.Marshal(value.mediaData)
 	case "media_link":
-		value, err := loadMediaLink(m.ctx, m.tx, key.id)
+		value, err := loadMediaLink(ctx, tx, key.id)
 		if err != nil {
 			return nil, err
 		}
 		return json.Marshal(value.mediaLinkData)
 	case "barcode":
-		value, err := loadBarcode(m.ctx, m.tx, key.id)
+		value, err := loadBarcode(ctx, tx, key.id)
 		if err != nil {
 			return nil, err
 		}
 		return json.Marshal(value.BarcodeData)
 	case "alias":
-		value, err := loadAlias(m.ctx, m.tx, key.id)
+		value, err := loadAlias(ctx, tx, key.id)
 		if err != nil {
 			return nil, err
 		}
 		return json.Marshal(value.AliasData)
 	case "attribute":
-		value, err := loadAttribute(m.ctx, m.tx, key.id)
+		value, err := loadAttribute(ctx, tx, key.id)
 		if err != nil {
 			return nil, err
 		}
@@ -152,13 +166,7 @@ func (m *mutationTx) projectionPayload(key projectionKey) ([]byte, error) {
 			ItemID string `json:"item_id"`
 			TagID  string `json:"tag_id"`
 		}
-		if err := m.tx.QueryRowContext(m.ctx, "SELECT item_id,tag_id FROM item_tags WHERE item_id=? AND tag_id=?", parts[0], parts[1]).Scan(&value.ItemID, &value.TagID); err != nil {
-			return nil, err
-		}
-		return json.Marshal(value)
-	case "search_doc":
-		value, err := m.materializeSearch(key.id)
-		if err != nil {
+		if err := tx.QueryRowContext(ctx, "SELECT item_id,tag_id FROM item_tags WHERE item_id=? AND tag_id=?", parts[0], parts[1]).Scan(&value.ItemID, &value.TagID); err != nil {
 			return nil, err
 		}
 		return json.Marshal(value)

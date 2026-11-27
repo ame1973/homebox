@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Verify private current projection bytes and counters against selected read-only source fields, without claiming complete cross-domain authority or enabling bootstrap.
+
 - Avoid re-delivering a document's own session-clear broadcast as a delayed remote signal after login, while retaining cross-window and storage fallback notifications.
 
 - Recheck the private browser-test clock immediately before each explicit setup action and report only bounded fixture/request relationships after a 401; setup is never automatically retried.
