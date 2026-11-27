@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Verify retained inventory-event source and current projections, including deleted Unit and Location history, without enabling public synchronization.
+
 - Verify canonical Item/Tag membership source and current-projection coverage without enabling public synchronization.
 
 - Verify independently identified Barcode, Alias and Attribute source coverage without collapsing shared barcodes or rewriting legacy values.

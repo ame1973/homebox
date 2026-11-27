@@ -71,6 +71,8 @@ func readSyncCoverageIDs(ctx context.Context, tx *sql.Tx, kind, after string, co
 		query = "SELECT CASE WHEN length(CAST(id AS BLOB))<=512 THEN id END FROM locations"
 	case "location_event":
 		query = "SELECT CASE WHEN length(CAST(id AS BLOB))<=512 THEN id END FROM location_events"
+	case "inventory_event":
+		query = "SELECT CASE WHEN length(CAST(id AS BLOB))<=512 THEN id END FROM inventory_events"
 	case "category":
 		query = "SELECT CASE WHEN length(CAST(id AS BLOB))<=512 THEN id END FROM categories"
 	case "tag":
